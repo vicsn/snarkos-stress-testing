@@ -1,0 +1,14 @@
+# snarkos.aws_ec2.yml
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-east-2
+
+keyed_groups:
+  - key: tags.Name
+    prefix: ""
+    separator: ""
+
+filters:
+  instance-state-name: running
+  tag:Name: snarkos-node-*

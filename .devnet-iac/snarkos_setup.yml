@@ -1,0 +1,41 @@
+- name: Set up snarkOS nodes
+  hosts: "snarkos_node_*"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    branch: "testnet3"
+    first_node_ip: "TODO"
+    num_instances: 5
+    node_id: "{{ inventory_hostname }}"
+    verbosity: "4"
+
+  tasks:
+    - name: Clone or update snarkOS
+      git:
+        repo: 'https://github.com/AleoHQ/snarkOS.git'
+        dest: "/home/ubuntu/snarkOS"
+        version: "{{ branch }}"
+        clone: yes
+        update: yes
+
+    - name: List contents of snarkOS directory
+      command: ls -l /home/ubuntu/snarkOS
+      register: ls_output
+
+    - name: Show ls output
+      debug:
+        var: ls_output.stdout_lines
+
+    - name: Build snarkOS
+      shell: |
+        cd /home/ubuntu/snarkOS
+        ./build_ubuntu.sh
+      register: build_output
+
+    - name: Print build output
+      debug:
+        var: build_output.stdout_lines
+
+    - name: Start snarkos
+      shell: |
+        snarkos start --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3033 --peers {{ first_node_ip }}:4133 --validators {{ first_node_ip }}:5000 --verbosity {{ verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }}
