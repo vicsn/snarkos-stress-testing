@@ -12,7 +12,8 @@ resource "aws_instance" "snarkos_node" {
   }
 
   tags = {
-    Name = "snarkos-node-${count.index}"
+    Name = "snarkos-node-${count.index}",
+    Role = "snarkos-node"
   }
 }
 
