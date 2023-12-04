@@ -9,5 +9,5 @@ variable "instance_type" {
 variable "key_pair_name" {
   description = "The name of the AWS key pair to be used for the EC2 instances"
   type        = string
-  default     = "snarkos-testnet"
+  default     = "s3-testnet3"
 }

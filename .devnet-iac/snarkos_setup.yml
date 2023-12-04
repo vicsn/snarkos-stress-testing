@@ -69,13 +69,13 @@
       shell: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
-#    - name: Build snarkOS
-#      shell: |
-#        export PATH="$HOME/.cargo/bin:$PATH"
-#        cd /home/ubuntu/snarkOS
-#        cargo install --path .
-#      args:
-#        executable: /bin/bash
+    - name: Build snarkOS
+      shell: |
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cd /home/ubuntu/snarkOS
+        cargo install --path .
+      args:
+        executable: /bin/bash
 
     - name: Open ports on system
       shell: ufw allow "{{ item }}"
