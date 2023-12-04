@@ -1,3 +1,4 @@
+# snarkos_setup.yml
 - name: Set up snarkOS nodes
   hosts: "snarkos_node"
   become: yes
@@ -15,7 +16,7 @@
 
     - name: Set first node IP address
       set_fact:
-        first_node_ip: "{{ hostvars[groups['snarkos_node'][0]]['ansible_default_ipv4']['address'] }}"
+        first_node_ip: "{{ hostvars[groups['snarkos_node'][0]]['public_ip_address']}}"
       when: groups['snarkos_node'] is defined and groups['snarkos_node'] | length > 0
       run_once: true
 
@@ -28,12 +29,16 @@
         num_instances: "{{ groups['snarkos_node'] | length }}"
       run_once: true
 
-    - name: Set node_id for each host
+    - name: Set node_id based on instance tag
       set_fact:
-        node_id: "{{ item.index }}"
-      with_indexed_items: "{{ groups['snarkos_node'] }}"
-      delegate_to: localhost
-      run_once: true
+        node_id: "{{ tags['Dev'] }}"
+      loop: "{{ groups['snarkos_node'] }}"
+      loop_control:
+        loop_var: instance
+
+#    - name: Debug - Print first_node_ip
+#      debug:
+#        var: node_id
 
 
     - name: Clone or update snarkOS
@@ -79,8 +84,35 @@
         - "4133/tcp"
         - "3033/tcp"
 
+    - name: Set environment variables for snarkos service
+      set_fact:
+        ansible_env:
+          FIRST_NODE_IP: "{{ first_node_ip }}"
+          VERBOSITY: "{{ verbosity }}"
+          NODE_ID: "{{ node_id }}"
+          NUM_INSTANCES: "{{ num_instances }}"
+      tags: always
 
+    - name: Deploy the snarkos systemd service file
+      template:
+        src: snarkos.service
+        dest: /etc/systemd/system/snarkos.service
+      become: yes
 
-    - name: Start snarkos
-      shell: |
-        snarkos start --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3033 --peers {{ first_node_ip }}:4133 --validators {{ first_node_ip }}:5000 --verbosity {{ verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }}
+    - name: Reload systemd to read new snarkos service file
+      systemd:
+        daemon_reload: yes
+      become: yes
+
+    - name: Start snarkos service
+      systemd:
+        name: snarkos
+        state: started
+        enabled: yes
+      become: yes
+
+#    - name: Restart snarkos service
+#      systemd:
+#        name: snarkos
+#        state: restarted
+#      become: yes

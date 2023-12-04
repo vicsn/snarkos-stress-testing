@@ -1,3 +1,4 @@
+# main.tf
 resource "aws_instance" "snarkos_node" {
   count         = var.instance_count
   ami           = data.aws_ami.latest_ubuntu.id
@@ -7,13 +8,14 @@ resource "aws_instance" "snarkos_node" {
   security_groups = [aws_security_group.snarkos_sg.name]
 
   ebs_block_device {
-    device_name = "/dev/sdh"
+    device_name = "/dev/sda1"
     volume_size = 80
   }
 
   tags = {
     Name = "snarkos-node-${count.index}",
-    Role = "snarkos-node"
+    Role = "snarkos-node",
+    Dev = count.index
   }
 }
 
