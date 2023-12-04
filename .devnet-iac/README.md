@@ -33,6 +33,11 @@ After Terraform successfully applies, use the output to create or update the Ans
 
 ```bash
 ansible-playbook -i snarkos.aws_ec2.yml snarkos_setup.yml
+ansible-playbook snarkos_run.yml
+```
+
+```bash
+ssh-add ~/.ssh/snarkos-testnet.pem
 ```
 
 ## Teardown

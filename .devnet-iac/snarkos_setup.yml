@@ -104,13 +104,6 @@
         daemon_reload: yes
       become: yes
 
-    - name: Start snarkos service
-      systemd:
-        name: snarkos
-        state: started
-        enabled: yes
-      become: yes
-
 #    - name: Restart snarkos service
 #      systemd:
 #        name: snarkos

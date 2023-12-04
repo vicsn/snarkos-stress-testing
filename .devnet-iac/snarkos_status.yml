@@ -1,0 +1,19 @@
+# snarkos_status.yml
+- name: Get status of snarkOS nodes
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    branch: "testnet3"
+    verbosity: "4"
+  tasks:
+    - name: Get snarkos service status
+      command: systemctl status snarkos
+      register: snarkos_status
+      ignore_errors: yes
+      changed_when: false
+      become: yes
+
+    - name: Output snarkos service status
+      debug:
+        var: snarkos_status.stdout_lines
