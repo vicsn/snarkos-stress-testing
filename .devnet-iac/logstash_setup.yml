@@ -18,17 +18,23 @@
       private: yes
 
   tasks:
-    - name: Add GPG Key for Elasticsearch
-      ansible.builtin.apt_key:
-        url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    - name: Set AWS Region Fact
+      set_fact:
+        aws_region: "{{ ansible_host.split('.')[1] }}"
+      when: ansible_host is defined
+
+    - name: Add Elastic GPG key
+      ansible.builtin.shell:
+        cmd: "wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes --dearmor -o /usr/share/keyrings/elastic-keyring.gpg"
+
+    - name: Add Elastic APT repository
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/elastic-8.x.list
+        line: "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
+        create: yes
         state: present
 
-    - name: Add Elasticsearch repository
-      ansible.builtin.apt_repository:
-        repo: deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
-        state: present
-
-    - name: Update and install logstash
+    - name: Update and install Logstash
       ansible.builtin.apt:
         update_cache: yes
         name: logstash
@@ -36,21 +42,15 @@
 
     - name: Install Logstash Output Opensearch Plugin
       ansible.builtin.shell:
-        cmd: /usr/share/logstash/bin/logstash-plugin install --version 2.0.0 logstash-output-opensearch
-
-    - name: Start Logstash Service
-      ansible.builtin.systemd:
-        name: logstash
-        state: started
-        enabled: yes
+        cmd: "/usr/share/logstash/bin/logstash-plugin install --version 2.0.0 logstash-output-opensearch"
 
     - name: Copy Logstash Configuration Template
       ansible.builtin.template:
         src: logstash.conf
         dest: /etc/logstash/conf.d/logstash.conf
 
-    - name: Restart Logstash Service
+    - name: Start Logstash Service
       ansible.builtin.systemd:
         name: logstash
-        state: restarted
+        state: started
         enabled: yes

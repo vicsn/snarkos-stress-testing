@@ -98,3 +98,59 @@ cd ecs-botnet-cluster
 terraform init
 terraform apply
 ```
+
+This will set up the cluster and task definition. ECS tasks can be run from the CLI:
+
+```bash
+aws ecs run-task \
+                --region 'us-east-2' \
+                --cluster 'tx-cannon' \
+                --task-definition 'tx-cannon-2vCPU-16GB' \
+                --launch-type FARGATE \
+                --count 1 \
+                --overrides '{
+                    "containerOverrides": [
+                        {
+                            "name": "tx-cannon-repo-latest",
+                            "command": ["/bin/sh", "-c", "aleo-cannon cannon -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --num-threads 5 --num-executions 400 -e http://brentnet-v7-balancer-1913504089.us-east-1.elb.amazonaws.com:3033 --accounts APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --accounts APrivateKey1zkp2RWGDcde3efb89rjhME1VYA8QMxcxep5DShNBR6n8Yjh --accounts APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --accounts APrivateKey1zkpBjpEgLo4arVUkQmcLdKQMiAKGaHAQVVwmF8HQby8vdYs --accounts APrivateKey1zkp3J6rRrDEDKAMMzSQmkBqd3vPbjp4XTyH7oMKFn7eVFwf --test-definition-file tests/hello_hello.toml"]
+                        }
+                    ]
+                }' \
+                --network-configuration '{
+                    "awsvpcConfiguration": {
+                        "subnets": [
+                            "subnet-0f75eb61126c94ee8", "subnet-021f7014e19e051f3","subnet-00279334e1be83b36"
+                        ],
+                        "securityGroups": [
+                            "sg-00246c5b5b63d2bdc"
+                        ],
+                        "assignPublicIp": "ENABLED"
+                    }
+                }'
+```
+
+A task can have a max count of 10 and will shut down when it is complete.
+
+To have a higher count and have the `tx-cannon` run over and over, you can create a service:
+
+```bash
+aws ecs create-service \
+                  --region 'us-east-2' \
+                  --cluster 'tx-cannon' \
+                  --service-name 'hello_hello_service' \
+                  --task-definition 'tx-cannon-2vCPU-16GB' \
+                  --desired-count 2000 \
+                  --launch-type FARGATE \
+                  --network-configuration '{
+                      "awsvpcConfiguration": {
+                          "subnets": [
+                              "subnet-0f75eb61126c94ee8", "subnet-021f7014e19e051f3","subnet-00279334e1be83b36"
+                          ],
+                          "securityGroups": [
+                              "sg-00246c5b5b63d2bdc"
+                          ],
+                          "assignPublicIp": "ENABLED"
+                      }
+                  }'
+```
+
