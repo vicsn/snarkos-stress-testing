@@ -96,3 +96,33 @@ data "aws_ami" "latest_ubuntu" {
   owners = ["099720109477"]  # Canonical's owner ID for Ubuntu images
 }
 
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+resource "aws_elb" "snarkos_lb" {
+  name               = "snarkos-lb"
+  security_groups    = [aws_security_group.snarkos_sg.id]
+  availability_zones = data.aws_availability_zones.available.names
+
+  listener {
+    instance_port     = 3033
+    instance_protocol = "http"
+    lb_port           = 3033
+    lb_protocol       = "http"
+  }
+
+  health_check {
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 3
+    interval            = 30
+    target              = "HTTP:3033/testnet3/latest/height"
+  }
+
+  instances = [for i in aws_instance.snarkos_node : i.id]
+
+  tags = {
+    Name = "snarkos-lb"
+  }
+}
