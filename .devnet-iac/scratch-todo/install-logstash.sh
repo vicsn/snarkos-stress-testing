@@ -24,6 +24,7 @@ run_installation_and_configuration() {
     wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-8.x.list
     sudo apt-get update && sudo apt-get install logstash
+    sudo /usr/share/logstash/bin/logstash-plugin install --version 2.0.0 logstash-output-opensearch
     sudo systemctl start logstash.service
 
     # Create Logstash configuration
@@ -49,12 +50,21 @@ filter {
   }
 }
 output {
-  elasticsearch {
-    hosts => ["http://elastic_host_here:9200"]
-    index => "snarkos-logs-%{+YYYY.MM.dd}"
-    user => "elastic"
-    password => "password_here"
+  opensearch {
+    ecs_compatibility => disabled
+    hosts => "https://wqcnb8fib7sn7wbraau7.us-east-2.aoss.amazonaws.com:443"
+    index => "test4"
+    auth_type => {
+      type => 'aws_iam'
+      aws_access_key_id => 'mykey'
+      aws_secret_access_key => 'mykey'
+      region => 'us-east-2'
+      service_name => 'aoss'
+    }
+    default_server_major_version => 2
+    legacy_template => false
   }
+  stdout {}
 }
 LOGSTASH_CONF
 

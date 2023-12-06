@@ -1,0 +1,56 @@
+# logstash_setup.yml
+- name: Install and Configure Logstash
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+
+  vars_prompt:
+    - name: collection_enpdoint
+      prompt: "Enter the OpenSearch or ElasticSearch collection Endpoint (e.g. https://abcdef123456.us-east-1.aoss.amazonaws.com)"
+      private: no
+
+    - name: aws_access_key_id
+      prompt: "Enter your AWS Access Key ID"
+      private: yes
+
+    - name: aws_secret_access_key
+      prompt: "Enter your AWS Secret Access Key"
+      private: yes
+
+  tasks:
+    - name: Add GPG Key for Elasticsearch
+      ansible.builtin.apt_key:
+        url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+        state: present
+
+    - name: Add Elasticsearch repository
+      ansible.builtin.apt_repository:
+        repo: deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
+        state: present
+
+    - name: Update and install logstash
+      ansible.builtin.apt:
+        update_cache: yes
+        name: logstash
+        state: latest
+
+    - name: Install Logstash Output Opensearch Plugin
+      ansible.builtin.shell:
+        cmd: /usr/share/logstash/bin/logstash-plugin install --version 2.0.0 logstash-output-opensearch
+
+    - name: Start Logstash Service
+      ansible.builtin.systemd:
+        name: logstash
+        state: started
+        enabled: yes
+
+    - name: Copy Logstash Configuration Template
+      ansible.builtin.template:
+        src: logstash.conf
+        dest: /etc/logstash/conf.d/logstash.conf
+
+    - name: Restart Logstash Service
+      ansible.builtin.systemd:
+        name: logstash
+        state: restarted
+        enabled: yes

@@ -38,4 +38,12 @@ terraform destroy
 # Check inventory
 ansible-inventory -i snarkos.aws_ec2.yml --graph
 ```
+TODO logstash setup
 
+TODO creating SSH key to be added on instances
+
+TDOD edit tf variables to liking
+
+update region in snarkos.aws_ec2.yml
+
+todo run opensearch then save endpoint and run logstash setup

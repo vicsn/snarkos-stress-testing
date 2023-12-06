@@ -1,3 +1,7 @@
+variable "aws_region" {
+  default     = "us-east-2"
+}
+
 variable "instance_count" {
   default = 5
 }
@@ -7,7 +11,5 @@ variable "instance_type" {
 }
 
 variable "key_pair_name" {
-  description = "The name of the AWS key pair to be used for the EC2 instances"
-  type        = string
   default     = "s3-testnet3"
 }
