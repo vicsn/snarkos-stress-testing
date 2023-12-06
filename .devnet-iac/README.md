@@ -10,7 +10,9 @@
 
 ## 0. Key Configuration
 
-Create a `.pem` file in AWS under `EC2 > Network & Security > Key Pairs`. Download the `.pem` file and place it in your `~/.ssh` directory.
+Create a `.pem` file in your desired AWS region under `EC2 > Network & Security > Key Pairs`. Download the `.pem` file and place it in your `~/.ssh` directory.
+
+Add the key to your authentication agent and configure AWS.
 
 ```bash
 ssh-add ~/.ssh/your-key.pem
@@ -25,7 +27,7 @@ Edit `variables.tf` to set your `region`, `instance type`, and `number of instan
 
 Edit `snarkos.aws_ec2.yml` to the same `region` you set in `variables.tf`.
 
-## 2. Spinning up a devnet
+## 2. Spinning up a Devnet
 
 ```bash
 terraform init
@@ -35,7 +37,7 @@ ansible-playbook snarkos_setup.yml
 
 These commands will create the instances, install snarkOS, and start the network.
 
-## Utility Scripts
+### Utility Scripts
 ```bash
 ansible-playbook snarkos_height.yml
 ansible-playbook snarkos_status.yml
@@ -43,13 +45,13 @@ ansible-playbook snarkos_stop.yml
 ansible-playbook snarkos_start.yml
 ```
 
-## Teardown
+### Teardown
 
 ```bash
 terraform destroy
 ```
 
-## Useful Commands
+### Useful Debug Commands
 
 ```bash
 # Check inventory
@@ -66,7 +68,7 @@ terraform init
 terraform apply
 ```
 
-Copy the `collection_enpdoint` and `dashboard_endpoint` from the Terraform outputs for later.
+Copy the `collection_endpoint` and `dashboard_endpoint` from the Terraform outputs for later.
 
 Go back to the main directory and run the `logstash_setup.yml` playbook. It will prompt you for the `collection_endpoint` and AWS access keys.
 
@@ -77,15 +79,15 @@ cd ..
 ansible-playbook logstash_setup.yml
 ```
 
-Once these is complete, logstash will immediately start sending logs to the OpenSearch collection. You can view the logs by navigating to the `dashboard_endpoint`.
+Once this is complete, Logstash will immediately start sending logs to the OpenSearch collection. You can view the logs by navigating to the `dashboard_endpoint`.
 
 The indices are automatically created, but you will need to [create an index pattern](https://opensearch.org/docs/latest/dashboards/management/index-patterns/) to search them in the `Discover` tab.
 
 For more information on using OpenSearch Dashboards, check the documentation [here](https://opensearch.org/docs/latest/dashboards/index/).
 
-Run `terraform destory` in the `opensearch` directory to teardown the logging analytic resources. You can reuse and persist the OpenSearch collection across multiple devnets, so you should only need to do this if you are done testing.
+Run `terraform destroy` in the `opensearch` directory to tear down the logging analytic resources. You can reuse and persist the OpenSearch collection across multiple devnets, so you should only need to do this if you are done testing.
 
-If you need to adjust the logstash template it can be found at `templates/logstash.confg`
+If you need to adjust the Logstash template, it can be found at `templates/logstash.config`.
 
 ## 4. (Optional) tx-cannon ECS "botnet" cluster
 
@@ -96,4 +98,3 @@ cd ecs-botnet-cluster
 terraform init
 terraform apply
 ```
-

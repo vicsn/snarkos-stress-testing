@@ -1,4 +1,16 @@
 # main.tf
+variable "aws_region" {
+  default     = "us-east-2"
+}
+
+variable "collection_name" {
+  default     = "snarkos-collection"
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
 terraform {
   required_version = ">= 0.12"
 }
