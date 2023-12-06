@@ -8,15 +8,32 @@
 - [Install AWS CLI](https://aws.amazon.com/cli/)
   - `brew install awscli`
 
-## Running
+## 0. Key Configuration
+
+Create a `.pem` file in AWS under `EC2 > Network & Security > Key Pairs`. Download the `.pem` file and place it in your `~/.ssh` directory.
 
 ```bash
+ssh-add ~/.ssh/your-key.pem
 aws configure
+```
+
+Change `your-key` in `variables.tf` to the name of the key you created.
+
+## 1. Variable Configuration
+
+Edit `variables.tf` to set your `region`, `instance type`, and `number of instances`.
+
+Edit `snarkos.aws_ec2.yml` to the same `region` you set in `variables.tf`.
+
+## 2. Spinning up a devnet
+
+```bash
 terraform init
 terraform apply
-ssh-add ~/.ssh/your-key.pem
 ansible-playbook snarkos_setup.yml
 ```
+
+These commands will create the instances, install snarkOS, and start the network.
 
 ## Utility Scripts
 ```bash
@@ -38,12 +55,45 @@ terraform destroy
 # Check inventory
 ansible-inventory -i snarkos.aws_ec2.yml --graph
 ```
-TODO logstash setup
 
-TODO creating SSH key to be added on instances
+## 3. (Optional) Log Analytics
 
-TDOD edit tf variables to liking
+In the `opensearch` directory run Terraform to set up a serverless OpenSearch collection.
 
-update region in snarkos.aws_ec2.yml
+```bash
+cd opensearch
+terraform init
+terraform apply
+```
 
-todo run opensearch then save endpoint and run logstash setup
+Copy the `collection_enpdoint` and `dashboard_endpoint` from the Terraform outputs for later.
+
+Go back to the main directory and run the `logstash_setup.yml` playbook. It will prompt you for the `collection_endpoint` and AWS access keys.
+
+If you don't want to use your root access keys, you'll need the access keys to at least have access to the `AmazonOpenSearchIngestionFullAccess` permission.
+
+```bash
+cd ..
+ansible-playbook logstash_setup.yml
+```
+
+Once these is complete, logstash will immediately start sending logs to the OpenSearch collection. You can view the logs by navigating to the `dashboard_endpoint`.
+
+The indices are automatically created, but you will need to [create an index pattern](https://opensearch.org/docs/latest/dashboards/management/index-patterns/) to search them in the `Discover` tab.
+
+For more information on using OpenSearch Dashboards, check the documentation [here](https://opensearch.org/docs/latest/dashboards/index/).
+
+Run `terraform destory` in the `opensearch` directory to teardown the logging analytic resources. You can reuse and persist the OpenSearch collection across multiple devnets, so you should only need to do this if you are done testing.
+
+If you need to adjust the logstash template it can be found at `templates/logstash.confg`
+
+## 4. (Optional) tx-cannon ECS "botnet" cluster
+
+In the `ecs-botnet-cluster` directory run Terraform to set up an ECS cluster and task definition for running scaled [tx-cannon](https://github.com/AleoHQ/tx-cannon) stress tests.
+
+```bash
+cd ecs-botnet-cluster
+terraform init
+terraform apply
+```
+

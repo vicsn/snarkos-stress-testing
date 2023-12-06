@@ -10,19 +10,11 @@
     - name: Gather facts from all nodes
       setup:
 
-#    - name: Debug - Print group names and their contents
-#      debug:
-#        var: groups
-
     - name: Set first node IP address
       set_fact:
         first_node_ip: "{{ hostvars[groups['snarkos_node'][0]]['public_ip_address']}}"
       when: groups['snarkos_node'] is defined and groups['snarkos_node'] | length > 0
       run_once: true
-
-#    - name: Debug - Print first_node_ip
-#      debug:
-#        var: first_node_ip
 
     - name: Determine the number of instances
       set_fact:
@@ -35,11 +27,6 @@
       loop: "{{ groups['snarkos_node'] }}"
       loop_control:
         loop_var: instance
-
-#    - name: Debug - Print first_node_ip
-#      debug:
-#        var: node_id
-
 
     - name: Clone or update snarkOS
       git:
@@ -104,8 +91,8 @@
         daemon_reload: yes
       become: yes
 
-#    - name: Restart snarkos service
-#      systemd:
-#        name: snarkos
-#        state: restarted
-#      become: yes
+    - name: Restart snarkos service
+      systemd:
+        name: snarkos
+        state: restarted
+      become: yes
