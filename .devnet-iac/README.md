@@ -112,7 +112,7 @@ aws ecs run-task \
                     "containerOverrides": [
                         {
                             "name": "tx-cannon-repo-latest",
-                            "command": ["/bin/sh", "-c", "tx-cannon bulk-execute --test tests/hello_hello/hello_hello.toml"]
+                            "command": ["/bin/sh", "-c", "tx-cannon bulk-execute --test tests/hello_hello/hello_hello_flood.toml --flood -e http://snarkos-lb-786949557.us-east-2.elb.amazonaws.com"]
                         }
                     ]
                 }' \
