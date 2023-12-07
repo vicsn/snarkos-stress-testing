@@ -112,7 +112,7 @@ aws ecs run-task \
                     "containerOverrides": [
                         {
                             "name": "tx-cannon-repo-latest",
-                            "command": ["/bin/sh", "-c", "aleo-cannon cannon -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --num-threads 5 --num-executions 400 -e http://brentnet-v7-balancer-1913504089.us-east-1.elb.amazonaws.com:3033 --accounts APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --accounts APrivateKey1zkp2RWGDcde3efb89rjhME1VYA8QMxcxep5DShNBR6n8Yjh --accounts APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --accounts APrivateKey1zkpBjpEgLo4arVUkQmcLdKQMiAKGaHAQVVwmF8HQby8vdYs --accounts APrivateKey1zkp3J6rRrDEDKAMMzSQmkBqd3vPbjp4XTyH7oMKFn7eVFwf --test-definition-file tests/hello_hello.toml"]
+                            "command": ["/bin/sh", "-c", "tx-cannon bulk-execute --test tests/hello_hello.toml"]
                         }
                     ]
                 }' \
