@@ -1,0 +1,26 @@
+# snarkos_clean.yml
+- name: Clean snarkOS nodes
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    branch: "testnet3"
+    verbosity: "4"
+  tasks:
+    - name: Stop snarkos service
+      systemd:
+        name: snarkos
+        state: stopped
+      become: yes
+
+    - name: Remove snarkos data
+      ansible.builtin.shell:
+        cmd: "/root/.cargo/bin/snarkos clean --dev {{ item }}"
+      loop: "{{ range(0, 41) | list }}"
+
+    - name: Restart snarkos service
+      systemd:
+        name: snarkos
+        state: started
+        enabled: yes
+      become: yes
