@@ -11,11 +11,11 @@
 
     - name: aws_access_key_id
       prompt: "Enter your AWS Access Key ID"
-      private: yes
+      private: no
 
     - name: aws_secret_access_key
       prompt: "Enter your AWS Secret Access Key"
-      private: yes
+      private: no
 
   tasks:
     - name: Set AWS Region Fact
