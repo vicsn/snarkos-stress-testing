@@ -1,0 +1,62 @@
+- name: Copy files to EC2 instance
+  hosts: prometheus_server  # Use the hostname of your Prometheus server instance
+  become: yes  # Run tasks with elevated privileges if necessary
+  gather_facts: false  # Enable gathering facts
+  vars:
+    ansible_user: ubuntu 
+
+  tasks:
+    - name: Copy docker-compose.yml
+      copy:
+        src: docker-compose.yml  # Replace with the actual path to your docker-compose.yml
+        dest: /home/ubuntu/docker-compose.yml
+        owner: ubuntu  # Update with the appropriate username
+        group: ubuntu  # Update with the appropriate group
+      become_user: ubuntu
+
+    #- name: Copy prometheus.yml
+    #  copy:
+    #    src: prometheus.yml  # Replace with the actual path to your prometheus.yml
+    #    dest: /home/ubuntu/prometheus.yml
+    #    owner: ubuntu  # Update with the appropriate username
+    #    group: ubuntu
+    #  become_user: ubuntu
+
+- name: Generate Prometheus scrape target JSON file
+  hosts: prometheus_server  # Use the hostname of your Prometheus server instance
+  become: yes  # Run tasks with elevated privileges if necessary
+  gather_facts: true  # Enable gathering facts
+  vars:
+    ansible_user: ubuntu 
+
+  tasks:
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: "/usr/local/bin/docker-compose"
+        mode: 'u+x,g+x'
+
+    #- name: Create YAML scrape target file of all nodes
+    #  ansible.builtin.template:
+    #    src: templates/scrape_targets.j2  # Path to your Jinja2 template file
+    #    dest: /home/ubuntu/snarkos_nodes.yml
+    - name: Create YAML scrape target file of all nodes
+      ansible.builtin.template:
+        src: prometheus.yml  # Path to your Jinja2 template file
+        dest: /home/ubuntu/prometheus.yml
+
+    - name: Run docker-compose up
+      command: docker-compose up -d
+      args:
+        chdir: /home/ubuntu/
+
+

@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 1m
+scrape_configs:
+  - job_name: prometheus
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+    - targets:
+      - localhost:9090
+  - job_name: 'snarkos'
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+    - targets: [{% for host in groups['snarkos_node'] %}"{{ host }}:9000"
+                {%- if not loop.last %},{% endif %}
+                {%- endfor %}]
+      labels:
+        group: "snarkos"
