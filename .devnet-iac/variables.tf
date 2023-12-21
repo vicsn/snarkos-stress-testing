@@ -3,7 +3,7 @@ variable "aws_region" {
 }
 
 variable "instance_type" {
-  default = "m5.2xlarge"
+  default = "m5.4xlarge"
 }
 
 variable "instance_count" {

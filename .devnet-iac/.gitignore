@@ -3,3 +3,5 @@
 **/terraform.tfstate
 **/terraform.tfstate.lock.info
 **/terraform.tfstate.backup
+/group_vars/snarkos_node.yml
+/terraform.tfvars
