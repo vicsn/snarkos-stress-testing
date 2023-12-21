@@ -1,6 +1,7 @@
 ## Stress Observability
 
-The intention of this repo is to replace the [.devnet folder](https://github.com/AleoHQ/snarkOS/tree/testnet3/.devnet)
+The intention of this repo is to be an alternative to
+the [.devnet folder](https://github.com/AleoHQ/snarkOS/tree/testnet3/.devnet)
 of snarkOS with an infrastructure as code (IaC) approach to allow for faster iterations on stress testing.
 
 It also contains extra tools to set up better observability and infrastructure related to stress testing specifically.
