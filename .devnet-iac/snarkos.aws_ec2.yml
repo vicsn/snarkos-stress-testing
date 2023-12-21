@@ -2,7 +2,7 @@
 plugin: amazon.aws.aws_ec2
 
 regions:
-  - us-west-1
+  - us-west-2
 
 keyed_groups:
   - key: tags.Role

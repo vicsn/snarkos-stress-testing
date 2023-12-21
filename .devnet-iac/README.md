@@ -15,6 +15,7 @@ Create a `.pem` file in your desired AWS region under `EC2 > Network & Security 
 Add the key to your authentication agent and configure AWS.
 
 ```bash
+chmod 400 your-key.pem
 ssh-add ~/.ssh/your-key.pem
 aws configure
 ```
@@ -31,7 +32,11 @@ Edit `snarkos.aws_ec2.yml` to the same `region` you set in `variables.tf`.
 
 ```bash
 terraform init
+```
+```bash
 terraform apply
+```
+```bash
 ansible-playbook snarkos_setup.yml
 ```
 
@@ -40,8 +45,14 @@ These commands will create the instances, install snarkOS, and start the network
 ### Utility Scripts
 ```bash
 ansible-playbook snarkos_height.yml
+```
+```bash
 ansible-playbook snarkos_status.yml
+```
+```bash
 ansible-playbook snarkos_stop.yml
+```
+```bash
 ansible-playbook snarkos_start.yml
 ```
 

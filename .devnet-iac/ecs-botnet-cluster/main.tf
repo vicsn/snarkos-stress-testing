@@ -1,6 +1,6 @@
 variable "aws_region" {
   description = "AWS region for resources"
-  default     = "us-east-2"
+  default     = "us-west-2"
 }
 
 provider "aws" {
