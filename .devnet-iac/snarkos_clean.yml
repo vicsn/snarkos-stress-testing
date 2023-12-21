@@ -3,10 +3,14 @@
   hosts: "snarkos_node"
   become: yes
   remote_user: ubuntu
-  vars:
-    branch: "testnet3"
-    verbosity: "4"
   tasks:
+    - name: Set node_id based on instance tag
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+      loop: "{{ groups['snarkos_node'] }}"
+      loop_control:
+        loop_var: instance
+
     - name: Stop snarkos service
       systemd:
         name: snarkos
@@ -15,8 +19,7 @@
 
     - name: Remove snarkos data
       ansible.builtin.shell:
-        cmd: "/root/.cargo/bin/snarkos clean --dev {{ item }}"
-      loop: "{{ range(0, 41) | list }}"
+        cmd: "/root/.cargo/bin/snarkos clean --dev {{ node_id }}"
 
     - name: Restart snarkos service
       systemd:
