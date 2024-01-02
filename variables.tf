@@ -1,5 +1,5 @@
 variable "aws_region" {
-  default     = "us-east-2"
+  default     = "us-west-2"
 }
 
 variable "instance_type" {
@@ -11,5 +11,5 @@ variable "instance_count" {
 }
 
 variable "key_pair_name" {
-  default     = "devnet-ansible"
+  default     = "your-key"
 }
