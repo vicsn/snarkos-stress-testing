@@ -1,35 +1,23 @@
-- name: Copy files to EC2 instance
+- name: Install prometheus and enable remote forwarding to Grafana cloud
   hosts: prometheus_server  # Use the hostname of your Prometheus server instance
   become: yes  # Run tasks with elevated privileges if necessary
-  gather_facts: false  # Enable gathering facts
+  gather_facts: true 
   vars:
     ansible_user: ubuntu 
+  vars_prompt:
+    - name: devnet_name
+      prompt: What is your first name?
+      private: false
 
   tasks:
     - name: Copy docker-compose.yml
       copy:
-        src: docker-compose.yml  # Replace with the actual path to your docker-compose.yml
+        src: docker-compose.yml  
         dest: /home/ubuntu/docker-compose.yml
         owner: ubuntu  # Update with the appropriate username
         group: ubuntu  # Update with the appropriate group
       become_user: ubuntu
 
-    #- name: Copy prometheus.yml
-    #  copy:
-    #    src: prometheus.yml  # Replace with the actual path to your prometheus.yml
-    #    dest: /home/ubuntu/prometheus.yml
-    #    owner: ubuntu  # Update with the appropriate username
-    #    group: ubuntu
-    #  become_user: ubuntu
-
-- name: Generate Prometheus scrape target JSON file
-  hosts: prometheus_server  # Use the hostname of your Prometheus server instance
-  become: yes  # Run tasks with elevated privileges if necessary
-  gather_facts: true  # Enable gathering facts
-  vars:
-    ansible_user: ubuntu 
-
-  tasks:
     - name: Install Docker
       apt:
         name: docker.io
@@ -45,14 +33,24 @@
         dest: "/usr/local/bin/docker-compose"
         mode: 'u+x,g+x'
 
-    #- name: Create YAML scrape target file of all nodes
-    #  ansible.builtin.template:
-    #    src: templates/scrape_targets.j2  # Path to your Jinja2 template file
-    #    dest: /home/ubuntu/snarkos_nodes.yml
     - name: Create YAML scrape target file of all nodes
       ansible.builtin.template:
-        src: prometheus.yml  # Path to your Jinja2 template file
+        src: prometheus.yml 
         dest: /home/ubuntu/prometheus.yml
+
+    - name: Install unzip
+      ansible.builtin.package:
+        name: unzip
+        state: present
+
+    - name: Download, unzip, and set execute permissions on Grafana Agent
+      ansible.builtin.shell: |
+        curl -O -L "https://github.com/grafana/agent/releases/latest/download/grafana-agent-linux-amd64.zip" &&
+        unzip "grafana-agent-linux-amd64.zip" &&
+        chmod a+x grafana-agent-linux-amd64
+      args:
+        chdir: /home/ubuntu
+        creates: grafana-agent-linux-amd64
 
     - name: Run docker-compose up
       command: docker-compose up -d

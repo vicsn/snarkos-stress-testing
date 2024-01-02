@@ -2,6 +2,13 @@ global:
   scrape_interval: 15s
   scrape_timeout: 10s
   evaluation_interval: 1m
+  external_labels:
+    origin_prometheus: {{ devnet_name }}_devnet
+remote_write:
+  - url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
+    basic_auth:
+      username: 1272055
+      password: {{ lookup('amazon.aws.aws_secret', 'stress-testing.grafana_cloud_api_key', nested=true) }}
 scrape_configs:
   - job_name: prometheus
     honor_timestamps: true
@@ -22,7 +29,7 @@ scrape_configs:
     follow_redirects: true
     static_configs:
     - targets: [{% for host in groups['snarkos_node'] %}"{{ host }}:9000"
-                {%- if not loop.last %},{% endif %}
-                {%- endfor %}]
+                 {%- if not loop.last %},{% endif %}
+                 {%- endfor %}]
       labels:
         group: "snarkos"
