@@ -1,8 +1,12 @@
-# snarkos.aws_ec2.yml
+# dynamic_inventory.aws_ec2.yml
 plugin: amazon.aws.aws_ec2
 
 regions:
+<<<<<<< HEAD:.devnet-iac/snarkos.aws_ec2.yml
   - us-east-2
+=======
+  - us-west-2
+>>>>>>> main:dynamic_inventory.aws_ec2.yml
 
 keyed_groups:
   - key: tags.Role

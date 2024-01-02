@@ -3,10 +3,6 @@
   hosts: "snarkos_node"
   become: yes
   remote_user: ubuntu
-  vars:
-    branch: "testnet3"
-    verbosity: "4"
-    ansible_ssh_private_key_file:
   tasks:
     - name: Stop snarkos service
       systemd:
