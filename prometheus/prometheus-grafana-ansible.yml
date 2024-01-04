@@ -1,16 +1,23 @@
-- name: Install Prometheus on Server and start scraping nodes on devnet
-  hosts: prometheus_server 
-  become: yes  
+- name: Install prometheus and enable remote forwarding to Grafana cloud
+  hosts: prometheus_server
+  become: yes 
   gather_facts: true 
   vars:
     ansible_user: ubuntu 
+  vars_prompt:
+    - name: devnet_name
+      prompt: "Input desired devnet name:"
+      private: false
+    - name: grafana_cloud_api_key
+      prompt: "Paste the grafana cloud api key:"
+      private: true
 
   tasks:
     - name: Copy docker-compose.yml
       copy:
         src: docker-compose.yml  
         dest: /home/ubuntu/docker-compose.yml
-        owner: ubuntu  
+        owner: ubuntu 
         group: ubuntu  
       become_user: ubuntu
 
@@ -23,7 +30,6 @@
       service:
         name: docker
         state: started
-
     - name: Install Docker Compose
       get_url:
         url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
@@ -32,9 +38,19 @@
 
     - name: Create YAML scrape target file of all nodes
       ansible.builtin.template:
-        src: prometheus.yml
+        src: prometheus-cloud-grafana.yml 
         dest: /home/ubuntu/prometheus.yml
 
+    - name: Install unzip
+      ansible.builtin.package:
+        name: unzip
+        state: present
+
+    - name: Download, unzip, and set execute permissions on Grafana Agent
+      ansible.builtin.shell: |
+        curl -O -L "https://github.com/grafana/agent/releases/latest/download/grafana-agent-linux-amd64.zip" &&
+        unzip "grafana-agent-linux-amd64.zip" &&
+        chmod a+x grafana-agent-linux-amd64
       args:
         chdir: /home/ubuntu
         creates: grafana-agent-linux-amd64
@@ -43,6 +59,3 @@
       command: docker-compose up -d
       args:
         chdir: /home/ubuntu/
-
-
-
