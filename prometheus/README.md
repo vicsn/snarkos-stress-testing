@@ -31,11 +31,17 @@ This will ask for an input of your desired devnet name-- this is for remote forw
 
 *Check that* you have the vars changed to suit your needs, this usually means (in the `main.tf` file that you change the name of your pem private key, as well as whatever region you are set to)
 
-You can then plug this endpoint into Grafana cloud to query your devnet metrics in a central place, and any credentialed user can observe them.
+The devnet metrics are now being forwarded to Grafana cloud!
 
 # Viewing Metrics on Grafana
 Once these steps are complete, you should be able to access your metrics [here](https://aleostresstest.grafana.net/explore?schemaVersion=1&panes=%7B%22_Tc%22%3A%7B%22datasource%22%3A%22grafanacloud-prom%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%22%2C%22range%22%3Atrue%2C%22instant%22%3Atrue%2C%22datasource%22%3A%7B%22type%22%3A%22prometheus%22%2C%22uid%22%3A%22grafanacloud-prom%22%7D%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-6h%22%2C%22to%22%3A%22now%22%7D%7D%7D&orgId=1)
 
-You can filter to select only nodes in your network using the `Label Filters` and then the name of your devnet, which is simply the name you input earlier with the `_devnet` suffix
+You can filter to select only nodes in your network using the `Label Filters`, click `origin_prometheus` as the filter and then the name of your devnet.
+
+# Viewing the Dashboard for your Network
+ 
+Running the ansible playbook called `prometheus-grafana-ansible.yml` will have templated a file called `grafana-dashboard.yml` in this directory. That is a spec for a Grafana dashboard that is specific to the devnet you created. 
+
+To create this dashboard (which you only have to do once per devnet instantation), go to [aleostresstest.grafana.net](aleostresstest.grafana.net) and find `Dashboards` in the left menu. You can click `new dashboard`, and then `Import a Dashboard` on the bottom right. All you need to do is copy and paste the formatted JSON file contents into the box that says `Import via dashboard JSON model`, and your dashboard is ready to go!
 
 

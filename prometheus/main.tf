@@ -8,7 +8,7 @@ variable "instance_type" {
 }
 
 variable "key_pair_name" {
-  default     = "devnet-ansible" # change to your keypair name
+  default     = "stress-testing" # change to your keypair name
 }
 
 data "aws_ami" "latest_ubuntu" {

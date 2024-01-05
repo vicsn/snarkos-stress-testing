@@ -19,6 +19,7 @@
         name: docker.io
         state: present
         update_cache: yes
+        
     - name: Ensure Docker service is started
       service:
         name: docker

@@ -6,10 +6,10 @@
     ansible_user: ubuntu 
   vars_prompt:
     - name: devnet_name
-      prompt: "Input desired devnet name:"
+      prompt: "Input desired devnet name (e.g. 'howard_devnet')"
       private: false
     - name: grafana_cloud_api_key
-      prompt: "Paste the grafana cloud api key:"
+      prompt: "Paste the grafana cloud api key"
       private: true
 
   tasks:
@@ -26,10 +26,12 @@
         name: docker.io
         state: present
         update_cache: yes
+
     - name: Ensure Docker service is started
       service:
         name: docker
         state: started
+
     - name: Install Docker Compose
       get_url:
         url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
@@ -59,3 +61,20 @@
       command: docker-compose up -d
       args:
         chdir: /home/ubuntu/
+
+    - name: Pass devnet name onto template
+      set_fact:
+        devnet_name: "{{ devnet_name }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+- name: Template the Grafana Dashboard
+  hosts: localhost
+  gather_facts: true 
+  tasks:
+    - name: Template the Grafana Json
+      ansible.builtin.template:
+        src: grafana-dashboard-template.json
+        dest: grafana-dashboard.json
+
+
