@@ -44,6 +44,14 @@ resource "aws_security_group" "snarkos_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+# This is for the prometheus process exporter
+  ingress {
+    from_port   = 9256
+    to_port     = 9256
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   ingress {
     from_port   = 3033
     to_port     = 3033
