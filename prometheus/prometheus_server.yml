@@ -1,0 +1,49 @@
+- name: Install Prometheus on Server and start scraping nodes on devnet
+  hosts: prometheus_server 
+  become: yes  
+  gather_facts: true 
+  vars:
+    ansible_user: ubuntu 
+
+  tasks:
+    - name: Copy docker-compose.yml
+      copy:
+        src: docker-compose.yml  
+        dest: /home/ubuntu/docker-compose.yml
+        owner: ubuntu  
+        group: ubuntu  
+      become_user: ubuntu
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+        
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: "/usr/local/bin/docker-compose"
+        mode: 'u+x,g+x'
+
+    - name: Create YAML scrape target file of all nodes
+      ansible.builtin.template:
+        src: prometheus.yml
+        dest: /home/ubuntu/prometheus.yml
+
+      args:
+        chdir: /home/ubuntu
+        creates: grafana-agent-linux-amd64
+
+    - name: Run docker-compose up
+      command: docker-compose up -d
+      args:
+        chdir: /home/ubuntu/
+
+
+

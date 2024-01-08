@@ -96,3 +96,26 @@
         name: snarkos
         state: restarted
       become: yes
+
+    - name: Start Prometheus Process Exporter
+      pause:
+        prompt: Please confirm you want to start the prometheus process exporter! Press return to continue. Press Ctrl+c and then "a" to abort
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+        
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Run Docker Process Exporter for snarkos
+      ansible.builtin.shell: >
+        docker run -d --rm -p 9256:9256 --privileged -v /proc:/host/proc -v $(pwd):/config ncabatoff/process-exporter --procfs /host/proc -procnames snarkos
+      args:
+        executable: /bin/bash
+
+
