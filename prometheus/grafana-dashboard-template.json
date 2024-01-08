@@ -1599,7 +1599,7 @@
             "uid": "grafanacloud-prom"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, groupname)(namedprocess_namegroup_memory_bytes{groupname=\"snarkos\",origin_prometheus=\"{{ devnet_name }}"})/1000000000",
+          "expr": "sum by (instance, groupname)(namedprocess_namegroup_memory_bytes{groupname=\"snarkos\",origin_prometheus=\"{{ devnet_name }}\"})/1000000000",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
