@@ -59,6 +59,16 @@ ansible-playbook snarkos_setup.yml
 
 These commands will create the instances, install snarkOS, and start the network.
 
+### (Optional) Ship logs with Logstash to Elastic
+
+```bash
+ansible-playbook logstash_setup.yml
+```
+
+By default, this ships logs to an Elastic Cloud server by giving it a cloud ID and API key.
+
+[logstash.conf](templates%2Flogstash.conf) can be edited to ship the logs anywhere else.
+
 ### Utility Scripts
 
 ```bash

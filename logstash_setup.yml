@@ -5,16 +5,11 @@
   remote_user: ubuntu
 
   vars_prompt:
-    - name: collection_enpdoint
-      prompt: "Enter the OpenSearch or ElasticSearch collection Endpoint (e.g. https://abcdef123456.us-east-1.aoss.amazonaws.com)"
+    - name: cloud_id
+      prompt: "Enter your Elastic Cloud ID"
       private: no
-
-    - name: aws_access_key_id
-      prompt: "Enter your AWS Access Key ID"
-      private: no
-
-    - name: aws_secret_access_key
-      prompt: "Enter your AWS Secret Access Key"
+    - name: api_key
+      prompt: "Enter your Elastic API Key"
       private: no
 
   tasks:
@@ -39,10 +34,6 @@
         update_cache: yes
         name: logstash
         state: latest
-
-    - name: Install Logstash Output Opensearch Plugin
-      ansible.builtin.shell:
-        cmd: "/usr/share/logstash/bin/logstash-plugin install --version 2.0.0 logstash-output-opensearch"
 
     - name: Copy Logstash Configuration Template
       ansible.builtin.template:
