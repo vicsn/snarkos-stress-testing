@@ -6,7 +6,7 @@
     ansible_user: ubuntu 
   vars_prompt:
     - name: devnet_name
-      prompt: "Input desired devnet name (e.g. 'howard_devnet')"
+      prompt: "Input desired devnet name (e.g. 'howard_devnet') - this should be the same name that you used for your logstash config"
       private: false
     - name: grafana_cloud_api_key
       prompt: "Paste the grafana cloud api key"
