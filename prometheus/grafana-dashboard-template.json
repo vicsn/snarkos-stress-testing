@@ -18,16 +18,240 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 16,
+  "id": 18,
   "links": [],
   "liveNow": false,
   "panels": [
+    {
+      "datasource": {
+        "type": "elasticsearch",
+        "uid": "a4f55976-8061-4d8d-8985-4fd62c21114e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unitScale": true
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "ERROR LOGS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ALL LOGS"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WARN LOGS"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "warn logs",
+                    "url": "https://stress-test.kb.us-east-2.aws.elastic-cloud.com:9243/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15m,to:now))&_a=(columns:!(),filters:!(),index:e502c24f-68c8-4d1e-a03a-c4d653a5f84c,interval:auto,query:(language:kuery,query:'_index:snarkos-logs-mia*%20AND%20loglevel:WARN'),sort:!(!(timestamp,desc)))"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 25,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "10.3.0-64796",
+      "targets": [
+        {
+          "alias": "",
+          "bucketAggs": [
+            {
+              "field": "timestamp",
+              "id": "2",
+              "settings": {
+                "interval": "auto"
+              },
+              "type": "date_histogram"
+            }
+          ],
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "a4f55976-8061-4d8d-8985-4fd62c21114e"
+          },
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "query": "_index:snarkos-logs-mia*",
+          "refId": "A",
+          "timeField": "timestamp"
+        },
+        {
+          "alias": "",
+          "bucketAggs": [
+            {
+              "field": "timestamp",
+              "id": "2",
+              "settings": {
+                "interval": "auto"
+              },
+              "type": "date_histogram"
+            }
+          ],
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "a4f55976-8061-4d8d-8985-4fd62c21114e"
+          },
+          "hide": false,
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "query": "_index:snarkos-logs-mia* AND loglevel:ERROR",
+          "refId": "B",
+          "timeField": "timestamp"
+        },
+        {
+          "alias": "",
+          "bucketAggs": [
+            {
+              "field": "timestamp",
+              "id": "2",
+              "settings": {
+                "interval": "auto"
+              },
+              "type": "date_histogram"
+            }
+          ],
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "a4f55976-8061-4d8d-8985-4fd62c21114e"
+          },
+          "hide": false,
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "query": "_index:snarkos-logs-mia* AND loglevel:WARN",
+          "refId": "C",
+          "timeField": "timestamp"
+        }
+      ],
+      "title": "Log Frequency",
+      "type": "barchart"
+    },
     {
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 8
       },
       "id": 18,
       "title": "Row title",
@@ -88,7 +312,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": [
           {
@@ -130,7 +355,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 9
       },
       "id": 12,
       "options": {
@@ -183,7 +408,39 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -194,7 +451,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -202,28 +460,22 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 9
       },
       "id": 8,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "text": {
-          "titleSize": 10
-        },
-        "textMode": "auto",
-        "wideLayout": true
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
-      "pluginVersion": "10.3.0-64399",
+      "pluginVersion": "10.3.0-64796",
       "targets": [
         {
           "datasource": {
@@ -243,7 +495,7 @@
         }
       ],
       "title": "Block Height",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -297,7 +549,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": [
           {
@@ -332,7 +585,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 17
       },
       "id": 11,
       "options": {
@@ -385,7 +638,39 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -396,7 +681,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -404,28 +690,22 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 17
       },
       "id": 7,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "text": {
-          "titleSize": 10
-        },
-        "textMode": "value_and_name",
-        "wideLayout": true
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
-      "pluginVersion": "10.3.0-64399",
+      "pluginVersion": "10.3.0-64796",
       "targets": [
         {
           "datasource": {
@@ -445,7 +725,7 @@
         }
       ],
       "title": "Current Round",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -467,7 +747,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -475,7 +756,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 17
+        "y": 25
       },
       "id": 2,
       "options": {
@@ -490,10 +771,11 @@
           "fields": "",
           "values": false
         },
+        "showPercentChange": false,
         "textMode": "value",
         "wideLayout": true
       },
-      "pluginVersion": "10.3.0-64399",
+      "pluginVersion": "10.3.0-64796",
       "targets": [
         {
           "datasource": {
@@ -534,7 +816,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -542,7 +825,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 17
+        "y": 25
       },
       "id": 10,
       "options": {
@@ -557,10 +840,11 @@
           "fields": "",
           "values": false
         },
+        "showPercentChange": false,
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "10.3.0-64399",
+      "pluginVersion": "10.3.0-64796",
       "targets": [
         {
           "datasource": {
@@ -631,7 +915,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -639,7 +924,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 17
+        "y": 25
       },
       "id": 9,
       "options": {
@@ -718,14 +1003,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": [
           {
@@ -773,7 +1060,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 33
       },
       "id": 4,
       "options": {
@@ -865,14 +1152,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -880,7 +1169,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 33
       },
       "id": 3,
       "options": {
@@ -964,14 +1253,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -979,7 +1270,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 33
+        "y": 41
       },
       "id": 1,
       "options": {
@@ -1062,14 +1353,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1077,7 +1370,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 33
+        "y": 41
       },
       "id": 5,
       "options": {
@@ -1160,11 +1453,13 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               }
             ]
           },
-          "unit": "µs"
+          "unit": "µs",
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1172,7 +1467,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 41
+        "y": 49
       },
       "id": 13,
       "options": {
@@ -1251,11 +1546,13 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               }
             ]
           },
-          "unit": "µs"
+          "unit": "µs",
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1263,7 +1560,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 41
+        "y": 49
       },
       "id": 14,
       "options": {
@@ -1342,11 +1639,13 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "decbytes",
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1354,7 +1653,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 41
+        "y": 49
       },
       "id": 15,
       "options": {
@@ -1433,10 +1732,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1444,7 +1745,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 41
+        "y": 49
       },
       "id": 16,
       "options": {
@@ -1482,7 +1783,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 57
       },
       "id": 17,
       "panels": [],
@@ -1499,7 +1800,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 58
       },
       "id": 24,
       "options": {
@@ -1511,7 +1812,7 @@
         "content": "# Process Metrics\n\nThe [Process Exporter](https://github.com/ncabatoff/process-exporter/tree/master) is a custom Prometheus Go package that mines `/proc` on selected resources. In this case, we are only monitoring the `snarkos` process. \nFor more information on all metrics exported by this package, click the link.",
         "mode": "markdown"
       },
-      "pluginVersion": "10.3.0-64399",
+      "pluginVersion": "10.3.0-64796",
       "type": "text"
     },
     {
@@ -1561,7 +1862,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -1569,7 +1871,8 @@
               }
             ]
           },
-          "unit": "decgbytes"
+          "unit": "decgbytes",
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1577,7 +1880,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 62
       },
       "id": 19,
       "options": {
@@ -1608,77 +1911,6 @@
       ],
       "title": "Total GB Memory Used by Node",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 54
-      },
-      "id": 20,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.3.0-64399",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-prom"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "(sum by (instance) (rate(namedprocess_namegroup_cpu_seconds_total{origin_prometheus=\"{{ devnet_name }}\"}[1m])) ) * 100\n",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "Avg CPU Usage per Second by SnarkOS",
-      "type": "stat"
     },
     {
       "datasource": {
@@ -1727,14 +1959,118 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "percent",
+          "unitScale": true
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 62
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.3.0-64796",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-prom"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "(sum by (instance) (rate(namedprocess_namegroup_cpu_seconds_total{origin_prometheus=\"{{ devnet_name }}\"}[1m])) ) * 100\n",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Avg CPU Usage per Second by SnarkOS",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1742,7 +2078,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 70
       },
       "id": 21,
       "options": {
@@ -1783,21 +2119,55 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
             "mode": "percentage",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1805,25 +2175,22 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 70
       },
       "id": 22,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "textMode": "auto",
-        "wideLayout": true
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
-      "pluginVersion": "10.3.0-64399",
+      "pluginVersion": "10.3.0-64796",
       "targets": [
         {
           "datasource": {
@@ -1839,7 +2206,7 @@
         }
       ],
       "title": "SnarkOS Minor Page Faults",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -1888,14 +2255,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unitScale": true
         },
         "overrides": []
       },
@@ -1903,7 +2272,7 @@
         "h": 8,
         "w": 12,
         "x": 6,
-        "y": 70
+        "y": 78
       },
       "id": 23,
       "options": {
@@ -1944,11 +2313,13 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
-  "version": 2,
+  "title": "Mia's Devnet",
+  "uid": "c91c800d-1ee7-4bd6-90bb-5b60b57440ef",
+  "version": 4,
   "weekStart": ""
 }
