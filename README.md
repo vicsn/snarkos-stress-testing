@@ -1,4 +1,4 @@
-## Stress Observability
+# Stress Observability
 
 The intention of this repo is to be an alternative to
 the [.devnet folder](https://github.com/AleoHQ/snarkOS/tree/testnet3/.devnet)
@@ -57,19 +57,41 @@ terraform apply
 ansible-playbook snarkos_setup.yml
 ```
 
-These commands will create the instances, install snarkOS, and start the network.
+### **Congratulations!**
+ You have now started the instances, installed snarkOS, and started your network.
 
-### (Optional) Ship logs with Logstash to Elastic
+-----
+
+# Viewing Logs in Elastic Cloud
+
+The Elastic cloud setup is a faster way to search logs of every node on your dev network. To set it up, run the below command in the main directory:
 
 ```bash
 ansible-playbook logstash_setup.yml
 ```
 
-By default, this ships logs to an Elastic Cloud server by giving it a cloud ID and API key.
+
+By default, this ships logs to the [Elastic Cloud server](https://stress-test.kb.us-east-2.aws.elastic-cloud.com:9243/app/discover) by giving it a cloud ID and API key.
+
+If you want to see only **your** devnet logs, type this filter in the top query bar:
+
+```
+_index: "snarkos-logs-$DEVNET_NAME*"
+```
+
+e.g. if the configured devnet name is `howard_devnet`, you would query:
+
+```
+_index: "snarkos-logs-howard_devnet*"
+```
+
 
 [logstash.conf](templates%2Flogstash.conf) can be edited to ship the logs anywhere else.
 
-### Utility Scripts
+-------
+
+
+# Utility Scripts
 
 ```bash
 ansible-playbook snarkos_height.yml

@@ -11,6 +11,9 @@
     - name: api_key
       prompt: "Enter your Elastic API Key"
       private: no
+    - name: devnet_name
+      prompt: "Input desired devnet name for logstash index (e.g. 'howard_devnet')"
+      private: false
 
   tasks:
     - name: Set AWS Region Fact
