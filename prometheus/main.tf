@@ -1,6 +1,6 @@
 # main.tf
 variable "aws_region" {
-  default     = "us-east-2"
+  default     = var.aws_region
 }
 
 variable "instance_type" {
@@ -8,7 +8,7 @@ variable "instance_type" {
 }
 
 variable "key_pair_name" {
-  default     = "stress-testing" # change to your keypair name
+  default     =  var.key_pair_name
 }
 
 data "aws_ami" "latest_ubuntu" {

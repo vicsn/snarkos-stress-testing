@@ -124,7 +124,7 @@
                 "value": [
                   {
                     "title": "warn logs",
-                    "url": "https://stress-test.kb.us-east-2.aws.elastic-cloud.com:9243/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15m,to:now))&_a=(columns:!(),filters:!(),index:e502c24f-68c8-4d1e-a03a-c4d653a5f84c,interval:auto,query:(language:kuery,query:'_index:snarkos-logs-mia*%20AND%20loglevel:WARN'),sort:!(!(timestamp,desc)))"
+                    "url": "https://stress-test.kb.us-east-2.aws.elastic-cloud.com:9243/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15m,to:now))&_a=(columns:!(),filters:!(),index:e502c24f-68c8-4d1e-a03a-c4d653a5f84c,interval:auto,query:(language:kuery,query:'_index:snarkos-logs-{{ devnet_name }}*%20AND%20loglevel:WARN'),sort:!(!(timestamp,desc)))"
                   }
                 ]
               }
@@ -184,7 +184,7 @@
               "type": "count"
             }
           ],
-          "query": "_index:snarkos-logs-mia*",
+          "query": "_index:snarkos-logs-{{ devnet_name }}*",
           "refId": "A",
           "timeField": "timestamp"
         },
@@ -211,7 +211,7 @@
               "type": "count"
             }
           ],
-          "query": "_index:snarkos-logs-mia* AND loglevel:ERROR",
+          "query": "_index:snarkos-logs-{{ devnet_name }}* AND loglevel:ERROR",
           "refId": "B",
           "timeField": "timestamp"
         },
@@ -238,7 +238,7 @@
               "type": "count"
             }
           ],
-          "query": "_index:snarkos-logs-mia* AND loglevel:WARN",
+          "query": "_index:snarkos-logs-{{ devnet_name }}* AND loglevel:WARN",
           "refId": "C",
           "timeField": "timestamp"
         }
