@@ -5,7 +5,7 @@
   remote_user: ubuntu
   vars:
     branch: "testnet3"
-    verbosity: "4"
+    verbosity: "1"
   tasks:
     - name: Gather facts from all nodes
       setup:
