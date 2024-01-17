@@ -1,14 +1,6 @@
 # main.tf
-variable "aws_region" {
-  default     = var.aws_region
-}
-
 variable "instance_type" {
   default = "m5.2xlarge"
-}
-
-variable "key_pair_name" {
-  default     =  var.key_pair_name
 }
 
 data "aws_ami" "latest_ubuntu" {
