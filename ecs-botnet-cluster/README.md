@@ -48,7 +48,7 @@ aws ecs create-service \
                   --cluster 'tx-cannon' \
                   --service-name 'hello_hello_service' \
                   --task-definition 'tx-cannon-2vCPU-16GB' \
-                  --desired-count 2000 \
+                  --desired-count 20 \
                   --launch-type FARGATE \
                   --network-configuration '{
                       "awsvpcConfiguration": {
