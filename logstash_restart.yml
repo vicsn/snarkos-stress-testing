@@ -1,0 +1,12 @@
+# restart_logstash.yml
+- name: Restart Logstash Service
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+
+  tasks:
+    - name: Restart Logstash Service
+      ansible.builtin.systemd:
+        name: logstash
+        state: restarted
+        enabled: yes
