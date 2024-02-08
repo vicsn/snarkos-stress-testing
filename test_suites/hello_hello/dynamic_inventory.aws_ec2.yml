@@ -1,4 +1,3 @@
-# dynamic_inventory.aws_ec2.yml
 plugin: amazon.aws.aws_ec2
 
 regions:
@@ -9,7 +8,11 @@ keyed_groups:
     prefix: ""
     separator: ""
     value: "snarkos-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "tx-cannon-node"
 
 filters:
   instance-state-name: running
-  tag:Name: snarkos-node-*
+  tag:Role: ["snarkos-node", "tx-cannon-node"]

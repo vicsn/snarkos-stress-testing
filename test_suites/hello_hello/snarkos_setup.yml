@@ -95,11 +95,9 @@
   tasks:
     - name: Clone or update tx-cannon
       git:
-        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/YourRepo/tx-cannon.git"
+        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
-        version: "main"
-      no_log: true
-
+        version: "feat/build-ubuntu"
 
     - name: Make build_ubuntu.sh executable for tx-cannon
       file:
