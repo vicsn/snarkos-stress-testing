@@ -10,3 +10,4 @@
 **/grafana-dashboard.json
 **/devnet-key
 **/devnet-key.pub
+**/.env

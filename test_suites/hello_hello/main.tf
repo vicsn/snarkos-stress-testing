@@ -38,6 +38,38 @@ resource "aws_instance" "snarkos_node" {
   }
 }
 
+# Add variables for tx-cannon instance configuration
+variable "tx_cannon_instance_type" {
+  description = "Instance type for tx-cannon nodes"
+  default     = "t2.medium"
+}
+
+variable "tx_cannon_instance_count" {
+  description = "Number of tx-cannon nodes"
+  default     = 2
+}
+
+# Resource block for tx-cannon instances
+resource "aws_instance" "tx_cannon_node" {
+  count         = var.tx_cannon_instance_count
+  ami           = data.aws_ami.latest_ubuntu.id
+  instance_type = var.tx_cannon_instance_type
+  key_name      = aws_key_pair.generated_key.key_name
+
+  security_groups = [aws_security_group.snarkos_sg.name]
+
+  ebs_block_device {
+    device_name = "/dev/sda1"
+    volume_size = 20  # Adjust the volume size if needed
+  }
+
+  tags = {
+    Name = "tx-cannon-node-${count.index}",
+    Role = "tx-cannon-node",
+    Dev = count.index
+  }
+}
+
 resource "aws_security_group" "snarkos_sg" {
   name        = "snarkos_sg"
   description = "Security group for snarkOS nodes"

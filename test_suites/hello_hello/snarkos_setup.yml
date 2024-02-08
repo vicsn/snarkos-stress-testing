@@ -86,3 +86,36 @@
         name: snarkos
         state: restarted
       become: yes
+
+# setting up and running tx-cannon on tx-cannon instances
+- name: Set up and run tx-cannon
+  hosts: "tx_cannon_node"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Clone or update tx-cannon
+      git:
+        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/YourRepo/tx-cannon.git"
+        dest: "/home/ubuntu/tx-cannon"
+        version: "main"
+      no_log: true
+
+
+    - name: Make build_ubuntu.sh executable for tx-cannon
+      file:
+        path: "/home/ubuntu/tx-cannon/build_ubuntu.sh"
+        mode: '0755'
+
+    - name: Build tx-cannon using build_ubuntu.sh
+      shell: cd /home/ubuntu/tx-cannon && sudo ./build_ubuntu.sh
+      args:
+        executable: /bin/bash
+
+    - name: Run tx-cannon
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        ./tx-cannon batch-execute --test tests/hello_hello/hello_hello.toml --threads 1 -e http://{{ test_network_url }}:3033/
+      args:
+        executable: /bin/bash
+      async: 3600 # Adjust based on expected duration of the tx-cannon run
+      poll: 0 # Fire and forget; adjust if you need to wait for completion
