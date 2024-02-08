@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Function to clean up resources using Terraform
+cleanup() {
+    echo "An error occurred. Destroying infrastructure to avoid unnecessary costs..."
+    terraform destroy -auto-approve
+}
+
+# Set up trap to call cleanup function on any error
+trap cleanup ERR
+
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
@@ -26,9 +35,16 @@ terraform init
 echo "Creating infrastructure..."
 terraform apply -auto-approve
 
+# Run Ansible playbook to configure the nodes
+echo "Configuring nodes with Ansible..."
+ansible-playbook -i dynamic_inventory.aws_ec2.yml snarkos_setup.yml
+
 # Optionally, wait for user input before destroying the infrastructure
 read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
 # Destroy the infrastructure
 echo "Destroying infrastructure..."
 terraform destroy -auto-approve
+
+# tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml --threads 1 -e http://snarkos-lb-1676216919.us-west-2.elb.amazonaws.com:3033/
+# tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://snarkos-lb-1676216919.us-west-2.elb.amazonaws.com:3033/
