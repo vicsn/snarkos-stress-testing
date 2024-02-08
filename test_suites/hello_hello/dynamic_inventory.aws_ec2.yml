@@ -1,0 +1,15 @@
+# dynamic_inventory.aws_ec2.yml
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-west-2
+
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-node"
+
+filters:
+  instance-state-name: running
+  tag:Name: snarkos-node-*
