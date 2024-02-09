@@ -88,16 +88,6 @@
       become: yes
 
 # logstash
-- name: Debug environment variables
-  hosts: "snarkos_node"
-  become: yes
-  remote_user: ubuntu
-  tasks:
-    - name: Print DEVNET_NAME environment variable
-      debug:
-        msg: "DEVNET_NAME is '{{ lookup('env', 'DEVNET_NAME') }}'"
-
-
 - name: Install and Configure Logstash
   hosts: "snarkos_node"
   become: yes
