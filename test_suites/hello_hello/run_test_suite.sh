@@ -8,7 +8,8 @@ load_env() {
         source ../.env
         set +a
     else
-        echo ".env file not found. Skipping environment variable loading..."
+        echo ".env file not found. Exiting..."
+        exit 1
     fi
 }
 
