@@ -60,7 +60,6 @@
       args:
         executable: /bin/bash
 
-
     - name: Set environment variables for snarkos service
       set_fact:
         ansible_env:
@@ -86,6 +85,23 @@
         name: snarkos
         state: restarted
       become: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+        
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Run Docker Process Exporter for snarkos
+      ansible.builtin.shell: >
+        docker run -d --rm -p 9256:9256 --privileged -v /proc:/host/proc -v $(pwd):/config ncabatoff/process-exporter --procfs /host/proc -procnames snarkos
+      args:
+        executable: /bin/bash
 
 # logstash
 - name: Install and Configure Logstash
@@ -131,6 +147,66 @@
         name: logstash
         state: started
         enabled: yes
+
+# metrics on grafana
+- name: Install prometheus and enable remote forwarding to Grafana cloud
+  hosts: prometheus_server
+  become: yes 
+  gather_facts: true 
+  vars:
+    ansible_user: ubuntu 
+    grafana_cloud_api_key: "{{ lookup('env', 'GRAFANA_CLOUD_API_KEY') }}"
+    devnet_name: "{{ lookup('env', 'DEVNET_NAME') }}"
+
+  tasks:
+    - name: Copy docker-compose.yml
+      copy:
+        src: docker-compose.yml  
+        dest: /home/ubuntu/docker-compose.yml
+        owner: ubuntu 
+        group: ubuntu  
+      become_user: ubuntu
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: "/usr/local/bin/docker-compose"
+        mode: 'u+x,g+x'
+
+    - name: Create YAML scrape target file of all nodes
+      ansible.builtin.template:
+        src: prometheus.yml 
+        dest: /home/ubuntu/prometheus.yml
+
+    - name: Install unzip
+      ansible.builtin.package:
+        name: unzip
+        state: present
+
+    - name: Download, unzip, and set execute permissions on Grafana Agent
+      ansible.builtin.shell: |
+        curl -O -L "https://github.com/grafana/agent/releases/latest/download/grafana-agent-linux-amd64.zip" &&
+        unzip "grafana-agent-linux-amd64.zip" &&
+        chmod a+x grafana-agent-linux-amd64
+      args:
+        chdir: /home/ubuntu
+        creates: grafana-agent-linux-amd64
+
+    - name: Run docker-compose up
+      command: docker-compose up -d
+      args:
+        chdir: /home/ubuntu/
 
 # Setting up and running tx-cannon on tx-cannon instances
 - name: Set up and run tx-cannon
