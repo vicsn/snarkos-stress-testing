@@ -3,7 +3,12 @@ global:
   scrape_timeout: 10s
   evaluation_interval: 1m
   external_labels:
-    origin_prometheus: {{ devnet_name }}_devnet
+    origin_prometheus: {{ devnet_name }}
+remote_write:
+  - url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
+    basic_auth:
+      username: 1272055
+      password: {{ grafana_cloud_api_key }}
 scrape_configs:
   - job_name: 'snarkos'
     honor_timestamps: true
@@ -31,3 +36,4 @@ scrape_configs:
                  {%- endfor %}]
       labels:
         group: "process_exporter"
+

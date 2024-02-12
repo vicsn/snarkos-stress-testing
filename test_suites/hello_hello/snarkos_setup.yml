@@ -186,6 +186,11 @@
         chdir: /home/ubuntu
         creates: grafana-agent-linux-amd64
 
+    - name: Run docker-compose up
+      command: docker-compose up -d
+      args:
+        chdir: /home/ubuntu/
+
 # Setting up and running tx-cannon on tx-cannon instances
 - name: Set up and run tx-cannon
   hosts: "tx_cannon_node"
