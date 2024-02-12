@@ -3,7 +3,11 @@
 **/.terraform.lock.hcl
 **/terraform.tfstate
 **/terraform.tfstate.lock.info
+**/.terraform.tfstate.lock.info
 **/terraform.tfstate.backup
 /group_vars/snarkos_node.yml
 /terraform.tfvars
 **/grafana-dashboard.json
+**/devnet-key
+**/devnet-key.pub
+**/.env
