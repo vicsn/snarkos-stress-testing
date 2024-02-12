@@ -142,7 +142,7 @@
       git:
         repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
-        version: "feat/build-ubuntu"
+        version: "testnet3"
 
     - name: Make build_ubuntu.sh executable for tx-cannon
       file:
