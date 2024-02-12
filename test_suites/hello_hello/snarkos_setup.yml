@@ -86,6 +86,23 @@
         state: restarted
       become: yes
 
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+        
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Run Docker Process Exporter for snarkos
+      ansible.builtin.shell: >
+        docker run -d --rm -p 9256:9256 --privileged -v /proc:/host/proc -v $(pwd):/config ncabatoff/process-exporter --procfs /host/proc -procnames snarkos
+      args:
+        executable: /bin/bash
+
 # logstash
 - name: Install and Configure Logstash
   hosts: "snarkos_node"
