@@ -108,15 +108,15 @@ resource "aws_security_group" "snarkos_sg" {
   }
 
   ingress {
-    from_port   = 3033
-    to_port     = 3033
+    from_port   = 3030
+    to_port     = 3030
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    from_port   = 4133
-    to_port     = 4133
+    from_port   = 4130
+    to_port     = 4230
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
