@@ -11,3 +11,5 @@
 **/devnet-key
 **/devnet-key.pub
 **/.env
+**/*.swp
+**/*tx-cannon.log

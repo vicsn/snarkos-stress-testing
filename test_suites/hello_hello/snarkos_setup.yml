@@ -18,7 +18,7 @@
   become: yes
   remote_user: ubuntu
   vars:
-    branch: "testnet3"
+    branch: "mainnet"
     verbosity: "1"
   tasks:
     - name: Gather facts from all nodes
@@ -218,7 +218,7 @@
       git:
         repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
-        version: "testnet3"
+        version: "mainnet"
 
     - name: Make build_ubuntu.sh executable for tx-cannon
       file:
@@ -233,7 +233,7 @@
     - name: Run tx-cannon and capture logs
       shell: |
         cd /home/ubuntu/tx-cannon
-        /root/.cargo/bin/tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3033 >> tx-cannon.log 2>&1
+        /root/.cargo/bin/tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -243,7 +243,7 @@
 
     - name: Wait for the deployed program to be ready
       uri:
-        url: "http://{{ test_network_url }}:3033/testnet3/program/hello_hello.aleo"
+        url: "http://{{ test_network_url }}:3030/mainnet/program/hello_hello.aleo"
         method: GET
         status_code: 200
         timeout: 10
