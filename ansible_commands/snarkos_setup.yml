@@ -1,10 +1,24 @@
 # snarkos_setup.yml
+- name: Wait for SSH to become available
+  hosts: "snarkos_node"
+  remote_user: ubuntu
+  gather_facts: no
+  tasks:
+    - name: Wait for SSH to become ready
+      wait_for:
+        port: 22
+        host: "{{ inventory_hostname }}"
+        timeout: 300
+        delay: 10
+        state: started
+
+
 - name: Set up snarkOS nodes
   hosts: "snarkos_node"
   become: yes
   remote_user: ubuntu
   vars:
-    branch: "testnet3"
+    branch: "mainnet"
     verbosity: "1"
   tasks:
     - name: Gather facts from all nodes
@@ -36,40 +50,15 @@
         clone: yes
         update: yes
 
-    - name: Install Ubuntu dependencies
-      apt:
-        name:
-          - build-essential
-          - curl
-          - clang
-          - gcc
-          - libssl-dev
-          - llvm
-          - make
-          - pkg-config
-          - tmux
-          - xz-utils
-          - ufw
-        update_cache: yes
+    - name: Make build-ubuntu.sh executable
+      file:
+        path: "/home/ubuntu/snarkOS/build_ubuntu.sh"
+        mode: '0755'
 
-    - name: Install Rust
-      shell: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-
-    - name: Build snarkOS
-      shell: |
-        export PATH="$HOME/.cargo/bin:$PATH"
-        cd /home/ubuntu/snarkOS
-        cargo install --path .
+    - name: Build snarkOS using build_ubuntu.sh
+      shell: cd /home/ubuntu/snarkOS && sudo ./build_ubuntu.sh
       args:
         executable: /bin/bash
-
-    - name: Open ports on system
-      shell: ufw allow "{{ item }}"
-      loop:
-        - "5000/tcp"
-        - "4133/tcp"
-        - "3033/tcp"
 
     - name: Set environment variables for snarkos service
       set_fact:
@@ -97,10 +86,6 @@
         state: restarted
       become: yes
 
-    - name: Start Prometheus Process Exporter
-      pause:
-        prompt: Please confirm you want to start the prometheus process exporter! Press return to continue. Press Ctrl+c and then "a" to abort
-
     - name: Install Docker
       apt:
         name: docker.io
@@ -117,4 +102,110 @@
         docker run -d --rm -p 9256:9256 --privileged -v /proc:/host/proc -v $(pwd):/config ncabatoff/process-exporter --procfs /host/proc -procnames snarkos
       args:
         executable: /bin/bash
+
+# logstash
+- name: Install and Configure Logstash
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+
+  vars:
+    cloud_id: "{{ lookup('env', 'ELASTIC_CLOUD_ID') }}"
+    api_key: "{{ lookup('env', 'ELASTIC_API_KEY') }}"
+    devnet_name: "{{ lookup('env', 'DEVNET_NAME') }}"
+
+  tasks:
+    - name: Set AWS Region Fact
+      set_fact:
+        aws_region: "{{ ansible_host.split('.')[1] }}"
+      when: ansible_host is defined
+
+    - name: Add Elastic GPG key
+      ansible.builtin.shell:
+        cmd: "wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes --dearmor -o /usr/share/keyrings/elastic-keyring.gpg"
+
+    - name: Add Elastic APT repository
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/elastic-8.x.list
+        line: "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
+        create: yes
+        state: present
+
+    - name: Update and install Logstash
+      ansible.builtin.apt:
+        update_cache: yes
+        name: logstash
+        state: latest
+
+    - name: Copy Logstash Configuration Template
+      ansible.builtin.template:
+        src: logstash.conf
+        dest: /etc/logstash/conf.d/logstash.conf
+
+    - name: Start Logstash Service
+      ansible.builtin.systemd:
+        name: logstash
+        state: started
+        enabled: yes
+
+# metrics on grafana
+- name: Install prometheus and enable remote forwarding to Grafana cloud
+  hosts: prometheus_server
+  become: yes 
+  gather_facts: true 
+  vars:
+    ansible_user: ubuntu 
+    grafana_cloud_api_key: "{{ lookup('env', 'GRAFANA_CLOUD_API_KEY') }}"
+    devnet_name: "{{ lookup('env', 'DEVNET_NAME') }}"
+
+  tasks:
+    - name: Copy docker-compose.yml
+      copy:
+        src: docker-compose.yml  
+        dest: /home/ubuntu/docker-compose.yml
+        owner: ubuntu 
+        group: ubuntu  
+      become_user: ubuntu
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: "/usr/local/bin/docker-compose"
+        mode: 'u+x,g+x'
+
+    - name: Create YAML scrape target file of all nodes
+      ansible.builtin.template:
+        src: prometheus.yml 
+        dest: /home/ubuntu/prometheus.yml
+
+    - name: Install unzip
+      ansible.builtin.package:
+        name: unzip
+        state: present
+
+    - name: Download, unzip, and set execute permissions on Grafana Agent
+      ansible.builtin.shell: |
+        curl -O -L "https://github.com/grafana/agent/releases/latest/download/grafana-agent-linux-amd64.zip" &&
+        unzip "grafana-agent-linux-amd64.zip" &&
+        chmod a+x grafana-agent-linux-amd64
+      args:
+        chdir: /home/ubuntu
+        creates: grafana-agent-linux-amd64
+
+    - name: Run docker-compose up
+      command: docker-compose up -d
+      args:
+        chdir: /home/ubuntu/
+
 
