@@ -1,0 +1,11 @@
+# snarkos_stop.yml
+- name: Stop snarkOS nodes
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Stop snarkos service
+      systemd:
+        name: snarkos
+        state: stopped
+      become: yes
