@@ -43,7 +43,11 @@ if [ ! -f "${KEY_NAME}" ]; then
     chmod 400 "${KEY_NAME}"
     ssh-add "${KEY_NAME}"
     cp "${KEY_NAME}" "$parent_dir/multi_region_devnet/${KEY_NAME}"
+    cp "${KEY_NAME}.pub" "$parent_dir/multi_region_devnet/${KEY_NAME}.pub"
+    cp "${KEY_NAME}" "$parent_dir/ansible_commands/${KEY_NAME}"
     cp "${KEY_NAME}.pub" "$parent_dir/ansible_commands/${KEY_NAME}.pub"
+    cp "${KEY_NAME}" "$parent_dir/150_client_devnet/${KEY_NAME}"
+    cp "${KEY_NAME}.pub" "$parent_dir/150_client_devnet/${KEY_NAME}.pub"
 else
     echo "SSH key already exists. Skipping generation..."
 fi

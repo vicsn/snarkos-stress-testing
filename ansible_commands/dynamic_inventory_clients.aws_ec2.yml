@@ -1,0 +1,10 @@
+# dynamic_inventory_clients.aws_ec2.yml
+plugin: amazon.aws.aws_ec2
+regions:
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+filters:
+  instance-state-name: running
+  tag:Role: ["snarkos-node", "snarkos-client-node"]
