@@ -2,6 +2,7 @@ plugin: amazon.aws.aws_ec2
 
 regions:
 
+
 keyed_groups:
   - key: tags.Role
     prefix: ""

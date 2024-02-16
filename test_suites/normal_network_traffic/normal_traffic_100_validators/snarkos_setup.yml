@@ -1,0 +1,122 @@
+# snarkos_setup.yml
+- name: Wait for SSH to become available
+  hosts: "snarkos_node"
+  remote_user: ubuntu
+  gather_facts: no
+  tasks:
+    - name: Wait for SSH to become ready
+      wait_for:
+        port: 22
+        host: "{{ inventory_hostname }}"
+        timeout: 300
+        delay: 10
+        state: started
+
+
+- name: Set up snarkOS nodes
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    branch: "testnet3"
+    verbosity: "1"
+  tasks:
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Set first node IP address
+      set_fact:
+        first_node_ip: "{{ hostvars[groups['snarkos_node'][0]]['public_ip_address']}}"
+      when: groups['snarkos_node'] is defined and groups['snarkos_node'] | length > 0
+      run_once: true
+
+    - name: Determine the number of instances
+      set_fact:
+        num_instances: "{{ groups['snarkos_node'] | length }}"
+      run_once: true
+
+    - name: Set node_id based on instance tag
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+      loop: "{{ groups['snarkos_node'] }}"
+      loop_control:
+        loop_var: instance
+
+    - name: Clone or update snarkOS
+      git:
+        repo: 'https://github.com/AleoHQ/snarkOS.git'
+        dest: "/home/ubuntu/snarkOS"
+        version: "{{ branch }}"
+        clone: yes
+        update: yes
+
+    - name: Make build-ubuntu.sh executable
+      file:
+        path: "/home/ubuntu/snarkOS/build_ubuntu.sh"
+        mode: '0755'
+
+    - name: Build snarkOS using build_ubuntu.sh
+      shell: cd /home/ubuntu/snarkOS && sudo ./build_ubuntu.sh
+      args:
+        executable: /bin/bash
+
+
+    - name: Set environment variables for snarkos service
+      set_fact:
+        ansible_env:
+          FIRST_NODE_IP: "{{ first_node_ip }}"
+          VERBOSITY: "{{ verbosity }}"
+          NODE_ID: "{{ node_id }}"
+          NUM_INSTANCES: "{{ num_instances }}"
+      tags: always
+
+    - name: Deploy the snarkos systemd service file
+      template:
+        src: snarkos.service
+        dest: /etc/systemd/system/snarkos.service
+      become: yes
+
+    - name: Reload systemd to read new snarkos service file
+      systemd:
+        daemon_reload: yes
+      become: yes
+
+    - name: Restart snarkos service
+      systemd:
+        name: snarkos
+        state: restarted
+      become: yes
+
+# setting up and running tx-cannon on tx-cannon instances
+- name: Set up and run tx-cannon
+  hosts: "tx_cannon_node"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Clone or update tx-cannon
+      git:
+        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        dest: "/home/ubuntu/tx-cannon"
+        version: "testnet3"
+
+    - name: Make build_ubuntu.sh executable for tx-cannon
+      file:
+        path: "/home/ubuntu/tx-cannon/build_ubuntu.sh"
+        mode: '0755'
+
+    - name: Build tx-cannon using build_ubuntu.sh
+      shell: cd /home/ubuntu/tx-cannon && sudo ./build_ubuntu.sh
+      args:
+        executable: /bin/bash
+
+    - name: Run tx-cannon
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        ./tx-cannon batch-deploy --manifest tests/normal_network_traffic/normal_network_traffic.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3033/
+        ./tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_1.toml --threads 1 -e http://{{ test_network_url }}:3033/
+        ./tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_2.toml --threads 1 -e http://{{ test_network_url }}:3033/
+        ./tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_3.toml --threads 1 -e http://{{ test_network_url }}:3033/
+      args:
+        executable: /bin/bash
+      async: 3600 # Adjust based on expected duration of the tx-cannon run
+      poll: 0 # Fire and forget; adjust if you need to wait for completion

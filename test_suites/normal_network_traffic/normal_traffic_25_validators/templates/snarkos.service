@@ -1,0 +1,16 @@
+[Unit]
+Description=snarkOS Node Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/ubuntu
+Environment="FIRST_NODE_IP={{ ansible_env.FIRST_NODE_IP }}"
+Environment="VERBOSITY={{ ansible_env.VERBOSITY }}"
+Environment="NODE_ID={{ ansible_env.NODE_ID }}"
+Environment="NUM_INSTANCES={{ ansible_env.NUM_INSTANCES }}"
+ExecStart=/root/.cargo/bin/snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3033 --peers ${FIRST_NODE_IP}:4133 --validators ${FIRST_NODE_IP}:5000 --verbosity ${VERBOSITY} --dev ${NODE_ID} --dev-num-validators ${NUM_INSTANCES} --validator --rest-rps 100000
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
