@@ -1,3 +1,11 @@
+#!/bin/bash
+
+# Define the input Terraform configuration file
+output_file="main.tf"
+var_file="variables.tf"
+
+# Initialize the output file with the Prometheus setup block
+cat > "$output_file" <<- 'EOF'
 # Terraform for the prometheus setup 
 data "aws_ami" "latest_ubuntu" {
   most_recent = true
@@ -80,39 +88,70 @@ resource "aws_instance" "prometheus_server" {
     Role = "prometheus-server"
   }
 }
+EOF
+
+# Loop through the regions and generate provider and module blocks
+index=0
+
+IFS=',' read -r -a regions <<< "$REGION_LIST"
+
+for region in "${regions[@]}"; do
+    echo "$region"
+    cat >> "$output_file" <<EOF
 
 provider "aws" {
-  alias  = "us-west-1"
-  region = "us-west-1"
+  alias  = "$region"
+  region = "$region"
 }
 
-module "snarkos_node_setup_us-west-1" {
+module "snarkos_node_setup_$region" {
   providers = {
-    aws = aws.us-west-1
+    aws = aws.$region
   }
   source        = "./modules/snarkos_node_setup"
-  region        = "us-west-1"
+  region        = "$region"
   instance_count = var.instance_count
   instance_type = var.instance_type
   key_pair_name = var.key_pair_name
-  region_index = 0
+  region_index = $index
 }
 
+EOF
+    ((index++))
+done
 
-provider "aws" {
-  alias  = "us-west-2"
-  region = "us-west-2"
+
+# Loop through the regions and concatenate them
+for ((i=0; i<${#regions[@]}; i++)); do
+    region_list+="\"${regions[i]}\""
+    # Add a comma if it's not the last element
+    if [ $i -lt $((${#regions[@]} - 1)) ]; then
+        region_list+=", "
+    fi
+done
+
+
+
+cat > "$var_file" <<- EOF
+variable "regions" {
+  description = "List of regions for deployment"
+  default     = [$region_list]
 }
 
-module "snarkos_node_setup_us-west-2" {
-  providers = {
-    aws = aws.us-west-2
-  }
-  source        = "./modules/snarkos_node_setup"
-  region        = "us-west-2"
-  instance_count = var.instance_count
-  instance_type = var.instance_type
-  key_pair_name = var.key_pair_name
-  region_index = 1
+variable "instance_count" {
+  description = "Number of instances to create in each region"
+  default     = $INSTANCES_PER_REGION
 }
 
+variable "instance_type" {
+  description = "Type of instance to deploy"
+  default     = "m5.4xlarge"
+}
+
+variable "key_pair_name" {
+  description = "Name of the AWS key pair"
+  default     = "devnet-key"
+}
+EOF
+
+echo "Terraform configuration generated in $output_file"

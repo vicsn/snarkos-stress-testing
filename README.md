@@ -20,21 +20,17 @@ It also contains extra tools to set up better observability and infrastructure r
 
 Make sure you make a copy of the `.env/example` file in the home directory as just `.env`, and fill the values in for Elastic and Grafana cloud.
 
-If you are spinning up a single region devnet, go to `/single_region_devnet/variables.tf` and set your desired `region`, `instance type`, and `number of instances`.
-
-If you are spinning up a multi region devnet, go to `/multi_region_devnet/variables.tf` and set your desired number of nodes **per region**, as well as the list of regions you want to deploy in. Then edit the `main.tf` to reflect this (make sure to update the index w each module/region addition).
+Fill in the variables for single or multi region regions and instance counts (or both, it doesnt matter) and these will automatically populate in the terraform folders for you when running the startup scripts.
 
 ## 2. Spinning up a Devnet
 
 
 **Single Region Devnet**
 ```bash
-chmod +x run_single_region_devnet.sh
 ./run_single_region_devnet.sh
 ```
 **Multi Region Devnet**
 ```bash
-chmod +x run_multi_region_devnet.sh
 ./run_multi_region_devnet.sh
 ```
 

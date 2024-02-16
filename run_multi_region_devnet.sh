@@ -18,7 +18,7 @@ load_env() {
 cleanup() {
     echo "An error occurred. Destroying infrastructure to avoid unnecessary costs..."
     read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-    cd "$parent_dir/single_region_devnet" && terraform destroy -auto-approve
+    cd "$parent_dir/multi_region_devnet" && terraform destroy -auto-approve
 }
 
 # Set up trap to call cleanup function on any error
@@ -37,15 +37,24 @@ load_env
 KEY_NAME="devnet-key"
 
 # Check if the SSH key already exists, generate if not
-cd multi_region_devnet
+cd single_region_devnet
 if [ ! -f "${KEY_NAME}" ]; then
     echo "Generating SSH key..."
     ssh-keygen -t rsa -b 4096 -f "${KEY_NAME}" -N '' # -N '' specifies no passphrase
     chmod 400 "${KEY_NAME}"
     ssh-add "${KEY_NAME}"
+    cp "${KEY_NAME}" "$parent_dir/multi_region_devnet/${KEY_NAME}"
+    cp "${KEY_NAME}.pub" "$parent_dir/multi_region_devnet/${KEY_NAME}.pub"
+    cp "${KEY_NAME}" "$parent_dir/ansible_commands/${KEY_NAME}"
+    cp "${KEY_NAME}.pub" "$parent_dir/ansible_commands/${KEY_NAME}.pub"
 else
     echo "SSH key already exists. Skipping generation..."
 fi
+
+
+# format the terraform files
+cd ../multi_region_devnet 
+chmod +x format_multi_region.sh && ./format_multi_region.sh
 
 # Initialize Terraform
 echo "Initializing Terraform..."

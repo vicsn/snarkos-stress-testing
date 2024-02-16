@@ -36,15 +36,20 @@ load_env
 KEY_NAME="devnet-key"
 
 # Check if the SSH key already exists, generate if not
-cd single_region_devnet 
+cd single_region_devnet
 if [ ! -f "${KEY_NAME}" ]; then
     echo "Generating SSH key..."
     ssh-keygen -t rsa -b 4096 -f "${KEY_NAME}" -N '' # -N '' specifies no passphrase
     chmod 400 "${KEY_NAME}"
     ssh-add "${KEY_NAME}"
+    cp "${KEY_NAME}" "$parent_dir/multi_region_devnet/${KEY_NAME}"
+    cp "${KEY_NAME}.pub" "$parent_dir/ansible_commands/${KEY_NAME}.pub"
 else
     echo "SSH key already exists. Skipping generation..."
 fi
+
+# format variable file
+chmod +x format_single_region.sh && ./format_single_region.sh
 
 # Initialize Terraform
 echo "Initializing Terraform..."
@@ -66,4 +71,4 @@ read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
 # Destroy the infrastructure
 echo "Destroying infrastructure..."
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/single_region_devnet" 2>/dev/null || true && terraform destroy -auto-approve
+cd "$parent_dir/single_region_devnet" && terraform destroy -auto-approve
