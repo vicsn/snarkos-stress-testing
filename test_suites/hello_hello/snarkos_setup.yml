@@ -18,9 +18,25 @@
   become: yes
   remote_user: ubuntu
   vars:
-    branch: "mainnet"
     verbosity: "1"
+    binaries_tag: v0.0.1
   tasks:
+    - name: Install GitHub CLI
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Export GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
     - name: Gather facts from all nodes
       setup:
 
@@ -42,23 +58,23 @@
       loop_control:
         loop_var: instance
 
-    - name: Clone or update snarkOS
-      git:
-        repo: 'https://github.com/AleoHQ/snarkOS.git'
-        dest: "/home/ubuntu/snarkOS"
-        version: "{{ branch }}"
-        clone: yes
-        update: yes
-
-    - name: Make build-ubuntu.sh executable
-      file:
-        path: "/home/ubuntu/snarkOS/build_ubuntu.sh"
-        mode: '0755'
-
-    - name: Build snarkOS using build_ubuntu.sh
-      shell: cd /home/ubuntu/snarkOS && sudo ./build_ubuntu.sh
+    - name: Download snarkOS binary with GitHub CLI
+      shell: >
+        GITHUB_TOKEN="{{ gh_token }}" gh release download "{{ binaries_tag }}"
+        --repo aleoHQ/stress-observability
+        --pattern "snarkos*"
+        --dir "/usr/bin"
+        --skip-existing
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
       args:
         executable: /bin/bash
+      become: yes
+
+    - name: Make snarkos executable
+      file:
+        path: "/usr/bin/snarkos"
+        mode: '0755'
 
     - name: Set environment variables for snarkos service
       set_fact:
@@ -213,6 +229,9 @@
   hosts: "tx_cannon_node"
   become: yes
   remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    binaries_tag: v0.0.1
   tasks:
     - name: Clone or update tx-cannon
       git:
@@ -220,20 +239,47 @@
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
 
-    - name: Make build_ubuntu.sh executable for tx-cannon
-      file:
-        path: "/home/ubuntu/tx-cannon/build_ubuntu.sh"
-        mode: '0755'
-
-    - name: Build tx-cannon using build_ubuntu.sh
-      shell: cd /home/ubuntu/tx-cannon && sudo ./build_ubuntu.sh
+    - name: Install GitHub CLI for tx-cannon
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
       args:
         executable: /bin/bash
+      become: yes
+
+    - name: Export GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Download tx-cannon binary with GitHub CLI
+      shell: >
+        GITHUB_TOKEN="{{ lookup('env', 'GITHUB_TOKEN') }}" gh release download "{{ binaries_tag }}"
+        --repo aleoHQ/stress-observability
+        --pattern "tx-cannon*"
+        --dir "/usr/bin"
+        --skip-existing
+      environment:
+        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Make tx-cannon executable
+      file:
+        path: "/usr/bin/tx-cannon"
+        mode: '0755'
 
     - name: Run tx-cannon and capture logs
       shell: |
         cd /home/ubuntu/tx-cannon
-        /root/.cargo/bin/tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
+        /usr/bin/tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run

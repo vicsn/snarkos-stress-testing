@@ -40,3 +40,32 @@ From the folder where your `.env` file is written, change directory and run your
 ```
 cd flood-attack && ./run_test_suite.sh
 ```
+
+## Building new binaries
+
+To speed up testing, you can use pre-built binaries for the `binaries_tag` environment variable. Here are the instructions to making new ones manually.
+
+First, create machine(s) of your choice.
+
+To build snarkOS:
+```
+ssh ubuntu@<machine_ip>
+git clone https://github.com/AleoHQ/snarkOS.git
+cd snarkOS
+git checkout origin/mainnet_no_tx_generation
+./build_ubuntu.sh
+exit
+scp ubuntu@${machine_ip}:snarkOS/target/release/snarkos .
+```
+
+To build tx-cannon:
+```
+git clone https://${personal_access_token}@github.com/aleoHQ/tx-cannon.git
+cd tx-cannon
+git checkout origin/mainnet
+./build_ubuntu.sh
+exit
+scp ubuntu@${machine_ip}:tx-cannon/target/release/tx-cannon .
+```
+
+Then you can make a new release following the [initial example](https://github.com/AleoHQ/stress-observability/releases/tag/v0.0.1), incrementing the version number.
