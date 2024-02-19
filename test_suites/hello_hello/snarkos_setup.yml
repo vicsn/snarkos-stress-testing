@@ -276,13 +276,24 @@
         path: "/usr/bin/tx-cannon"
         mode: '0755'
 
+    - name: Run tx-cannon network driver
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        /usr/bin/tx-cannon batch-execute --test "tests/network_driver/network_driver.toml" -e http://{{ test_network_url }}:3030 --repetitions 9000001 >> tx-cannon.log 2>&1
+      args:
+        executable: /bin/bash
+      async: 600000  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+      run_once: true
+      delegate_to: "{{ groups['tx_cannon_node'][1] }}"
+
     - name: Run tx-cannon and capture logs
       shell: |
         cd /home/ubuntu/tx-cannon
         /usr/bin/tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
       args:
         executable: /bin/bash
-      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      async: 60  # Adjust based on expected duration of the tx-cannon run
       poll: 0
       run_once: true
       delegate_to: "{{ groups['tx_cannon_node'][0] }}"
@@ -298,14 +309,16 @@
       retries: 30  # Number of retries
       delay: 10  # Delay in seconds between retries
 
-    - name: Continue with tx-cannon batch-execute
+    - name: Try running tx-cannon batch-execute
       shell: |
         cd /home/ubuntu/tx-cannon
-        /root/.cargo/bin/tx-cannon batch-execute --test "tests/hello_world_flood/hello_hello.toml" --threads 1 -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
+        /usr/bin/tx-cannon batch-execute --test "tests/hello_world_flood/hello_hello.toml" --threads 1 -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
       poll: 0
+      run_once: true
+      delegate_to: "{{ groups['tx_cannon_node'][0] }}"
 
     - name: Fetch tx-cannon logs
       fetch:
