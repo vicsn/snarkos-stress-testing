@@ -353,8 +353,8 @@
     - name: Execute multiple commands
       ansible.builtin.shell: |
         cd /home/ubuntu/tx-cannon &&
-        /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_1 -e http://{{ test_network_url }}:3030 &&
-        /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_2 -e http://{{ test_network_url }}:3030 &&
+        /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_1 -e http://{{ test_network_url }}:3030 &
+        /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_2 -e http://{{ test_network_url }}:3030 &
         /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_3 -e http://{{ test_network_url }}:3030
       args:
         executable: /bin/bash
