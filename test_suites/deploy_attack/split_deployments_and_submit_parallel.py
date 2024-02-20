@@ -6,7 +6,7 @@ import time
 # Function to execute command
 def execute_command(i, ip_addresses):
     ip = ip_addresses[i].strip()
-    cmd = f"tx-cannon batch-send --manifest programs_to_deploy/res_split/deployment_{i}.txt -e http://{ip}:3033"
+    cmd = f"tx-cannon batch-send --manifest programs_to_deploy/split/deployment_{i}.txt -e http://{ip}:3030"
     result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output = result.stdout.decode().strip()
     error = result.stderr.decode().strip()
@@ -19,8 +19,8 @@ def main():
     with open(ip_addresses_path, "r") as f:
         ip_addresses = f.readlines()
 
-    deployment_txt_path = os.path.join(os.getcwd(), "programs_to_deploy", "res", "8-val-64-tx.txt")
-    deployments_split_folder_path = os.path.join(os.getcwd(), "programs_to_deploy", "res_split")
+    deployment_txt_path = os.path.join(os.getcwd(), "programs_to_deploy", "single_file", "mainnet-5df9bc2-25val-50tx.txt")
+    deployments_split_folder_path = os.path.join(os.getcwd(), "programs_to_deploy", "split")
 
     # create the folder if it does not exist
     if not os.path.exists(deployments_split_folder_path):

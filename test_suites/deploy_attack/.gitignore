@@ -5,4 +5,4 @@ ip_addresses.txt
 *.log
 
 # Directories to ignore
-programs_to_deploy/res_split/
+programs_to_deploy/split/

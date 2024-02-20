@@ -10,7 +10,7 @@ variable "instance_type" {
 
 variable "instance_count" {
   description = "Number of client nodes"
-  default     = 8
+  default     = 25
 }
 
 resource "aws_key_pair" "generated_key" {
@@ -104,15 +104,15 @@ resource "aws_security_group" "snarkos_sg" {
   }
 
   ingress {
-    from_port   = 3033
-    to_port     = 3033
+    from_port   = 3030
+    to_port     = 3030
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    from_port   = 4133
-    to_port     = 4133
+    from_port   = 4130
+    to_port     = 4230
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -179,9 +179,9 @@ resource "aws_elb" "snarkos_lb" {
   availability_zones = data.aws_availability_zones.available.names
 
   listener {
-    instance_port     = 3033
+    instance_port     = 3030
     instance_protocol = "http"
-    lb_port           = 3033
+    lb_port           = 3030
     lb_protocol       = "http"
   }
 
@@ -190,7 +190,7 @@ resource "aws_elb" "snarkos_lb" {
     unhealthy_threshold = 2
     timeout             = 3
     interval            = 30
-    target              = "HTTP:3033/testnet3/latest/height"
+    target              = "HTTP:3030/mainnet/latest/height"
   }
 
   instances = [for i in aws_instance.snarkos-node : i.id]

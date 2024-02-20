@@ -18,7 +18,7 @@
   become: yes
   remote_user: ubuntu
   vars:
-    branch: "vicsn/stress_test_2"
+    branch: "mainnet_no_tx_generation"
     verbosity: "1"
   tasks:
     - name: Gather facts from all nodes
@@ -219,7 +219,7 @@
       git:
         repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
-        version: "kp/feat/build-ubuntu"
+        version: "mainnet"
 
     - name: Make build_ubuntu.sh executable for tx-cannon
       file:
@@ -234,17 +234,17 @@
     - name: Run tx-cannon and capture logs
       shell: |
         cd /home/ubuntu/tx-cannon
-        /root/.cargo/bin/tx-cannon batch-execute --test tests/network_driver/network_driver.toml -e http://{{ test_network_url }}:3033 --repetitions 9000001 >> tx-cannon.log 2>&1
+        /root/.cargo/bin/tx-cannon batch-execute --test tests/network_driver/network_driver.toml -e http://{{ test_network_url }}:3030 --repetitions 9000001 >> tx-cannon.log 2>&1
       args:
         executable: /bin/bash
-      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      async: 31536000  # Run for one year, adjust as needed
       poll: 0
       run_once: true
       delegate_to: "{{ groups['tx_cannon_node'][0] }}"
 
     - name: Wait for the block height to reach 5 or higher
       uri:
-        url: "http://{{ test_network_url }}:3033/testnet3/latest/height"
+        url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
         method: GET
         return_content: yes  # Ensure the content is returned so we can inspect it
         status_code: 200

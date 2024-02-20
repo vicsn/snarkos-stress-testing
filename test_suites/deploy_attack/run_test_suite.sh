@@ -17,7 +17,7 @@ load_env() {
 cleanup() {
     echo "An error occurred. Destroying infrastructure to avoid unnecessary costs..."
     read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-    terraform destroy -auto-approve
+    terraform destroy -auto-approve -parallelism=50
 }
 
 # Set up trap to call cleanup function on any error
@@ -50,7 +50,7 @@ terraform init
 
 # Apply Terraform configuration
 echo "Creating infrastructure..."
-terraform apply -auto-approve
+terraform apply -auto-approve -parallelism=50
 
 # Get the load balancer DNS name
 LB_URL=$(terraform output -raw snarkos_lb_dns_name)
@@ -65,8 +65,8 @@ terraform output -json instance_ips > output.json && jq -r '.[]' output.json > i
 
 # Fetch block height before the attack
 echo "Fetching block height before the attack..."
-# Query "http://{{ LB_URL }}:3033/testnet3/latest/height" and store the result in a variable
-BLOCK_HEIGHT_BEFORE=$(curl -s "${LB_URL}:3033/testnet3/latest/height")
+# Query "http://{{ LB_URL }}:3030/mainnet/latest/height" and store the result in a variable
+BLOCK_HEIGHT_BEFORE=$(curl -s "${LB_URL}:3030/mainnet/latest/height")
 echo "Block height before the attack: ${BLOCK_HEIGHT_BEFORE}"
 
 # Run the attack
@@ -76,7 +76,7 @@ python3 split_deployments_and_submit_parallel.py
 # Wait for the block height to reach BLOCK_HEIGHT_BEFORE + 20
 echo "Waiting for the block height to reach BLOCK_HEIGHT_BEFORE + 20..."
 while true; do
-    BLOCK_HEIGHT_NOW=$(curl -s "${LB_URL}:3033/testnet3/latest/height")
+    BLOCK_HEIGHT_NOW=$(curl -s "${LB_URL}:3030/mainnet/latest/height")
     if [ $((BLOCK_HEIGHT_NOW - BLOCK_HEIGHT_BEFORE)) -ge 20 ]; then
         break
     fi
@@ -90,7 +90,4 @@ read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
 # Destroy the infrastructure
 echo "Destroying infrastructure..."
-terraform destroy -auto-approve
-
-# tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml --threads 1 -e http://snarkos-lb-1676216919.us-west-2.elb.amazonaws.com:3033/
-# tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://snarkos-lb-1676216919.us-west-2.elb.amazonaws.com:3033/
+terraform destroy -auto-approve -parallelism=50
