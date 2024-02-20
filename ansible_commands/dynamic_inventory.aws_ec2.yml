@@ -11,7 +11,11 @@ keyed_groups:
     prefix: ""
     separator: ""
     value: "prometheus-server"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "tx-cannon-node"
 
 filters:
   instance-state-name: running
-  tag:Role: ["snarkos-node", "prometheus-server"]
+  tag:Role: ["snarkos-node", "prometheus-server", "tx-cannon-node"]

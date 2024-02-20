@@ -1,11 +1,11 @@
 variable "regions" {
   description = "List of regions for deployment"
-  default     = ["us-west-1", "us-west-2"]
+  default     = ["us-west-1", "us-west-2", "us-east-1", "us-east-2"]
 }
 
 variable "instance_count" {
   description = "Number of instances to create in each region"
-  default     = 5
+  default     = 25
 }
 
 variable "instance_type" {

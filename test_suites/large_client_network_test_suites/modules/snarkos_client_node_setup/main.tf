@@ -25,9 +25,9 @@ resource "aws_instance" "snarkos_node" {
   }
 
   tags = {
-    Name = "snarkos-node-${var.region_index * var.instance_count + count.index}"
-    Role = "snarkos-node",
-    Dev  = var.region_index * var.instance_count + count.index
+    Name = "snarkos-client-node-${var.validator_count + (var.region_index - 1) * var.instance_count + count.index}"
+    Role = "snarkos-client-node",
+    Dev  = var.validator_count + (var.region_index - 1) * var.instance_count + count.index
   }
 }
 
@@ -159,8 +159,4 @@ resource "aws_elb" "snarkos_lb" {
   tags = {
     Name = "snarkos-lb"
   }
-}
-
-output "snarkos_lb_dns_name" {
-  value = aws_elb.snarkos_lb.dns_name
 }

@@ -1,6 +1,6 @@
 # snarkos_setup.yml
 - name: Wait for SSH to become available
-  hosts: "snarkos_node"
+  hosts: "snarkos_node:snarkos_client_node"
   remote_user: ubuntu
   gather_facts: no
   tasks:
@@ -12,9 +12,8 @@
         delay: 10
         state: started
 
-
 - name: Set up snarkOS nodes
-  hosts: "snarkos_node"
+  hosts: "snarkos_node:snarkos_client_node"
   become: yes
   remote_user: ubuntu
   vars:
@@ -89,6 +88,14 @@
       template:
         src: snarkos.service
         dest: /etc/systemd/system/snarkos.service
+      when: "'snarkos_node' in group_names"
+      become: yes
+
+    - name: Deploy the snarkos-client systemd service file for snarkos_client_node
+      template:
+        src: snarkos-client.service
+        dest: /etc/systemd/system/snarkos-client.service
+      when: "'snarkos_client_node' in group_names"
       become: yes
 
     - name: Reload systemd to read new snarkos service file
@@ -96,32 +103,43 @@
         daemon_reload: yes
       become: yes
 
-    - name: Restart snarkos service
+    - name: Restart snarkos service on snarkos_node
       systemd:
         name: snarkos
         state: restarted
       become: yes
+      when: "'snarkos_node' in group_names"
+
+    - name: Restart snarkos-client service on snarkos_client_node
+      systemd:
+        name: snarkos-client
+        state: restarted
+      become: yes
+      when: "'snarkos_client_node' in group_names"
 
     - name: Install Docker
       apt:
         name: docker.io
         state: present
         update_cache: yes
+      when: "'snarkos_node' in group_names"
         
     - name: Ensure Docker service is started
       service:
         name: docker
         state: started
+      when: "'snarkos_node' in group_names"
 
     - name: Run Docker Process Exporter for snarkos
       ansible.builtin.shell: >
         docker run -d --rm -p 9256:9256 --privileged -v /proc:/host/proc -v $(pwd):/config ncabatoff/process-exporter --procfs /host/proc -procnames snarkos
       args:
         executable: /bin/bash
+      when: "'snarkos_node' in group_names"
 
 # logstash
 - name: Install and Configure Logstash
-  hosts: "snarkos_node"
+  hosts: "snarkos_node:snarkos_client_node"
   become: yes
   remote_user: ubuntu
 
@@ -224,4 +242,129 @@
       args:
         chdir: /home/ubuntu/
 
+# Setting up and running tx-cannon on tx-cannon instances
+- name: Set up and run tx-cannon
+  hosts: "tx_cannon_node:network_driver_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    binaries_tag: v0.0.1
+  tasks:
+    - name: Clone or update tx-cannon
+      git:
+        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        dest: "/home/ubuntu/tx-cannon"
+        version: "mainnet"
 
+    - name: Install GitHub CLI for tx-cannon
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Export GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Download tx-cannon binary with GitHub CLI
+      shell: >
+        GITHUB_TOKEN="{{ lookup('env', 'GITHUB_TOKEN') }}" gh release download "{{ binaries_tag }}"
+        --repo aleoHQ/stress-observability
+        --pattern "tx-cannon*"
+        --dir "/usr/bin"
+        --skip-existing
+      environment:
+        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Make tx-cannon executable
+      file:
+        path: "/usr/bin/tx-cannon"
+        mode: '0755'
+
+    - name: Continue with tx-cannon batch-execute
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        /usr/bin/tx-cannon batch-execute --test tests/network_driver/network_driver.toml -e http://{{ test_network_url }}:3030 --repetitions 9000001 >> tx-cannon.log 2>&1
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+      when: "'network_driver_node' in group_names"
+
+    - name: Pause to deploy driver
+      pause:
+        seconds: 120 # let network generation start
+
+    - name: Run tx-cannon and capture logs
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        /usr/bin/tx-cannon batch-deploy --manifest tests/normal_network_traffic/normal_network_traffic.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+      run_once: true
+      delegate_to: "{{ groups['tx_cannon_node'][0] }}"
+      when: "'tx_cannon_node' in group_names"
+
+    - name: Wait for multiple endpoints to be ready
+      vars:
+        endpoints:
+          - "http://{{ test_network_url }}:3030/mainnet/program/hello_hello.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/double_color_ball.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/calculator.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/temperatureconverter.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/animals_nft_v30.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/aleo_monopoly_workshop8.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/ideaground_friends_beta9.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/cassino_game_test_fp.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/twoadicity_mmbbn88.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/ideaground_friends_beta1.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/ans_coupon_card_v1.aleo"
+          - "http://{{ test_network_url }}:3030/mainnet/program/leomailprov2.aleo"
+          # Add more endpoints as needed
+      block:
+        - name: Check each endpoint
+          uri:
+            url: "{{ item }}"
+            method: GET
+            status_code: 200
+            timeout: 10
+          register: result
+          until: result.status == 200
+          retries: 30
+          delay: 10
+          loop: "{{ endpoints }}"
+      when: "'tx_cannon_node' in group_names and endpoints is defined and endpoints | length > 0"
+
+    - name: Execute multiple commands
+      ansible.builtin.shell: |
+        cd /home/ubuntu/tx-cannon &&
+        /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_1 -e http://{{ test_network_url }}:3030 &&
+        /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_2 -e http://{{ test_network_url }}:3030 &&
+        /usr/bin/tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic.toml_3 -e http://{{ test_network_url }}:3030
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+      when: "'tx_cannon_node' in group_names"
+
+    - name: Fetch tx-cannon logs
+      fetch:
+        src: "/home/ubuntu/tx-cannon/tx-cannon.log"
+        dest: "./{{ inventory_hostname }}-tx-cannon.log"
+        flat: yes
+      ignore_errors: yes  # Optional, to proceed even if fetching logs fails

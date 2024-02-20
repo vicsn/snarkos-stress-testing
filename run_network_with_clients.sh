@@ -18,7 +18,7 @@ load_env() {
 cleanup() {
     echo "An error occurred. Destroying infrastructure to avoid unnecessary costs..."
     read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-    cd "$parent_dir/150_client_devnet" && terraform destroy -auto-approve
+    cd "$parent_dir/150_client_devnet" && terraform destroy -auto-approve -parallelism=200
 }
 
 # Set up trap to call cleanup function on any error
@@ -60,7 +60,7 @@ terraform init
 
 # Apply Terraform configuration
 echo "Creating infrastructure..."
-terraform apply -auto-approve
+terraform apply -auto-approve -parallelism=200
 
 
 # Run Ansible playbook to configure the nodes
@@ -72,4 +72,4 @@ read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
 # Destroy the infrastructure
 echo "Destroying infrastructure..."
-cd "$parent_dir/150_client_devnet" && terraform destroy -auto-approve
+cd "$parent_dir/150_client_devnet" && terraform destroy -auto-approve -parallelism=200

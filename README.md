@@ -18,7 +18,7 @@ It also contains extra tools to set up better observability and infrastructure r
 
 ## 1. Variable Configuration
 
-Make sure you make a copy of the `.env/example` file in the home directory as just `.env`, and fill the values in for Elastic and Grafana cloud.
+Make sure you make a copy of the `.env/example` file in the home directory as just `.env`, and fill the values in for Elastic and Grafana cloud as well as the desired devnet name.
 
 Fill in the variables for single or multi region regions and instance counts (or both, it doesnt matter) and these will automatically populate in the terraform folders for you when running the startup scripts.
 

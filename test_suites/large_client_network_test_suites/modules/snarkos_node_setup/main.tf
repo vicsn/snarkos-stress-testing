@@ -161,6 +161,3 @@ resource "aws_elb" "snarkos_lb" {
   }
 }
 
-output "snarkos_lb_dns_name" {
-  value = aws_elb.snarkos_lb.dns_name
-}

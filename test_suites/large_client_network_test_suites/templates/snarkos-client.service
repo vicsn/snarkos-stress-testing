@@ -9,7 +9,7 @@ Environment="FIRST_NODE_IP={{ ansible_env.FIRST_NODE_IP }}"
 Environment="VERBOSITY={{ ansible_env.VERBOSITY }}"
 Environment="NODE_ID={{ ansible_env.NODE_ID }}"
 Environment="NUM_INSTANCES={{ ansible_env.NUM_INSTANCES }}"
-ExecStart=/usr/bin/snarkos start --metrics --nodisplay --peers ${FIRST_NODE_IP}:4130 --client --verbosity ${VERBOSITY} --dev ${NODE_ID} --dev-num-validators ${NUM_INSTANCES}
+ExecStart=/root/.cargo/bin/snarkos start --metrics --nodisplay --peers ${FIRST_NODE_IP}:4130 --client --verbosity ${VERBOSITY} --dev ${NODE_ID} --dev-num-validators ${NUM_INSTANCES}
 Restart=no
 
 [Install]
