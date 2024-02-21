@@ -12,20 +12,59 @@ Each stress test folder will have the following:
 The tests may differ in their needs, but will be organized similar to the following:
 
 ```
-stress-tests
-│ └─ flood-attack
-│   └─ run_test_suite.sh
+test_suites
+│ └─ hello_hello # Example test suite
+│   └─ templates # SnarkOS systemd service + logstash config
+│   │   └─ logstash.conf
+│   │   └─ snarkos.service # Change this file if you need a custom SnarkOS start command
 │   └─ ansible.cfg
+│   └─ docker-compose.yml
 │   └─ dynamic_inventory.aws_ec2.yml
-│   └─ main.tf
-│   └─ snarkos_setup.yml
+│   └─ main.tf # Edit this file to change the number & type of AWS instances
+│   └─ prometheus.tf
+│   └─ run_test_suite.sh
+│   └─ snarkos_setup.yml # Edit this file to setup your custom test code
 ```
 
 ## Steps Prior to Executing Tests
 
-First perform the setup in the [top level README](../README.md).
+### 1. Copy `.env.example` to `.env` and fill the environment variables.
+```txt
+## Make a github token with repo access and paste it here
+GITHUB_TOKEN=your_github_token_here
 
-Copy `.env.example` to `.env` and fill the environment variables.
+## ASK YOUR ADMINS FOR THESE:
+ELASTIC_CLOUD_ID=your_elastic_cloud_id
+ELASTIC_API_KEY=your_elastic_api_key
+GRAFANA_CLOUD_API_KEY=your_grafana_api_key
+
+## Name this whatever you want
+DEVNET_NAME=your_devnet_name
+```
+
+### 2. Edit your main.tf file
+Edit your main.tf file to change the number & type of AWS instances you need for the test.
+```terraform
+variable "aws_region" {
+default     = "us-west-2"
+}
+```
+
+```terraform
+variable "instance_type" {
+  description = "Instance type for client nodes"
+  default     = "m5.4xlarge"
+}
+
+variable "instance_count" {
+  description = "Number of client nodes"
+  default     = 5
+}
+```
+
+### 3. Modify your `snarkos_setup.yml` file to include your test steps
+Your test likely requires some custom setup steps. You can add these steps to the `snarkos_setup.yml` file.
+
 
 ## Transaction Cannon Tests
 
@@ -38,34 +77,9 @@ Prior to running a transaction cannon test, a tx-cannon test needs to be created
 From the folder where your `.env` file is written, change directory and run your preferred test suite:
 
 ```
-cd flood-attack && ./run_test_suite.sh
+cd hello_hello && ./run_test_suite.sh
 ```
 
-## Building new binaries
+## Using Pre-built Binaries
 
-To speed up testing, you can use pre-built binaries for the `binaries_tag` environment variable. Here are the instructions to making new ones manually.
-
-First, create machine(s) of your choice.
-
-To build snarkOS:
-```
-ssh ubuntu@<machine_ip>
-git clone https://github.com/AleoHQ/snarkOS.git
-cd snarkOS
-git checkout origin/mainnet_no_tx_generation
-./build_ubuntu.sh
-exit
-scp ubuntu@${machine_ip}:snarkOS/target/release/snarkos .
-```
-
-To build tx-cannon:
-```
-git clone https://${personal_access_token}@github.com/aleoHQ/tx-cannon.git
-cd tx-cannon
-git checkout origin/mainnet
-./build_ubuntu.sh
-exit
-scp ubuntu@${machine_ip}:tx-cannon/target/release/tx-cannon .
-```
-
-Then you can make a new release following the [initial example](https://github.com/AleoHQ/stress-observability/releases/tag/v0.0.1), incrementing the version number.
+You can add pre-built binaries to your test suite to speed up testing. [A full guide is here](PREBUILD.md)

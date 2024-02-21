@@ -21,22 +21,6 @@
     verbosity: "1"
     binaries_tag: v0.0.1
   tasks:
-    - name: Install GitHub CLI
-      shell: |
-        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-        && sudo apt update \
-        && sudo apt install gh -y
-      args:
-        executable: /bin/bash
-      become: yes
-
-    - name: Export GitHub token for gh CLI
-      ansible.builtin.set_fact:
-        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
-
     - name: Gather facts from all nodes
       setup:
 
@@ -58,15 +42,11 @@
       loop_control:
         loop_var: instance
 
-    - name: Download snarkOS binary with GitHub CLI
-      shell: >
-        GITHUB_TOKEN="{{ gh_token }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
-        --pattern "snarkos*"
-        --dir "/usr/bin"
-        --skip-existing
-      environment:
-        GITHUB_TOKEN: "{{ gh_token }}"
+    - name: Install SnarkOS binaries
+      shell: |
+        curl -L https://github.com/iamalwaysuncomfortable/snarkOS/releases/download/v2.2.8-latest/snarkos-v2.2.8-latest-x86_64-unknown-linux-gnu.zip -o snarkos.zip
+        sudo apt-get install unzip
+        sudo unzip -o snarkos.zip -d /usr/bin
       args:
         executable: /bin/bash
       become: yes
@@ -239,37 +219,22 @@
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
 
-    - name: Install GitHub CLI for tx-cannon
-      shell: |
-        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-        && sudo apt update \
-        && sudo apt install gh -y
-      args:
-        executable: /bin/bash
-      become: yes
-
-    - name: Export GitHub token for gh CLI
-      ansible.builtin.set_fact:
-        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
-
     - name: Gather facts from all nodes
       setup:
 
-    - name: Download tx-cannon binary with GitHub CLI
-      shell: >
-        GITHUB_TOKEN="{{ lookup('env', 'GITHUB_TOKEN') }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
-        --pattern "tx-cannon*"
-        --dir "/usr/bin"
-        --skip-existing
-      environment:
-        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+    - name: Install the tx-cannon
+      shell: |
+        sudo apt-get install -y unzip
+        sudo apt-get install -y jq
+        RELEASE_DATA=$(curl -L https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/tx-cannon/releases/latest)
+        ASSET_ID=$(echo "${RELEASE_DATA}" | jq -r '.assets[] | select(.name == "tx-cannon-v0.1.0-x86_64-unknown-linux-gnu.zip") | .id')
+        sudo curl -L -H 'Accept: application/octet-stream' https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/tx-cannon/releases/assets/$ASSET_ID -o tx-cannon.zip
+        sudo unzip -o tx-cannon.zip -d /usr/bin
       args:
         executable: /bin/bash
       become: yes
+      environment:
+        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
 
     - name: Make tx-cannon executable
       file:
@@ -279,21 +244,20 @@
     - name: Run tx-cannon network driver
       shell: |
         cd /home/ubuntu/tx-cannon
-        /usr/bin/tx-cannon batch-execute --test "tests/network_driver/network_driver.toml" -e http://{{ test_network_url }}:3030 --repetitions 9000001 >> tx-cannon.log 2>&1
+        sudo bash -c '/usr/bin/tx-cannon batch-execute --test tests/network_driver/network_driver.toml -e http://{{ test_network_url }}:3030 -r 9000001  >> tx-cannon.log 2>&1'
       args:
         executable: /bin/bash
-      async: 600000  # Adjust based on expected duration of the tx-cannon run
+      async: 36000  # Adjust based on expected duration of the tx-cannon run
       poll: 0
-      run_once: true
-      delegate_to: "{{ groups['tx_cannon_node'][1] }}"
 
     - name: Run tx-cannon and capture logs
       shell: |
         cd /home/ubuntu/tx-cannon
-        /usr/bin/tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
+        sleep 10
+        sudo bash -c '/usr/bin/tx-cannon deploy -p tests/hello_world_flood/hello_hello.aleo -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1'
       args:
         executable: /bin/bash
-      async: 60  # Adjust based on expected duration of the tx-cannon run
+      async: 600  # Adjust based on expected duration of the tx-cannon run
       poll: 0
       run_once: true
       delegate_to: "{{ groups['tx_cannon_node'][0] }}"
@@ -312,7 +276,8 @@
     - name: Try running tx-cannon batch-execute
       shell: |
         cd /home/ubuntu/tx-cannon
-        /usr/bin/tx-cannon batch-execute --test "tests/hello_world_flood/hello_hello.toml" --threads 1 -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
+        sudo bash -c "/usr/bin/tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml -e http://{{ test_network_url }}:3030 --repeat 9001 >> tx-cannon.log 2>&1"
+
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
