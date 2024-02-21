@@ -45,7 +45,7 @@ resource "aws_instance" "snarkos_node" {
 # Add variables for tx-cannon instance configuration
 variable "tx_cannon_instance_type" {
   description = "Instance type for tx-cannon nodes"
-  default     = "t2.medium"
+  default     = "m5.2xlarge"
 }
 
 variable "tx_cannon_instance_count" {

@@ -123,9 +123,8 @@
   remote_user: ubuntu
   vars:
     verbosity: "1"
-    binaries_tag: v0.0.1
   tasks:
-    - name: Install GitHub CLI
+    - name: Install GitHub CLI snarkOS
       shell: |
         type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
         curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -162,38 +161,43 @@
       loop_control:
         loop_var: instance
 
-    - name: Clone or update snarkOS
-      git:
-        repo: 'https://{{ gh_token }}@github.com/AleoHQ/snarkOS-staging.git'
-        dest: "/home/ubuntu/snarkOS"
-        version: "consensus_test_peer_response"
-        clone: yes
-        update: yes
-      run_once: true
-      delegate_to: "{{ groups['snarkos_node'][1] }}" # TODO: consider delegating to a whole group consisting of 30% of nodes.
+    - name: Download snarkOS binary with GitHub CLI 
+      shell: >
+        TAG=v0.consensus_test_peer_response
 
-    - name: Make build-ubuntu.sh executable
-      file:
-        path: "/home/ubuntu/snarkOS/build_ubuntu.sh"
-        mode: '0755'
-      run_once: true
-      delegate_to: "{{ groups['snarkos_node'][1] }}" # TODO: consider delegating to a whole group consisting of 30% of nodes.
+        apt-get install -y unzip
 
-    - name: Build snarkOS using build_ubuntu.sh
-      shell: cd /home/ubuntu/snarkOS && sudo ./build_ubuntu.sh && cp /home/ubuntu/snarkOS/target/release/snarkos /usr/bin/snarkos
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/snarkOS-staging
+        --pattern "snarkos*unknown-linux-gnu.zip"
+        --output "/usr/bin/snarkos.zip"
+        --skip-existing
+  
+        unzip -o /usr/bin/snarkos.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
       args:
         executable: /bin/bash
-      run_once: true
-      delegate_to: "{{ groups['snarkos_node'][1] }}" # TODO: consider delegating to a whole group consisting of 30% of nodes.
       become: yes
+      delegate_to: "{{ groups['snarkos_node'][i] }}"
+      run_once: true
+      loop: "{{ range(1, 9) | list }}" # only install this branch on 8 nodes
+      loop_control:
+        loop_var: i
 
-    - name: Download snarkOS binary with GitHub CLI
+    - name: Download snarkOS binary with GitHub CLI 
       shell: >
-        GITHUB_TOKEN="{{ gh_token }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
-        --pattern "snarkos*"
-        --dir "/usr/bin"
+        TAG=mainnet_no_tx_generation-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/snarkOS-staging
+        --pattern "snarkos*unknown-linux-gnu.zip"
+        --output "/usr/bin/snarkos.zip"
         --skip-existing
+  
+        unzip -o /usr/bin/snarkos.zip -d /usr/bin
       environment:
         GITHUB_TOKEN: "{{ gh_token }}"
       args:
@@ -255,7 +259,6 @@
   remote_user: ubuntu
   vars:
     verbosity: "1"
-    binaries_tag: v0.0.1
   tasks:
     - name: Clone or update tx-cannon
       git:
@@ -282,15 +285,21 @@
     - name: Gather facts from all nodes
       setup:
 
-    - name: Download tx-cannon binary with GitHub CLI
+    - name: Download tx-cannon binary with GitHub CLI 
       shell: >
-        GITHUB_TOKEN="{{ lookup('env', 'GITHUB_TOKEN') }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
-        --pattern "tx-cannon*"
-        --dir "/usr/bin"
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+      
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/tx-cannon
+        --pattern "tx-cannon*unknown-linux-gnu.zip"
+        --output "/usr/bin/tx-cannon.zip"
         --skip-existing
+
+        unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
       environment:
-        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+        GITHUB_TOKEN: "{{ gh_token }}"
       args:
         executable: /bin/bash
       become: yes
