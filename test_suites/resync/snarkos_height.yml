@@ -1,0 +1,16 @@
+# snarkos_height.yml
+- name: View latest block height on all snarkOS nodes
+  hosts: "snarkos_node"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Get snarkos height
+      command: curl -s http://localhost:3030/mainnet/latest/height
+      register: snarkos_status
+      ignore_errors: yes
+      changed_when: false
+      become: yes
+
+    - name: Output snarkos service status
+      debug:
+        var: snarkos_status.stdout_lines
