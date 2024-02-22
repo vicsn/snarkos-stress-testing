@@ -77,6 +77,15 @@
         executable: /bin/bash
       become: yes
 
+    - name: Slurp the commit hash
+      ansible.builtin.slurp:
+        src: '/usr/bin/SNARKOS_COMMIT_HASH'
+      register: file_content_encoded
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
+
     - name: Make snarkos executable
       file:
         path: "/usr/bin/snarkos"
@@ -165,6 +174,7 @@
         dest: /etc/logstash/conf.d/logstash.conf
       vars:
         host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}" 
+        commit_hash: "{{ commit_hash }}"
 
     - name: Start Logstash Service
       ansible.builtin.systemd:

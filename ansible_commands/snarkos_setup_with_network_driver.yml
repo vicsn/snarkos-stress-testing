@@ -19,7 +19,6 @@
   remote_user: ubuntu
   vars:
     verbosity: "1"
-    binaries_tag: v0.0.1
   tasks:
     - name: Install GitHub CLI
       shell: |
@@ -36,7 +35,7 @@
     - name: Export GitHub token for gh CLI
       ansible.builtin.set_fact:
         gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
-
+      
     - name: Gather facts from all nodes
       setup:
 
@@ -59,18 +58,33 @@
       loop_control:
         loop_var: instance
 
-    - name: Download snarkOS binary with GitHub CLI
+    - name: Download snarkOS binary with GitHub CLI 
       shell: >
-        GITHUB_TOKEN="{{ gh_token }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
-        --pattern "snarkos*"
-        --dir "/usr/bin"
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/snarkOS-staging
+        --pattern "snarkos*unknown-linux-gnu.zip"
+        --output "/usr/bin/snarkos.zip"
         --skip-existing
+
+        unzip -o /usr/bin/snarkos.zip -d /usr/bin
       environment:
         GITHUB_TOKEN: "{{ gh_token }}"
       args:
         executable: /bin/bash
       become: yes
+
+    - name: Slurp the commit hash
+      ansible.builtin.slurp:
+        src: '/usr/bin/SNARKOS_COMMIT_HASH'
+      register: file_content_encoded
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
 
     - name: Make snarkos executable
       file:
@@ -160,6 +174,7 @@
         dest: /etc/logstash/conf.d/logstash.conf
       vars:
         host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}" 
+        commit_hash: "{{ commit_hash }}"
 
     - name: Start Logstash Service
       ansible.builtin.systemd:
