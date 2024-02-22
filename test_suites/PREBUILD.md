@@ -10,22 +10,35 @@ Recommend when the test requires a custom build of SnarkOS or tx-cannon.
 
 
 ## OPTION 1: Use pre-built mainnet binaries
-If you are creating a new test, you can copy either of the `hello_hello` or `finalize_scope_attacks` as a starting
-template for your test as both of these tests use pre-built binaries and will not require you to make any further
-test modifications to use the pre-built binaries.
+If you are creating a new test, you can copy the `hello_hello` test suite as a
+starting template for your test as both of these tests use pre-built binaries
+and will not require you to make any further test modifications to use the
+pre-built binaries.
 
 ### Prebuilt SnarkOS Binaries
-The SnarkOS binaries are built using `github actions` on a fork of the `AleoHQ/snarkOS` repository.
+The SnarkOS binaries are built using `github actions` on the
+`AleoHQ/snarkOS-staging` repository.
 
-The binaries can be installed by adding the following two ansible step to the `snarkos_setup.yml` file in the
-`Setup snarkOS nodes` task.
+The binaries can be installed by adding the following ansible steps to the
+`snarkos_setup.yml` file in the `Setup snarkOS nodes` task. This assumes your
+`gh_token` is set and `gh` installed.
 
 ```yml
-    - name: Install SnarkOS binaries
-      shell: |
-        curl -L https://github.com/iamalwaysuncomfortable/snarkOS/releases/download/v2.2.8-latest/snarkos-v2.2.8-latest-x86_64-unknown-linux-gnu.zip -o snarkos.zip
-        sudo apt-get install unzip
-        sudo unzip -o snarkos.zip -d /usr/bin
+    - name: Download snarkOS binary with GitHub CLI 
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/snarkOS-staging
+        --pattern "snarkos*unknown-linux-gnu.zip"
+        --output "/usr/bin/snarkos.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/snarkos.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
       args:
         executable: /bin/bash
       become: yes
@@ -39,39 +52,37 @@ The binaries can be installed by adding the following two ansible step to the `s
 These binaries are maintained to the latest mainnet changes so no further action is required.
 
 ### Prebuilt Tx-Cannon Binaries
-The tx-cannon binaries are also built using `github actions` in `AleoHQ/tx-cannon` repository.
+The tx-cannon binaries are also built using `github actions` in
+`AleoHQ/tx-cannon` repository.
 
-The tx-cannon binaries can be installed by adding the following ansible steps to the `snarkos_setup.yml` file in the
-`Set up and run tx-cannon` ansible task:
+The tx-cannon binaries can be installed by adding the following ansible steps to
+the `snarkos_setup.yml` file in the `Set up and run tx-cannon` ansible task.
+This assumes your `gh_token` is set and `gh` installed.
 
 ```yaml
-    - name: Install the tx-cannon
-      shell: |
-        sudo apt-get install -y unzip
-        sudo apt-get install -y jq
-        RELEASE_DATA=$(curl -L https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/tx-cannon/releases/latest)
-        ASSET_ID=$(echo "${RELEASE_DATA}" | jq -r '.assets[] | select(.name == "tx-cannon-v0.1.0-x86_64-unknown-linux-gnu.zip") | .id')
-        sudo curl -L -H 'Accept: application/octet-stream' https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/tx-cannon/releases/assets/$ASSET_ID -o tx-cannon.zip
-        sudo unzip -o tx-cannon.zip -d /usr/bin
+    - name: Download tx-cannon binary with GitHub CLI 
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/tx-cannon
+        --pattern "tx-cannon*unknown-linux-gnu.zip"
+        --output "/usr/bin/tx-cannon.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
       args:
         executable: /bin/bash
       become: yes
-      environment:
-        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
-
+  
     - name: Make tx-cannon executable
       file:
         path: "/usr/bin/tx-cannon"
         mode: '0755'
-
-    - name: Run tx-cannon network driver
-      shell: |
-        cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon batch-execute --test tests/network_driver/network_driver.toml -e http://{{ test_network_url }}:3030 -r 9000001  >> tx-cannon.log 2>&1'
-      args:
-        executable: /bin/bash
-      async: 36000  # Adjust based on expected duration of the tx-cannon run
-      poll: 0
 ```
 
 ## OPTION 2: Build binaries yourself on github
@@ -86,28 +97,7 @@ The steps:
 git tag <your tag> && git push origin <your tag>
 ```
 This will trigger a build on the `snarkOS-staging` branch
-3. **Add a step to download the build to your test**
-
-```yml
-    - name: Install a custom SnarkOS branch
-      shell: |
-        sudo apt-get install -y unzip
-        sudo apt-get install -y jq
-        RELEASE_DATA=$(curl -L https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/snarkOS-staging/releases/latest)
-        ASSET_ID=$(echo "${RELEASE_DATA}" | jq -r '.assets[] | select(.name == "snarkos-<your tag name>-x86_64-unknown-linux-gnu.zip") | .id')
-        sudo curl -L -H 'Accept: application/octet-stream' https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/snarkOS-staging/releases/assets/$ASSET_ID -o snarkos.zip
-        sudo unzip -o snarkos.zip -d /usr/bin
-      args:
-        executable: /bin/bash
-      become: yes
-      environment:
-        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
-
-    - name: Make snarkos executable
-      file:
-        path: "/usr/bin/snarkos"
-        mode: '0755'
-```
+3. **Add the ansible code in the [snarkos binaries](#prebuilt-snarkos-binaries) section above with appropriate #{TAG_VERSION} to your test**
 
 ### Custom Tx-Cannon Binaries
 Follow the steps below to build the tx-cannon binaries on github.
@@ -119,4 +109,4 @@ The steps:
 git tag <your tag> && git push origin <your tag>
 ```
 This will trigger a build on the `tx-cannon` branch under the name of your tag
-3. **Add the ansible code in the [tx-cannon binaries](#tx-cannon-binaries) section above to your test**
+3. **Add the ansible code in the [tx-cannon binaries](#prebuilt-tx-cannon-binaries) section above with appropriate #{TAG_VERSION} to your test**
