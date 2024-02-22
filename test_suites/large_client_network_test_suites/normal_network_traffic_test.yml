@@ -176,6 +176,8 @@
       ansible.builtin.template:
         src: logstash.conf
         dest: /etc/logstash/conf.d/logstash.conf
+      vars:
+        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}" 
 
     - name: Start Logstash Service
       ansible.builtin.systemd:

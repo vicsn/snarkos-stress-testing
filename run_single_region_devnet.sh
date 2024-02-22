@@ -68,7 +68,7 @@ LB_URL=$(terraform output -raw snarkos_lb_dns_name)
 
 # Run Ansible playbook to configure the nodes
 echo "Configuring nodes with Ansible..."
-cd ../ansible_commands && ansible-playbook -i dynamic_inventory.aws_ec2.yml snarkos_setup.yml -f 14
+cd ../ansible_commands && ansible-playbook -i dynamic_inventory.aws_ec2.yml snarkos_setup_with_network_driver.yml --extra-vars "test_network_url=${LB_URL}" -f 14
 
 # Optionally, wait for user input before destroying the infrastructure
 read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."

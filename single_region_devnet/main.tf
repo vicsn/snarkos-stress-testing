@@ -231,3 +231,36 @@ resource "aws_instance" "prometheus_server" {
     Role = "prometheus-server"
   }
 }
+
+
+# Add variables for tx-cannon instance configuration
+variable "tx_cannon_instance_type" {
+  description = "Instance type for tx-cannon nodes"
+  default     = "m5.2xlarge"
+}
+
+variable "tx_cannon_instance_count" {
+  description = "Number of tx-cannon nodes"
+  default     = 2
+}
+
+# Resource block for tx-cannon instances
+resource "aws_instance" "tx_cannon_node" {
+  count         = var.tx_cannon_instance_count
+  ami           = data.aws_ami.latest_ubuntu.id
+  instance_type = var.tx_cannon_instance_type
+  key_name      = var.key_pair_name
+
+  security_groups = [aws_security_group.prometheus_sg.name]
+
+  ebs_block_device {
+    device_name = "/dev/sda1"
+    volume_size = 20  # Adjust the volume size if needed
+  }
+
+  tags = {
+    Name = "tx-cannon-node-${count.index}",
+    Role = "tx-cannon-node",
+    Dev = count.index
+  }
+}
