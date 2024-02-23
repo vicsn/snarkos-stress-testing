@@ -38,18 +38,52 @@
       set_fact:
         node_id: "{{ tags['Dev'] }}"
       loop: "{{ groups['snarkos_node'] }}"
-      run_once: true
       loop_control:
         loop_var: instance
 
-    - name: Install SnarkOS binaries
+    - name: Install GitHub CLI
       shell: |
-        curl -L https://github.com/iamalwaysuncomfortable/snarkOS/releases/download/v2.2.8-latest/snarkos-v2.2.8-latest-x86_64-unknown-linux-gnu.zip -o snarkos.zip
-        sudo apt-get install unzip
-        sudo unzip -o snarkos.zip -d /usr/bin
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
       args:
         executable: /bin/bash
       become: yes
+
+    - name: Export GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+    - name: Download snarkOS binary with GitHub CLI
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/snarkOS-staging
+        --pattern "snarkos*unknown-linux-gnu.zip"
+        --output "/usr/bin/snarkos.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/snarkos.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Slurp the commit hash
+      ansible.builtin.slurp:
+        src: '/usr/bin/SNARKOS_COMMIT_HASH'
+      register: file_content_encoded
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
 
     - name: Make snarkos executable
       file:
@@ -138,7 +172,8 @@
         src: logstash.conf
         dest: /etc/logstash/conf.d/logstash.conf
       vars:
-        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}" 
+        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+        commit_hash: "{{ commit_hash }}"
 
     - name: Start Logstash Service
       ansible.builtin.systemd:
@@ -212,30 +247,49 @@
   become: yes
   remote_user: ubuntu
   tasks:
+    - name: Gather facts from all nodes
+      setup:
+
     - name: Clone or update tx-cannon
       git:
         repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
 
-    - name: Install the tx-cannon
+    - name: Install GitHub CLI
       shell: |
-        sudo apt-get install -y unzip
-        sudo apt-get install -y jq
-        RELEASE_DATA=$(curl -L https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/tx-cannon/releases/latest)
-        ASSET_ID=$(echo "${RELEASE_DATA}" | jq -r '.assets[] | select(.name == "tx-cannon-v0.1.0-x86_64-unknown-linux-gnu.zip") | .id')
-        sudo curl -L -H 'Accept: application/octet-stream' https://$GITHUB_TOKEN:@api.github.com/repos/AleoHQ/tx-cannon/releases/assets/$ASSET_ID -o tx-cannon.zip
-        sudo unzip -o tx-cannon.zip -d /usr/bin
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
       args:
         executable: /bin/bash
       become: yes
-      environment:
-        GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') }}"
 
-    - name: Make tx-cannon executable
-      file:
-        path: "/usr/bin/tx-cannon"
-        mode: '0755'
+    - name: Export tx-cannon GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+    - name: Download tx-cannon binary with GitHub CLI
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/tx-cannon
+        --pattern "tx-cannon*unknown-linux-gnu.zip"
+        --output "/usr/bin/tx-cannon.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
+      args:
+        executable: /bin/bash
+      become: yes
 
     - name: Run tx-cannon network driver
       shell: |
