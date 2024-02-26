@@ -330,7 +330,7 @@
     - name: Try running tx-cannon batch-execute
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c "/usr/bin/tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml -e http://{{ test_network_url }}:3030 --repeat 9001 >> tx-cannon.log 2>&1"
+        sudo bash -c "/usr/bin/tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml -e http://{{ test_network_url }}:3030 --repetitions 9000001 >> tx-cannon.log 2>&1"
 
       args:
         executable: /bin/bash
