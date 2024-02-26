@@ -43,18 +43,18 @@
       setup:
 
     - name: Set first node IP address
-      set_fact:
+      ansible.builtin.set_fact:
         first_node_ip: "{{ hostvars[groups['snarkos_node'][0]]['public_ip_address']}}"
       when: groups['snarkos_node'] is defined and groups['snarkos_node'] | length > 0
       run_once: true
 
     - name: Determine the number of instances
-      set_fact:
+      ansible.builtin.set_fact:
         num_instances: "{{ groups['snarkos_node'] | length }}"
       run_once: true
 
     - name: Set node_id based on instance tag
-      set_fact:
+      ansible.builtin.set_fact:
         node_id: "{{ tags['Dev'] }}"
 
     - name: Download snarkOS binary with GitHub CLI 
@@ -82,7 +82,7 @@
       register: file_content_encoded
 
     - name: Decode the file commit from base64
-      set_fact:
+      ansible.builtin.set_fact:
         commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
 
     - name: Make snarkos executable
@@ -91,7 +91,7 @@
         mode: '0755'
 
     - name: Set environment variables for snarkos service
-      set_fact:
+      ansible.builtin.set_fact:
         ansible_env:
           FIRST_NODE_IP: "{{ first_node_ip }}"
           VERBOSITY: "{{ verbosity }}"
@@ -146,7 +146,7 @@
 
   tasks:
     - name: Set AWS Region Fact
-      set_fact:
+      ansible.builtin.set_fact:
         aws_region: "{{ ansible_host.split('.')[1] }}"
       when: ansible_host is defined
 
@@ -349,12 +349,14 @@
     - name: Try running tx-cannon batch-execute
       ansible.builtin.shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c "/usr/bin/tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml -e http://{{ test_network_url }}:3030 --repeat 9001 >> tx-cannon3.log 2>&1"
+        sudo bash -c "/usr/bin/tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml -e http://{{ test_network_url }}:3030 --repetitions 9000001 >> tx-cannon3.log 2>&1"
       args:
         executable: /bin/bash
       async: 21600  # Adjust based on expected duration of the tx-cannon run
       poll: 0
       run_once: true
+      # Note: if there is more than one tx-cannon, the following does not necessarily send the task to tx-cannon-node-0.
+      # I observed tx-cannon-node-1 having tx-cannon3.log.
       delegate_to: "{{ groups['tx_cannon_node'][0] }}"
 
     - name: Fetch tx-cannon log 1
@@ -370,6 +372,8 @@
         dest: "./{{ inventory_hostname }}-tx-cannon2.log"
         flat: yes
       ignore_errors: yes  # Optional, to proceed even if fetching logs fails
+      run_once: true
+      delegate_to: "{{ groups['tx_cannon_node'][0] }}"
 
     - name: Fetch tx-cannon log 3
       ansible.builtin.fetch:
@@ -377,6 +381,8 @@
         dest: "./{{ inventory_hostname }}-tx-cannon3.log"
         flat: yes
       ignore_errors: yes  # Optional, to proceed even if fetching logs fails
+      run_once: true
+      delegate_to: "{{ groups['tx_cannon_node'][0] }}"
 
 
 # While the tx-cannon is running, intermittently kill and restart validators, one by one
@@ -432,7 +438,7 @@
 #  gather_facts: yes
 #  tasks:
 #    - name: Calculate 30% of the nodes to stop
-#      set_fact:
+#      ansible.builtin.set_fact:
 #        # The following sets nodes_to_stop to a string containing a float
 #        # that ends in ".0" , e.g. "3.0".
 #        nodes_to_stop: "{{ ((groups['snarkos_node'] | length) * 0.3) | round(0, 'floor') }}"
@@ -472,7 +478,7 @@
   become: yes
   tasks:
     - name: Set batch_number
-      set_fact:
+      ansible.builtin.set_fact:
         batch_number: "{{ (hostvars['localhost']['batch_number'] | default(0) | int) + 1 }}"
       run_once: true # runs once per serial batch
       # The above will create a different batch_number variable
@@ -516,5 +522,3 @@
 # For example, are all of the validators still running
 # and advancing blocks at the end here.
 # Can we check that here?
-
-
