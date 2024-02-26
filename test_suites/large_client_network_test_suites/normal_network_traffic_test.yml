@@ -52,11 +52,7 @@
 
     - name: Set node_id based on instance tag
       set_fact:
-        node_id: "{{ tags['Dev'] }}"
-      loop: "{{ groups['snarkos_node'] }}"
-      run_once: true
-      loop_control:
-        loop_var: instance
+        node_id: {{ tags['Dev'] }}
 
     - name: Download snarkOS binary with GitHub CLI
       shell: >

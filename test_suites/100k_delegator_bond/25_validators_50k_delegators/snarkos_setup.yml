@@ -36,10 +36,7 @@
 
     - name: Set node_id based on instance tag
       set_fact:
-        node_id: "{{ tags['Dev'] }}"
-      loop: "{{ groups['snarkos_node'] }}"
-      loop_control:
-        loop_var: instance
+        node_id: {{ tags['Dev'] }}
 
     - name: Download delegator test data for SnarkOS genesis block
       shell: >
