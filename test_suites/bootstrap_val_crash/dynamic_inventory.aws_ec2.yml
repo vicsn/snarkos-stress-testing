@@ -1,0 +1,26 @@
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-east-2
+
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-node-delayed-start"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "tx-cannon-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "prometheus-server"
+
+filters:
+  instance-state-name: running
+  tag:Role: ["snarkos-node", "snarkos-node-delayed-start", "tx-cannon-node", "prometheus-server"]
