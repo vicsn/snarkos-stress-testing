@@ -6,7 +6,7 @@
   tasks:
     - name: Set node_id based on instance tag
       set_fact:
-        node_id: {{ tags['Dev'] }}
+        node_id: "{{ tags['Dev'] }}"
 
     - name: Stop snarkos service
       systemd:
