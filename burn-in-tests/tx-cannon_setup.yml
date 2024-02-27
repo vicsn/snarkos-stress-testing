@@ -1,0 +1,119 @@
+# tx-cannon_setup.yml
+
+# logstash
+- name: Install and Configure Logstash
+  hosts: "tx_cannon_burn_in_node"
+  become: yes
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+
+  tasks:
+    - name: Set AWS Region Fact
+      set_fact:
+        aws_region: "{{ ansible_host.split('.')[1] }}"
+      when: ansible_host is defined
+
+    - name: Add Elastic GPG key
+      ansible.builtin.shell:
+        cmd: "wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes --dearmor -o /usr/share/keyrings/elastic-keyring.gpg"
+
+    - name: Add Elastic APT repository
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/elastic-8.x.list
+        line: "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
+        create: yes
+        state: present
+
+    - name: Update and install Logstash
+      ansible.builtin.apt:
+        update_cache: yes
+        name: logstash
+        state: latest
+
+    - name: Copy Logstash Configuration Template
+      ansible.builtin.template:
+        src: logstash.conf
+        dest: /etc/logstash/conf.d/logstash.conf
+
+    - name: Start Logstash Service
+      ansible.builtin.systemd:
+        name: logstash
+        state: started
+        enabled: yes
+
+# Set up and run tx-cannon network driver
+- name: Set up and run tx-cannon network driver
+  hosts: "tx_cannon_burn_in_node"
+  become: yes
+  remote_user: ubuntu
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Clone or update tx-cannon
+      git:
+        repo: "https://{{ github_token }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        dest: "/home/ubuntu/tx-cannon"
+        version: "mainnet"
+
+    - name: Install GitHub CLI
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Download tx-cannon binary with GitHub CLI
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ github_token }}" gh release download ${TAG}
+        --repo aleoHQ/tx-cannon
+        --pattern "tx-cannon*unknown-linux-gnu.zip"
+        --output "/usr/bin/tx-cannon.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Make tx-cannon executable
+      file:
+        path: "/usr/bin/tx-cannon"
+        mode: '0755'
+
+    - name: Set node_id based on instance tag
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+
+    - name: Determine unique node for each host
+      set_fact:
+        node_to_hit: "{{ nodes_to_hit[ansible_play_hosts_all.index(inventory_hostname)] }}"
+
+    - name: Debug - Show the node to hit
+      debug:
+        msg: "This host will target {{ node_to_hit }}"
+
+    - name: Template the tx-cannon service file for each instance
+      ansible.builtin.template:
+        src: tx-cannon.service
+        dest: /etc/systemd/system/tx-cannon.service
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+      become: yes
+
+    - name: Ensure tx-cannon service is started and enabled
+      ansible.builtin.systemd:
+        name: tx-cannon
+        state: started
+        enabled: yes
