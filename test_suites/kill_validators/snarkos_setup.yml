@@ -473,7 +473,6 @@
 - name: Stop snarkOS service on groups of 30%
   hosts: snarkos_node
   serial: 30%
-  # hosts: stop_group
   remote_user: ubuntu
   become: yes
   tasks:
@@ -517,6 +516,20 @@
         minutes: 10
       run_once: true    # runs once per serial batch
 
+- name: See if network remains stable
+  hosts: snarkos_node
+  remote_user: ubuntu
+  become: yes
+  tasks:
+    - name: Finally run another 20 minutes
+      pause:
+        minutes: 20
+      run_once: true
+
+    - name: Report end time
+      debug:
+        msg: "Done with test at: {{ now() }}"
+      run_once: true
 
 # TODO: What do we want the pass/fail criteria to be?
 # For example, are all of the validators still running
