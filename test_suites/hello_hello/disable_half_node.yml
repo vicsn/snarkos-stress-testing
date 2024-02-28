@@ -1,0 +1,20 @@
+---
+# This playbook stops the tx-cannon service on half of the nodes
+
+- name: Dynamically Split Hosts into Two Groups
+  hosts: tx_cannon_burn_in_node
+  gather_facts: no
+  tasks:
+    - name: Group hosts dynamically into two
+      group_by:
+        key: "{{ 'stop_tx_cannon_group' if (play_hosts.index(inventory_hostname) % 2 == 0) else 'keep_tx_cannon_group' }}"
+
+- name: Stop tx-cannon service on half of the nodes
+  hosts: stop_tx_cannon_group
+  become: yes
+  tasks:
+    - name: Stop tx-cannon service
+      ansible.builtin.systemd:
+        name: tx-cannon
+        state: stopped
+        enabled: no
