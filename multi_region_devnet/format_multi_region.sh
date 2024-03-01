@@ -24,7 +24,7 @@ data "aws_ami" "latest_ubuntu" {
 }
 
 provider "aws" {
-  region = "us-west-2"
+  region = "us-west-1"
 }
 
 resource "aws_security_group" "prometheus_sg" {
