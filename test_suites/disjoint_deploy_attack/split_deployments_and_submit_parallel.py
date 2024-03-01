@@ -3,41 +3,55 @@ import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
 
-# Function to execute command
-def execute_command(i, ip_addresses):
-    ip = ip_addresses[i].strip()
-    cmd = f"tx-cannon batch-send --manifest programs_to_deploy/split/deployment_{i}.txt -e http://{ip}:3030"
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output = result.stdout.decode().strip()
-    error = result.stderr.decode().strip()
-    return f"Executed {cmd}\nOutput: {output}\nError: {error}"
+# Function to send transactions to a validator without surpassing the rate limit.
+def send_transactions(deployments_path, ip_address):
+    results = []
+    with open(deployments_path, "r") as f:
+        i = 0
+        for tx in f.readlines():
+            # sleep 1 second every 5 txs. This is a simplified way to throttle the txs to stay below the rate-limit.
+            if i % 5 == 0:
+                time.sleep(1)
+            cmd = f"curl http://{ip_address}:3030/mainnet/transaction/broadcast -X POST -H \"Content-Type: application/json\" -d '{tx}'"
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output = result.stdout.decode().strip()
+            error = result.stderr.decode().strip()
+            results.append(f"Executed {cmd}\nOutput: {output}\nError: {error}")
+            i += 1
+
+    return results
 
 def main():
 
-    # read ip_addresses.txt
+    # Read ip_addresses.txt
     ip_addresses_path = os.path.join(os.getcwd(), "ip_addresses.txt")
     with open(ip_addresses_path, "r") as f:
         ip_addresses = f.readlines()
 
-    deployment_txt_path = os.path.join(os.getcwd(), "programs_to_deploy", "single_file", "mainnet-5df9bc2-25val-50tx.txt")
-    deployments_split_folder_path = os.path.join(os.getcwd(), "programs_to_deploy", "split")
+    # Read pregenerated txs
+    txs = []
+    for i in range(5):
+        tx_path = os.path.join(os.getcwd(), "pregenerated_txs", f"{i}-e9533b6-5val-deploys.txt")
+        with open(tx_path, "r") as f:
+            for tx in f.readlines():
+                txs.append(tx)
 
-    # create the folder if it does not exist
+    # Create a folder to store the deployments
+    deployments_split_folder_path = os.path.join(os.getcwd(), "programs_to_deploy", "split")
     if not os.path.exists(deployments_split_folder_path):
         os.makedirs(deployments_split_folder_path)
 
-    # read deployment_txt_path
-    with open(deployment_txt_path, "r") as f:
-        deployments = f.readlines()
-
-    number_of_programs = len(deployments)
+    number_of_programs = len(txs)
     number_of_validators = len(ip_addresses)
 
     programs_per_validator = number_of_programs // number_of_validators
 
     deployment_counter = 0
+    deployment_paths = []
     for i in range(number_of_validators):
-        deployment_path = os.path.join(deployments_split_folder_path, f"deployment_{i}.txt")
+        deployment_path = os.path.join(deployments_split_folder_path, f"deployments_{i}.txt")
+        deployment_paths.append(deployment_path)
+
         # if the file exists, delete it
         if os.path.exists(deployment_path):
             os.remove(deployment_path)
@@ -45,7 +59,7 @@ def main():
         for j in range(programs_per_validator):
             # append deployment to deployment_path file
             with open(deployment_path, "a") as f:
-                f.write(deployments[deployment_counter])
+                f.write(txs[deployment_counter])
 
             deployment_counter += 1
     
@@ -56,7 +70,7 @@ def main():
     # Use ProcessPoolExecutor to parallelize the execution
     with ProcessPoolExecutor(max_workers=number_of_validators) as executor:
         # Schedule the execute_command calls and use as_completed to block until they are done
-        futures = {executor.submit(execute_command, i, ip_addresses): i for i in range(number_of_validators)}
+        futures = {executor.submit(send_transactions, deployment_paths[i], ip_addresses[i].strip()): i for i in range(number_of_validators)}
         for future in as_completed(futures):
             i = futures[future]
             try:

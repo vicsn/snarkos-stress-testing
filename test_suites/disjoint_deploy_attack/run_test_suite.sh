@@ -83,7 +83,7 @@ while true; do
     sleep 10
 done
 
-echo "Rached block height: ${BLOCK_HEIGHT_NOW}"
+echo "Reached block height: ${BLOCK_HEIGHT_NOW}"
 
 # Optionally, wait for user input before destroying the infrastructure
 read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."

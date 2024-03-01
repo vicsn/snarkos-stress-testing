@@ -1,0 +1,14 @@
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-west-2
+
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "tx-cannon-node"
+
+filters:
+  instance-state-name: running
+  tag:Role: ["tx-cannon-node"]
