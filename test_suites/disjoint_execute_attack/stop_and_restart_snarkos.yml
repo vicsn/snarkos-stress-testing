@@ -1,0 +1,24 @@
+# stop_and_restart_snarkos.yml
+- name: Gracefully stop and restart snarkOS nodes
+  hosts: "snarkos_node:snarkos_client_node"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Gracefully stop snarkOS service
+      systemd:
+        name: snarkos
+        state: stopped
+      become: yes
+      when: "'snarkos_node' in group_names"
+      ignore_errors: yes  # In case the service is not running
+
+    - name: Wait for 30 seconds before restarting
+      wait_for:
+        timeout: 30
+
+    - name: Restart snarkOS service on snarkos_node
+      systemd:
+        name: snarkos
+        state: restarted
+      become: yes
+      when: "'snarkos_node' in group_names"
