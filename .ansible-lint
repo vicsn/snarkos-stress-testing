@@ -1,0 +1,5 @@
+---
+profile: null
+
+skip_list:
+  - fqcn[action-core]

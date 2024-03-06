@@ -1,0 +1,57 @@
+# ------------------------------------------------
+# tx-cannon
+
+# Get load balancer DNS name
+- name: Gather information about all ELBs
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Get info about all classic ELBs
+      community.aws.elb_classic_lb_info:
+        names: snarkos-lb
+        region: us-east-1
+      register: elb_info
+
+    - name: Set DNS name as a fact
+      set_fact:
+        snarkos_lb_dns: "{{ elb_info.elbs[0].dns_name }}"
+
+    - ansible.builtin.debug:
+        msg: "The DNS name of snarkos-lb is {{ snarkos_lb_dns }}"
+
+    - name: Wait for the network to be healthly
+      uri:
+        url: "http://{{ snarkos_lb_dns }}:3030/mainnet/latest/height"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 10
+  tags: tx-cannon
+
+# prepare the cannons
+- name: Install and Configure tx-cannon on all nodes
+  hosts: tx_cannon_node
+  become: true
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+  roles:
+    - txcannon_setup
+    - logstash_txcannon_setup
+  tags: tx-cannon
+
+# Batch transfer continuously to simulate TPS
+- name: Batch transfer
+  hosts: tx_cannon_node
+  become: true
+  vars_files:
+    - vars.yml
+  vars:
+    txcannon_command: tx-cannon batch-transfer -e http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030 -r 90000001 --funding-account APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --amount 1 -w 5 -a aleo1hhzgdct6257yqj9wav3qqgnsjtnr2484frtqcjfva93yshywxypqs0wwa7
+  remote_user: ubuntu
+  roles:
+    - txcannon_service
+  tags: tx-cannon

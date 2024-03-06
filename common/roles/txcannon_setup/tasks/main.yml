@@ -1,0 +1,24 @@
+---
+- name: Clone or update tx-cannon
+  git:
+    repo: https://{{ github_token }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git
+    dest: /home/ubuntu/tx-cannon
+    version: mainnet
+
+- name: Download tx-cannon binary with GitHub CLI # noqa: no-changed-when
+  shell: >
+    GITHUB_TOKEN="{{ github_token }}" gh release download {{ txcannon_binary_tag }}
+    --repo aleoHQ/tx-cannon
+    --pattern "tx-cannon*unknown-linux-gnu.zip"
+    --output "/usr/bin/tx-cannon.zip"
+    --clobber
+
+    unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
+  args:
+    executable: /bin/bash
+  become: true
+
+- name: Make tx-cannon executable
+  file:
+    path: /usr/bin/tx-cannon
+    mode: "0755"

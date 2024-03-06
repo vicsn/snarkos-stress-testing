@@ -1,0 +1,12 @@
+---
+- name: Copy Logstash Configuration Template for tx-cannon
+  ansible.builtin.template:
+    src: logstash.conf
+    dest: /etc/logstash/conf.d/logstash.conf
+    mode: "0664"
+
+- name: Restart Logstash service
+  systemd:
+    name: logstash
+    state: restarted
+  become: true
