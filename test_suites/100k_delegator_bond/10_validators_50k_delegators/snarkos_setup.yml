@@ -56,7 +56,7 @@
 
     - name: Download snarkOS binary with GitHub CLI
       shell: >
-        TAG=mainnet-latest
+        TAG=mainnet-staging-latest
 
         apt-get install -y unzip
 

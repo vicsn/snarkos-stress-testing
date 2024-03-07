@@ -62,7 +62,7 @@
 
     - name: Download snarkOS binary with GitHub CLI
       shell: >
-        GITHUB_TOKEN="{{ gh_token }}" gh release download "mainnet-latest"
+        GITHUB_TOKEN="{{ gh_token }}" gh release download "mainnet-staging-latest"
         --repo AleoHQ/snarkOS-staging
         --pattern "snarkos*"
         --dir "/usr/bin"
