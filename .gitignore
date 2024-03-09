@@ -13,4 +13,5 @@
 **/.env
 **/*.swp
 **/*tx-cannon.log
+**/*.log
 **/vars.yml
