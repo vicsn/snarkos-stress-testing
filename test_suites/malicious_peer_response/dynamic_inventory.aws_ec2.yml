@@ -1,13 +1,16 @@
 plugin: amazon.aws.aws_ec2
 
 regions:
-  - us-west-2
 
 keyed_groups:
   - key: tags.Role
     prefix: ""
     separator: ""
-    value: "snarkos-node"
+    value: "snarkos-node-standard"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-node-malicious"
   - key: tags.Role
     prefix: ""
     separator: ""
@@ -19,4 +22,4 @@ keyed_groups:
 
 filters:
   instance-state-name: running
-  tag:Role: ["snarkos-node", "tx-cannon-node", "prometheus-server"]
+  tag:Role: ["snarkos-node-standard", "snarkos-node-malicious", "tx-cannon-node", "prometheus-server"]

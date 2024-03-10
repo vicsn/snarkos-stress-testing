@@ -2,8 +2,13 @@
 
 # Function to load environment variables from .env file
 load_env() {
-    if [ -f "../.env" ]; then
+    if [ -f ".env" ]; then
         echo "Loading environment variables from .env file..."
+        set -a  # Automatically export all variables
+        source .env
+        set +a
+    elif [ -f "../.env" ]; then
+        echo "Loading environment variables from ../.env file..."
         set -a  # Automatically export all variables
         source ../.env
         set +a
@@ -53,7 +58,7 @@ echo "Creating infrastructure..."
 terraform apply -auto-approve
 
 # Get the load balancer DNS name
-LB_URL=$(terraform output -raw snarkos_lb_dns_name)
+LB_URL=$(terraform output -raw snarkos_lb_all_dns_name)
 
 # Run Ansible playbook to configure the nodes
 echo "Configuring nodes with Ansible..."
@@ -65,6 +70,3 @@ read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 # Destroy the infrastructure
 echo "Destroying infrastructure..."
 terraform destroy -auto-approve
-
-# tx-cannon batch-execute --test tests/hello_world_flood/hello_hello.toml --threads 1 -e http://snarkos-lb-1676216919.us-west-2.elb.amazonaws.com:3033/
-# tx-cannon deploy -p "tests/hello_world_flood/hello_hello.aleo" -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://snarkos-lb-1676216919.us-west-2.elb.amazonaws.com:3033/

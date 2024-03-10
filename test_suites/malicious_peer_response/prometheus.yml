@@ -18,7 +18,7 @@ scrape_configs:
     scheme: http
     follow_redirects: true
     static_configs:
-    - targets: [{% for host in groups['snarkos_node'] %}"{{ host }}:9000"
+    - targets: [{% for host in all_hosts %}"{{ host }}:9000"
                  {%- if not loop.last %},{% endif %}
                  {%- endfor %}]
       labels:
@@ -41,7 +41,7 @@ scrape_configs:
     scheme: http
     follow_redirects: true
     static_configs:
-    - targets: [{% for host in groups['snarkos_node'] %}"{{ host }}:9256"
+    - targets: [{% for host in all_hosts %}"{{ host }}:9256"
                  {%- if not loop.last %},{% endif %}
                  {%- endfor %}]
       labels:
