@@ -270,38 +270,23 @@
 
     - name: Continue with running serial deployments 
       shell: |
-        cd /home/ubuntu/tx-cannon/tests/1_deploy_2_seconds/300k_constraints &&
+        cd /home/ubuntu/tx-cannon
 
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_1.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_1.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
 
-        sleep 2
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
 
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_2.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_3.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
 
-        sleep 4
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_4.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
 
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_3.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_5.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
 
-        sleep 6
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_6.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
 
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_4.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_7.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
 
-        sleep 8
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_5.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        sleep 10
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_6.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        sleep 12
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_7.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        sleep 14
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest programs_to_deploy/programs_8.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
+        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_8.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
         wait
 
       args:
