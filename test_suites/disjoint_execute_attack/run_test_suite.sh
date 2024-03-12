@@ -70,13 +70,15 @@ ansible-playbook -i dynamic_inventory.aws_ec2.yml playbook_setup.yml --extra-var
 
 # Run tx-cannon to deploy the program
 echo "Deploying program large_bhp_256_150.aleo with tx-cannon..."
+echo "Running command: tx-cannon deploy -p large_bhp_256_150.aleo -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://${LB_URL}:3030"
 tx-cannon deploy -p large_bhp_256_150.aleo -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://${LB_URL}:3030
 
-echo "Sleeping 60 seconds to allow the program to deploy..."
-sleep 60
+echo "Sleeping 90 seconds to allow the program to deploy..."
+sleep 90
 
 # Check http://${LB_URL}:3030/mainnet/program/large_bhp_256_150.aleo if the program is deployed
 echo "Checking if the program is deployed..."
+echo "Calling command: curl -s http://${LB_URL}:3030/mainnet/program/large_bhp_256_150.aleo"
 # if the curl response starts with "Something went wrong: Missing program for ID", then the program is not deployed. Otherwise, it is deployed
 if [[ $(curl -s http://${LB_URL}:3030/mainnet/program/large_bhp_256_150.aleo) == "Something went wrong: Missing program for ID"* ]]; then
     echo "Program not deployed. Exiting... Please destroy the infrastructure manually using:"
@@ -97,6 +99,7 @@ echo ""
 
 # execute the attack
 echo "Executing the attack..."
+echo "Running command: ansible-playbook -i dynamic_inventory.aws_ec2.yml playbook_attack.yml --extra-vars test_network_url=${LB_URL} --user ubuntu --private-key ./devnet-key -f 50"
 ansible-playbook -i dynamic_inventory.aws_ec2.yml playbook_attack.yml --extra-vars "test_network_url=${LB_URL}" --user ubuntu --private-key ./devnet-key -f 50
 
 echo "Now, please wait and see what happens to block production on Grafana ..."

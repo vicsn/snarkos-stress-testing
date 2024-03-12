@@ -204,7 +204,7 @@ variable "tx_cannon_instance_type" {
 
 # Resource block for tx-cannon instances
 resource "aws_instance" "tx_cannon_node" {
-  count         = var.validator_count
+  count         = var.tx_cannon_count
   ami           = data.aws_ami.latest_ubuntu.id
   instance_type = var.tx_cannon_instance_type
   key_name      = var.key_pair_name

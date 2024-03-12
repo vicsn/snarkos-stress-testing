@@ -60,7 +60,7 @@
 
     - name: Download snarkOS binary with GitHub CLI 
       shell: >
-        TAG=mainnet-9dbb8d70e3db7007504dddd76f8e234a7f009598
+        TAG=mainnet-staging-latest
 
         apt-get install -y unzip
 
@@ -296,7 +296,7 @@
       run_once: true
       delegate_to: "{{ groups['tx_cannon_node'][0] }}"
 
-    - name: Wait for the block height to reach 5 or higher
+    - name: Wait for the block height to reach 30 or higher
       uri:
         url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
         method: GET
@@ -304,8 +304,8 @@
         status_code: 200
         timeout: 10
       register: result
-      until: result.status == 200 and (result.content | int) >= 5
-      retries: 50  # Number of retries
+      until: result.status == 200 and (result.content | int) >= 30
+      retries: 100  # Number of retries
       delay: 10  # Delay in seconds between retries
 
     - name: Fetch tx-cannon logs

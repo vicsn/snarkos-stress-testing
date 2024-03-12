@@ -3,6 +3,10 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
+provider "aws" {
+  region = var.aws_region
+}
+
 variable "instance_type" {
   description = "Instance type for client nodes"
   default     = "m5.4xlarge"
@@ -10,7 +14,7 @@ variable "instance_type" {
 
 variable "instance_count" {
   description = "Number of client nodes"
-  default     = 25
+  default     = 10
 }
 
 resource "aws_key_pair" "generated_key" {

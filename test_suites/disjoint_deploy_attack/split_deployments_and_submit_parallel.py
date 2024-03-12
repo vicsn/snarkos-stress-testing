@@ -28,10 +28,17 @@ def main():
     with open(ip_addresses_path, "r") as f:
         ip_addresses = f.readlines()
 
+    num_pregenerated_txs_files = 1
+    commit = "dd00bf7"
+    num_validators = len(ip_addresses)
+    
     # Read pregenerated txs
     txs = []
-    for i in range(5):
-        tx_path = os.path.join(os.getcwd(), "pregenerated_txs", f"{i}-e9533b6-5val-deploys.txt")
+    for i in range(num_pregenerated_txs_files):
+        tx_path = os.path.join(os.getcwd(), "pregenerated_txs", f"{i}-{commit}-{num_validators}-val-deploys.txt")
+        if not os.path.exists(tx_path):
+                print(f"Missing transaction file {tx_path}, exiting...")
+                exit()
         with open(tx_path, "r") as f:
             for tx in f.readlines():
                 txs.append(tx)

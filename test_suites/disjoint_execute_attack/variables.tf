@@ -5,7 +5,12 @@ variable "regions" {
 
 variable "validator_count" {
   description = "Number of validator instances to create in one region"
-  default     = 25
+  default     = 10
+}
+
+variable "tx_cannon_count" {
+  description = "Number of validator instances to create in one region"
+  default     = 30
 }
 
 variable "instance_type" {

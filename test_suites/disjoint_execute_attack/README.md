@@ -1,6 +1,6 @@
 # Disjoint program execution - BHP 256 500
 
-This test suite runs deploys a BHP 256 500 program (in a finalize context), and then sends 4 disjoint executions to each validator. For this, it spins up 25 validator nodes in one region, and 25 transaction cannon nodes to attack in another region. It also spins up a network driving tx cannon node.
+This test suite runs deploys a BHP 256 150 program (in a finalize context), and then sends 30 disjoint executions to each validator. For this, it spins up 10 validator nodes in one region, and 30 transaction cannon nodes to attack in another region. It also spins up a network driving tx cannon node.
 
 To run the attack:
 
