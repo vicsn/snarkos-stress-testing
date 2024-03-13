@@ -17,7 +17,7 @@ packer build stress-test-base.json.pkr.hcl
 
 ## Other notes
 
-Currently available for `["us-east-1", "us-east-2", "us-west-1", "us-west-2"]`
+Currently available for `["us-east-1", "us-east-2", "us-west-1", "us-west-2", "eu-north-1"]`
 
 You have to run `disable-image-block-public-access` in each region you want the AMI published to.
 
