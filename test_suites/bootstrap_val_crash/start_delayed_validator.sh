@@ -15,6 +15,8 @@ number_of_lines_in_file_plus_one=$((number_of_lines_in_file + 1))
 # Connect to the server and run the commands in the background
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@$delayed_ip_address << EOF
 sudo -i <<'EOSUDO'
+export UseBootstrapPeers=1
+echo "$first_node_ip_address:4130" > /tmp/bootstrap_peers.txt
 nohup /usr/bin/snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers $first_node_ip_address:4130 --validators $first_node_ip_address:5000 --verbosity 1 --dev $number_of_lines_in_file --dev-num-validators $number_of_lines_in_file_plus_one --validator > /dev/null 2>&1 &
 EOSUDO
 EOF

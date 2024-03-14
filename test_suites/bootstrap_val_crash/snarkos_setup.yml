@@ -58,7 +58,7 @@
 
     - name: Download snarkOS binary with GitHub CLI
       shell: >
-        TAG=v0.0.1.bootstrap_peers
+        TAG=malice-latest
 
         apt-get install -y unzip
 

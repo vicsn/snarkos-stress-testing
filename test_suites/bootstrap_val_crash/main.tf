@@ -10,7 +10,7 @@ variable "instance_type" {
 
 variable "instance_count" {
   description = "Number of client nodes"
-  default     = 24
+  default     = 9
 }
 
 resource "aws_key_pair" "generated_key" {
