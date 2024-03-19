@@ -1,0 +1,8 @@
+[Unit]
+Description=snarkOS Node Service
+
+[Service]
+User=root
+ExecStart=/root/.cargo/bin/snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ first_node_ip }}:4130 --validators {{ first_node_ip }}:5000 --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10000000
+Restart=no
+LimitNOFILE=65535
