@@ -1,0 +1,15 @@
+[Unit]
+Description=snarkOS Node Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/ubuntu
+Environment="VERBOSITY={{ ansible_env.VERBOSITY }}"
+Environment="NODE_ID={{ ansible_env.NODE_ID }}"
+Environment="NUM_INSTANCES={{ ansible_env.NUM_INSTANCES }}"
+ExecStart=/usr/bin/snarkos start --metrics --nodisplay --node 0.0.0.0:4130 --client --verbosity ${VERBOSITY} --dev ${NODE_ID} --dev-num-validators ${NUM_INSTANCES}
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

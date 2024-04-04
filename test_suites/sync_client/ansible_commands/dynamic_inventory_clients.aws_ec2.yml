@@ -1,0 +1,34 @@
+# dynamic_inventory_clients.aws_ec2.yml
+plugin: amazon.aws.aws_ec2
+regions:
+
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-client-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-secondary-client-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "snarkos-tertiary-client-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "prometheus-server"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "tx-cannon-node"
+
+filters:
+  instance-state-name: running
+  tag:Role: ["snarkos-node", "snarkos-client-node", "snarkos-secondary-client-node", "snarkos-tertiary-client-node", "prometheus-server", "tx-cannon-node"]
+  

@@ -1,0 +1,3 @@
+output "instance_public_ips" {
+  value = aws_instance.snarkos_tertiary_client_node.*.public_ip
+}
