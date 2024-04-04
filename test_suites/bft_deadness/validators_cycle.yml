@@ -1,0 +1,62 @@
+- name: Select half of the validators randomly with Python
+  ansible.builtin.command: >
+    python3 -c "import random; import sys; hosts=sys.argv[1].split(','); random.shuffle(hosts); half=len(hosts)//2; selected_hosts=hosts[:half]; print(','.join(selected_hosts))" "{{ groups['snarkos_node'] | join(',') }}"
+  register: validators_to_stop_raw
+  run_once: true
+
+- name: Convert output to list
+  set_fact:
+    validators_to_stop: "{{ validators_to_stop_raw.stdout.split(',') }}"
+  run_once: true
+
+- name: Debug selected validators
+  debug:
+    msg: "Validators to stop: {{ validators_to_stop }}"
+    
+- name: Stop snarkos service on selected validators
+  delegate_to: "{{ item }}"
+  become: true
+  remote_user: ubuntu
+  ansible.builtin.systemd:
+    name: snarkos
+    state: stopped
+  loop: "{{ validators_to_stop }}"
+
+- name: Pause for 15 seconds
+  pause:
+    seconds: 15
+
+- name: Restart snarkos service on selected validators
+  delegate_to: "{{ item }}"
+  become: true
+  remote_user: ubuntu
+  ansible.builtin.systemd:
+    name: snarkos
+    state: restarted
+  loop: "{{ validators_to_stop }}"
+
+- name: Fetch the current block height
+  ansible.builtin.uri:
+    url: "http://{{ test_network_url }}:3030/mainnet/block/latest"
+    method: GET
+    return_content: true
+  register: current_block
+  run_once: true
+
+- name: Debug current block height
+  debug:
+    msg: "Current block height: {{  current_block.json['header']['metadata']['height'] }}"
+    
+- name: Wait for the network to progress by one block
+  ansible.builtin.uri:
+    url: "http://{{ test_network_url }}:3030/mainnet/block/latest"
+    method: GET
+    return_content: true
+  register: next_block
+  until: next_block.json['header']['metadata']['height'] | int > current_block.json['header']['metadata']['height'] | int
+  retries: 60
+  delay: 10
+
+- name: Debug next block height
+  debug:
+    msg: "Next block height: {{  next_block.json['header']['metadata']['height'] }}"
