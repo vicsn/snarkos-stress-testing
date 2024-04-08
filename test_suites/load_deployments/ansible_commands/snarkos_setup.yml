@@ -17,7 +17,8 @@
   become: yes
   remote_user: ubuntu
   vars:
-    verbosity: "4"
+    branch: "mainnet-staging"
+    verbosity: "1"
   tasks:
     - name: Gather facts from all nodes
       setup:
@@ -99,6 +100,7 @@
       template:
         src: snarkos.service
         dest: /etc/systemd/system/snarkos.service
+      when: "'snarkos_node' in group_names"
       become: yes
 
     - name: Reload systemd to read new snarkos service file
@@ -106,28 +108,37 @@
         daemon_reload: yes
       become: yes
 
-    - name: Restart snarkos service
+    - name: Reload systemd to read the new service file
+      systemd:
+        daemon_reload: yes
+      become: yes
+
+    - name: Restart snarkos service on snarkos_node
       systemd:
         name: snarkos
         state: restarted
       become: yes
+      when: "'snarkos_node' in group_names"
 
     - name: Install Docker
       apt:
         name: docker.io
         state: present
         update_cache: yes
-
+      when: "'snarkos_node' in group_names"
+        
     - name: Ensure Docker service is started
       service:
         name: docker
         state: started
+      when: "'snarkos_node' in group_names"
 
     - name: Run Docker Process Exporter for snarkos
       ansible.builtin.shell: >
         docker run -d --rm -p 9256:9256 --privileged -v /proc:/host/proc -v $(pwd):/config ncabatoff/process-exporter --procfs /host/proc -procnames snarkos
       args:
         executable: /bin/bash
+      when: "'snarkos_node' in group_names"
 
 # logstash
 - name: Install and Configure Logstash
@@ -168,7 +179,7 @@
         src: logstash.conf
         dest: /etc/logstash/conf.d/logstash.conf
       vars:
-        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}" 
         commit_hash: "{{ commit_hash }}"
 
     - name: Start Logstash Service
@@ -180,20 +191,20 @@
 # metrics on grafana
 - name: Install prometheus and enable remote forwarding to Grafana cloud
   hosts: prometheus_server
-  become: yes
-  gather_facts: true
+  become: yes 
+  gather_facts: true 
   vars:
-    ansible_user: ubuntu
+    ansible_user: ubuntu 
     grafana_cloud_api_key: "{{ lookup('env', 'GRAFANA_CLOUD_API_KEY') }}"
     devnet_name: "{{ lookup('env', 'DEVNET_NAME') }}"
 
   tasks:
     - name: Copy docker-compose.yml
       copy:
-        src: docker-compose.yml
+        src: docker-compose.yml  
         dest: /home/ubuntu/docker-compose.yml
-        owner: ubuntu
-        group: ubuntu
+        owner: ubuntu 
+        group: ubuntu  
       become_user: ubuntu
 
     - name: Install Docker
@@ -215,7 +226,7 @@
 
     - name: Create YAML scrape target file of all nodes
       ansible.builtin.template:
-        src: prometheus.yml
+        src: prometheus.yml 
         dest: /home/ubuntu/prometheus.yml
 
     - name: Install unzip
@@ -236,66 +247,3 @@
       command: docker-compose up -d
       args:
         chdir: /home/ubuntu/
-
-# Setting up and running tx-cannon on tx-cannon instances
-- name: Set up and run tx-cannon
-  hosts: "tx_cannon_node"
-  become: yes
-  remote_user: ubuntu
-  tasks:
-    - name: Clone or update tx-cannon
-      git:
-        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
-        dest: "/home/ubuntu/tx-cannon"
-        version: "mainnet"
-
-    - name: Make build_ubuntu.sh executable for tx-cannon
-      file:
-        path: "/home/ubuntu/tx-cannon/build_ubuntu.sh"
-        mode: '0755'
-
-    - name: Build tx-cannon using build_ubuntu.sh
-      shell: cd /home/ubuntu/tx-cannon && sudo ./build_ubuntu.sh
-      args:
-        executable: /bin/bash
-
-    - name: Continue with tx-cannon batch-execute of network driver
-      shell: |
-        cd /home/ubuntu/tx-cannon 
-        /root/.cargo/bin/tx-cannon batch-execute --test tests/network_driver/network_driver.toml -e http://{{ test_network_url }}:3030 --repetitions 9000001
-      args:
-        executable: /bin/bash
-      async: 36000  # Adjust based on expected duration of the tx-cannon run
-      poll: 0
-
-    - name: Continue with running serial deployments 
-      shell: |
-        cd /home/ubuntu/tx-cannon
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_1.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_3.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_4.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_5.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_6.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_7.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-
-        /root/.cargo/bin/tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_8.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 &
-        wait
-
-      args:
-        executable: /bin/bash
-
-
-    - name: Fetch tx-cannon logs
-      fetch:
-        src: "/tmp/tx-cannon.log"
-        dest: "./{{ inventory_hostname }}-tx-cannon.log"
-        flat: yes
-      ignore_errors: yes  # Optional, to proceed even if fetching logs fails

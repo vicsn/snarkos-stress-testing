@@ -1,25 +1,14 @@
-# main.tf
-variable "aws_region" {
-  default     = "us-west-1"
-}
-
-provider "aws" {
-  region = var.aws_region
-}
-
-variable "instance_type" {
-  description = "Instance type for client nodes"
-  default     = "m5.8xlarge"
-}
-
-variable "instance_count" {
-  description = "Number of client nodes"
-  default     = 25
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+  }
 }
 
 resource "aws_key_pair" "generated_key" {
-  key_name   = "devnet-key-${var.aws_region}"
-  public_key = file("${path.module}/devnet-key.pub")
+  key_name   = "devnet-key"
+  public_key = file("${path.module}/../../../devnet-key.pub")
 }
 
 resource "aws_instance" "snarkos_node" {
@@ -36,41 +25,9 @@ resource "aws_instance" "snarkos_node" {
   }
 
   tags = {
-    Name = "snarkos-node-${count.index}",
+    Name = "snarkos-node-${var.region_index * var.instance_count + count.index}"
     Role = "snarkos-node",
-    Dev = count.index
-  }
-}
-
-# Add variables for tx-cannon instance configuration
-variable "tx_cannon_instance_type" {
-  description = "Instance type for tx-cannon nodes"
-  default     = "m5.4xlarge"
-}
-
-variable "tx_cannon_instance_count" {
-  description = "Number of tx-cannon nodes"
-  default     = 1
-}
-
-# Resource block for tx-cannon instances
-resource "aws_instance" "tx_cannon_node" {
-  count         = var.tx_cannon_instance_count
-  ami           = data.aws_ami.latest_ubuntu.id
-  instance_type = var.tx_cannon_instance_type
-  key_name      = aws_key_pair.generated_key.key_name
-
-  security_groups = [aws_security_group.snarkos_sg.name]
-
-  ebs_block_device {
-    device_name = "/dev/sda1"
-    volume_size = 20  # Adjust the volume size if needed
-  }
-
-  tags = {
-    Name = "tx-cannon-node-${count.index}",
-    Role = "tx-cannon-node",
-    Dev = count.index
+    Dev  = var.region_index * var.instance_count + count.index
   }
 }
 
@@ -99,7 +56,7 @@ resource "aws_security_group" "snarkos_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-# This is for the prometheus process exporter
+  # This is for the prometheus process exporter
   ingress {
     from_port   = 9256
     to_port     = 9256
@@ -116,7 +73,7 @@ resource "aws_security_group" "snarkos_sg" {
 
   ingress {
     from_port   = 4130
-    to_port     = 4130
+    to_port     = 4230
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -201,77 +158,5 @@ resource "aws_elb" "snarkos_lb" {
 
   tags = {
     Name = "snarkos-lb"
-  }
-}
-
-output "instance_ips" {
-  value = aws_instance.snarkos_node.*.public_ip
-}
-
-output "snarkos_lb_dns_name" {
-  value = aws_elb.snarkos_lb.dns_name
-}
-
-
-resource "aws_security_group" "prometheus_sg" {
-  name_prefix = "prometheus-sg-"
-  description = "Security group for Prometheus server"
-  
-  # Allow incoming HTTP traffic on port 80
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow incoming HTTPS traffic on port 443
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow SSH traffic on port 22 (add this rule)
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow outgoing traffic to any destination
-  egress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  # Allow DNS queries
-  egress {
-    from_port   = 53
-    to_port     = 53
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-
-resource "aws_instance" "prometheus_server" {
-  ami           = data.aws_ami.latest_ubuntu.id
-  instance_type = var.instance_type
-  key_name      = aws_key_pair.generated_key.key_name
-  security_groups = [aws_security_group.prometheus_sg.name]
-
-  ebs_block_device {
-    device_name = "/dev/sda1"
-    volume_size = 80
-  }
-
-  tags = {
-    Name = "prometheus-server"
-    Role = "prometheus-server"
   }
 }

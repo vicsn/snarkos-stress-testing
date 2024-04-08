@@ -1,7 +1,7 @@
 global:
   scrape_interval: 15s
   scrape_timeout: 10s
-  evaluation_interval: 1m
+  evaluation_interval: 15s
   external_labels:
     origin_prometheus: {{ devnet_name }}
 remote_write:
@@ -46,4 +46,3 @@ scrape_configs:
                  {%- endfor %}]
       labels:
         group: "process_exporter"
-

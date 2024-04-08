@@ -1,0 +1,167 @@
+# Setting up and running tx-cannon on attacker-tx-cannon-node instances
+- name: Set up and run tx-cannon
+  hosts: "attacker_tx_cannon_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+  tasks:
+    - name: Install GitHub CLI
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Export tx-cannon GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+    - name: Clone or update tx-cannon
+      git:
+        repo: "https://{{ gh_token }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        dest: "/home/ubuntu/tx-cannon"
+        version: "mainnet"
+
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Download tx-cannon binary with GitHub CLI
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/tx-cannon
+        --pattern "tx-cannon*unknown-linux-gnu.zip"
+        --output "/usr/bin/tx-cannon.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Make tx-cannon executable
+      file:
+        path: "/usr/bin/tx-cannon"
+        mode: '0755'
+
+    - name: Deploy 300k constraint programs through half of the attacker nodes
+      shell: |
+        cd /home/ubuntu/tx-cannon &&
+        sudo python3 tests/random_deployments/generate_random_programs.py tests/random_deployments/300k_constraints cred 10000 &&
+        sudo /usr/bin/tx-cannon batch-deploy --manifest tests/random_deployments/300k_constraints/10000_cred.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 >> tx-cannon-task1.log 2>&1
+      args:
+        executable: /bin/bash
+      when: ansible_play_hosts.index(inventory_hostname) >= 0 and ansible_play_hosts.index(inventory_hostname) < (ansible_play_hosts|length / 2)
+      async: 360000  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Deploy 1M constraint programs through a quarter of the attacker nodes
+      shell: |
+        cd /home/ubuntu/tx-cannon &&
+        sudo python3 tests/random_deployments/generate_random_programs.py tests/random_deployments/1M_constraints prog 10000 &&
+        sudo /usr/bin/tx-cannon batch-deploy --manifest tests/random_deployments/1M_constraints/10000_prog.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 --concurrent-deployments 1 >> tx-cannon-task1.log 2>&1
+      args:
+        executable: /bin/bash
+      when: ansible_play_hosts.index(inventory_hostname) >= (ansible_play_hosts|length / 2) and ansible_play_hosts.index(inventory_hostname) < (3 * ansible_play_hosts|length / 4)
+      async: 360000  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - block:
+      - name: Install Python3.11
+        ansible.builtin.apt:
+          name: python3.11
+          state: present
+          update_cache: yes
+        become: yes  # Use sudo to install packages
+
+      - name: Download get-pip.py
+        ansible.builtin.get_url:
+          url: https://bootstrap.pypa.io/get-pip.py
+          dest: /tmp/get-pip.py
+        become: yes
+
+      - name: Install pip for Python3.11 using get-pip.py
+        ansible.builtin.shell:
+          cmd: python3.11 /tmp/get-pip.py
+        become: yes
+
+      - name: Upgrade pip for Python3.11
+        ansible.builtin.shell:
+          cmd: python3.11 -m pip install --upgrade pip
+        become: yes  # Use sudo to install packages
+
+      - name: Clone python-sdk
+        git:
+          repo: "https://{{ gh_token }}:x-oauth-basic@github.com/AleoHQ/python-sdk.git"
+          dest: "/home/ubuntu/python-sdk"
+          version: "mainnet"
+
+      - name: Install python3-venv package
+        ansible.builtin.apt:
+          name: python3.11-venv  # Adjust the version number as necessary
+          state: present
+          update_cache: yes
+        become: yes  # Use sudo to install packages
+
+      - name: Ensure build_ubuntu.sh is executable
+        ansible.builtin.file:
+          path: "/home/ubuntu/python-sdk/sdk/build_ubuntu.sh"
+          mode: '0755'
+
+      - name: Execute build_ubuntu.sh script
+        ansible.builtin.shell: "/home/ubuntu/python-sdk/sdk/build_ubuntu.sh"
+        args:
+          executable: /bin/bash
+
+      - name: Build Rust component with maturin
+        ansible.builtin.shell: |
+          source $HOME/.cargo/env && cd /home/ubuntu/python-sdk/sdk && python3.11 -m maturin build
+        args:
+          executable: /bin/bash
+
+      - name: Install generated wheel file
+        ansible.builtin.shell: |
+          source $HOME/.cargo/env && cd /home/ubuntu/python-sdk/sdk/target/wheels && python3.11 -m pip install aleo-0.2.0-cp37-abi3-manylinux_2_34_x86_64.whl
+        args:
+          executable: /bin/bash
+
+      - name: Deploy 1M+ underreporting constraint programs through a quarter of the attacker nodes
+        shell: |
+          cd /home/ubuntu/tx-cannon/tests/random_deployments/above_1M_constraints_underreport &&
+          sudo python3.11 process_tx.py {{ test_network_url }} --loop >> tx-cannon-task1.log 2>&1
+        args:
+          executable: /bin/bash
+        async: 360000  # Adjust based on expected duration of the tx-cannon run
+        poll: 0
+        when: ansible_play_hosts.index(inventory_hostname) >= (3 * ansible_play_hosts|length / 4) and ansible_play_hosts.index(inventory_hostname) < ansible_play_hosts|length
+
+    - name: Wait 5 minutes
+      pause:
+        minutes: 5
+
+    - name: Set log folder name
+      set_fact:
+        log_folder: "./tx-cannon-logs/{{ inventory_hostname }}"
+
+    - name: Create logs folder locally
+      file:
+        path: "{{ log_folder }}"
+        state: directory
+
+    - name: Fetch tx-cannon logs
+      fetch:
+        src: "/home/ubuntu/tx-cannon/tx-cannon-task1.log"
+        dest: "{{ log_folder }}/tx-cannon.log"
+        flat: yes
+      ignore_errors: yes  # Optional, to proceed even if fetching logs fails
