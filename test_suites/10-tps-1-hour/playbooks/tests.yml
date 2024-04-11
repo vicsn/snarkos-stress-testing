@@ -19,7 +19,7 @@
     - ansible.builtin.debug:
         msg: "The DNS name of snarkos-lb is {{ snarkos_lb_dns }}"
 
-    - name: Wait for the network to be healthly
+    - name: Wait for the network to be healthy
       uri:
         url: "http://{{ snarkos_lb_dns }}:3030/mainnet/latest/height"
         method: GET

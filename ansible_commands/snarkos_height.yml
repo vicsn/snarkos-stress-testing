@@ -5,7 +5,7 @@
   remote_user: ubuntu
   tasks:
     - name: Get snarkos height
-      command: curl -s http://localhost:3033/testnet3/latest/height
+      command: curl -s http://localhost:3030/mainnet/latest/height
       register: snarkos_status
       ignore_errors: yes
       changed_when: false

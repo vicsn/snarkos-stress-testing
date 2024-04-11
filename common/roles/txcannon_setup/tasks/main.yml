@@ -7,7 +7,7 @@
 
 - name: Download tx-cannon binary with GitHub CLI # noqa: no-changed-when
   shell: >
-    GITHUB_TOKEN="{{ github_token }}" gh release download {{ txcannon_binary_tag }}
+    GITHUB_TOKEN="{{ github_token }}" gh release download {{ tx_cannon_binary_tag }}
     --repo aleoHQ/tx-cannon
     --pattern "tx-cannon*unknown-linux-gnu.zip"
     --output "/usr/bin/tx-cannon.zip"
