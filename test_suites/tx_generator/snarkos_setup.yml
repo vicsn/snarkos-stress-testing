@@ -22,8 +22,7 @@
   remote_user: ubuntu
   vars:
     verbosity: "1"
-    num_validators: 25
-    snarkos_commit: "e9533b6"
+    num_validators: 10
   tasks:
     - name: Gather facts from all nodes
       setup:
@@ -56,7 +55,7 @@
 
     - name: Download snarkOS binary with GitHub CLI 
       shell: >
-        TAG=mainnet-{{ snarkos_commit }}
+        TAG=mainnet-staging-latest
 
         apt-get install -y unzip
 
@@ -86,7 +85,7 @@
 
     - name: Download tx-cannon binary with GitHub CLI 
       shell: >
-        TAG=mainnet-7a4bc10
+        TAG=mainnet-latest
 
         apt-get install -y unzip
       
@@ -132,6 +131,6 @@
     - name: Fetch pregenerated transactions
       fetch:
         src: "/home/ubuntu/tx-cannon/program_deployments/all_deployments.txt"
-        dest: "./{{ node_id }}-{{ snarkos_commit }}-{{ num_validators }}val-deploys.txt"
+        dest: "./{{ node_id }}-e347f8636-{{ num_validators }}val-deploys.txt"
         flat: yes
       

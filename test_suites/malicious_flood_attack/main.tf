@@ -22,7 +22,7 @@ variable "standard_node_instance_type" {
 
 variable "standard_node_count" {
   description = "Number of standard snarkOS nodes"
-  default     = 20
+  default     = 7
 }
 
 variable "malicious_node_instance_type" {
@@ -32,7 +32,7 @@ variable "malicious_node_instance_type" {
 
 variable "malicious_node_count" {
   description = "Number of malicious snarkOS nodes"
-  default     = 5
+  default     = 3
 }
 
 variable "default_instance_type" {
