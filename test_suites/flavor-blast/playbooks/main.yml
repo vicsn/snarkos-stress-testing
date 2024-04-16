@@ -1,0 +1,107 @@
+- name: Wait for SSH to become available
+  hosts: all
+  remote_user: ubuntu
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH to become ready
+      wait_for_connection:
+
+# ------------------------------------------------
+# Dependencies
+
+# Commented out since using stress test base AMI
+#- name: Dependencies
+#  import_playbook: ../../../common/ansible_playbooks/dependencies.yml
+#  tags: deps
+
+# ------------------------------------------------
+# snarkOS
+
+- name: Set up and start snarkOS network
+  hosts: snarkos_node
+  become: true
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+  pre_tasks:
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Set first node IP address
+      set_fact:
+        first_node_ip: "{{ hostvars[groups['snarkos_node'][0]]['public_ip_address'] }}"
+      when: groups['snarkos_node'] is defined and groups['snarkos_node'] | length > 0
+      run_once: true
+
+    - name: Determine the number of instances
+      set_fact:
+        num_instances: "{{ groups['snarkos_node'] | length }}"
+      run_once: true
+
+    - name: Set node_id based on instance tag
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+  roles:
+    - snarkos_setup_build_from_git
+  tags: snarkos
+
+# ------------------------------------------------
+# snarkOS Process Exporter
+
+- name: Install and Configure Process Exporter
+  hosts: snarkos_node
+  become: true
+  remote_user: ubuntu
+  roles:
+    - process_exporter_setup
+  tags: process_exporter
+
+# ------------------------------------------------
+# Logstash
+
+- name: Install and Configure Logstash
+  hosts: snarkos_node
+  become: true
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+  pre_tasks:
+    - name: Get current commit hash
+      shell: git rev-parse HEAD
+      args:
+        chdir: "/home/ubuntu/snarkOS"
+        executable: /bin/bash
+      register: current_commit_hash
+
+    - name: Print current commit hash
+      debug:
+        msg: "The current commit hash is {{ current_commit_hash.stdout }}"
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ current_commit_hash.stdout }}"
+
+    - name: Set host_public_ip
+      set_fact:
+        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+
+    - name: Set node_id based on instance tag
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+  roles:
+    - logstash_setup
+  tags: logstash
+
+# ------------------------------------------------
+# Prometheus for Grafana metrics
+
+- name: Install and Configure Prometheus
+  hosts: prometheus_server
+  become: true
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+  gather_facts: true
+  roles:
+    - prometheus_setup
+  tags: prometheus

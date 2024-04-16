@@ -5,7 +5,7 @@ variable "instance_type" {
 
 variable "instance_count" {
   description = "Number of snarkOS nodes"
-  default     = 25
+  default     = 10
 }
 
 variable "tx_cannon_instance_type" {

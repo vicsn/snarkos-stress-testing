@@ -3,7 +3,7 @@
   git:
     repo: 'https://github.com/AleoHQ/snarkOS.git'
     dest: "/home/ubuntu/snarkOS"
-    version: "mainnet-staging"
+    version: "{{ snarkos_git_hash }}"
     clone: true
     update: true
 
