@@ -33,7 +33,7 @@ resource "aws_instance" "snarkos_node" {
 
   ebs_block_device {
     device_name = "/dev/sda1"
-    volume_size = 80
+    volume_size = 1000
   }
 
   tags = {
