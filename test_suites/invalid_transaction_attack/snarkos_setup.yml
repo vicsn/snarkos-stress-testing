@@ -1,0 +1,625 @@
+# snarkos_setup.yml
+- name: Wait for SSH to become available
+  hosts: "snarkos_node_*"
+  remote_user: ubuntu
+  gather_facts: no
+  tasks:
+    - name: Wait for SSH to become ready
+      wait_for:
+        port: 22
+        host: "{{ inventory_hostname }}"
+        timeout: 300
+        delay: 10
+        state: started
+
+
+- name: Get all prerequisites for snarkOS
+  hosts: "snarkos_node_*"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Install GitHub CLI
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Export GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Combine the standard and malicious groups
+      set_fact:
+        all_nodes: "{{ groups['snarkos_node_standard'] + groups['snarkos_node_malicious'] }}"
+
+    - name: Set first node IP address
+      set_fact:
+        first_node_ip: "{{ hostvars[all_nodes[0]]['public_ip_address'] }}"
+      when: all_nodes is defined and all_nodes | length > 0
+      run_once: true
+
+    - name: Determine the number of instances
+      set_fact:
+        num_instances: "{{ all_nodes | length }}"
+      run_once: true
+
+    - name: Set node_id based on instance tag
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+
+    - name: Set role based on instance tag
+      set_fact:
+        role: "{{ tags['Role'] }}"
+
+
+- name: Print node information
+  hosts: "snarkos_node_*"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+      - name: Print node information
+        debug:
+          msg: "Node {{ node_id }} is a {{ role }} node with IP {{ ansible_host }}"
+
+
+- name: Set up the standard snarkOS nodes
+  hosts: "snarkos_node_standard"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+  tasks:
+    - name: Download snarkOS binary with GitHub CLI
+      shell: >
+        TAG=mainnet-staging-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/snarkOS-staging
+        --pattern "snarkos*unknown-linux-gnu.zip"
+        --output "/usr/bin/snarkos.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/snarkos.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Slurp the commit hash
+      ansible.builtin.slurp:
+        src: '/usr/bin/SNARKOS_COMMIT_HASH'
+      register: file_content_encoded
+
+    - name: Print the commit hash
+      debug:
+        var: file_content_encoded.content | b64decode | trim
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
+
+    - name: Make snarkos executable
+      file:
+        path: "/usr/bin/snarkos"
+        mode: '0755'
+
+    - name: Set environment variables for snarkos service
+      set_fact:
+        ansible_env:
+          FIRST_NODE_IP: "{{ first_node_ip }}"
+          VERBOSITY: "{{ verbosity }}"
+          NODE_ID: "{{ node_id }}"
+          NUM_INSTANCES: "{{ num_instances }}"
+      tags: always
+
+    - name: Deploy the snarkos systemd service file
+      template:
+        src: snarkos-node-standard.service
+        dest: /etc/systemd/system/snarkos.service
+      become: yes
+
+
+- name: Set up the malicious snarkOS nodes
+  hosts: "snarkos_node_malicious"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+  tasks:
+    - name: Download snarkOS binary with GitHub CLI
+      shell: >
+        TAG=malice-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/snarkOS-staging
+        --pattern "*unknown-linux-gnu.zip"
+        --output "/usr/bin/snarkos.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/snarkos.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Slurp the commit hash
+      ansible.builtin.slurp:
+        src: '/usr/bin/SNARKOS_COMMIT_HASH'
+      register: file_content_encoded
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
+
+    - name: Print the commit hash
+      debug:
+        var: file_content_encoded.content | b64decode | trim
+
+    - name: Make snarkos executable
+      file:
+        path: "/usr/bin/snarkos"
+        mode: '0755'
+    - name: Set environment variables for snarkos service
+      set_fact:
+        ansible_env:
+          FIRST_NODE_IP: "{{ first_node_ip }}"
+          VERBOSITY: "{{ verbosity }}"
+          NODE_ID: "{{ node_id }}"
+          NUM_INSTANCES: "{{ num_instances }}"
+      tags: always
+
+    - name: Deploy the snarkos systemd service file
+      template:
+        src: snarkos-node-malicious.service
+        dest: /etc/systemd/system/snarkos.service
+      become: yes
+
+
+# logstash
+- name: Install and Configure Logstash
+  hosts: "snarkos_node_*"
+  become: yes
+  remote_user: ubuntu
+
+  vars:
+    cloud_id: "{{ lookup('env', 'ELASTIC_CLOUD_ID') }}"
+    api_key: "{{ lookup('env', 'ELASTIC_API_KEY') }}"
+    devnet_name: "{{ lookup('env', 'DEVNET_NAME') }}"
+
+  tasks:
+    - name: Set AWS Region Fact
+      set_fact:
+        aws_region: "{{ ansible_host.split('.')[1] }}"
+      when: ansible_host is defined
+
+    - name: Add Elastic GPG key
+      ansible.builtin.shell:
+        cmd: "wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes --dearmor -o /usr/share/keyrings/elastic-keyring.gpg"
+
+    - name: Add Elastic APT repository
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/elastic-8.x.list
+        line: "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
+        create: yes
+        state: present
+
+    - name: Update and install Logstash
+      ansible.builtin.apt:
+        update_cache: yes
+        name: logstash
+        state: latest
+
+    - name: Copy Logstash Configuration Template
+      ansible.builtin.template:
+        src: logstash.conf
+        dest: /etc/logstash/conf.d/logstash.conf
+      vars:
+        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+        commit_hash: "{{ commit_hash }}"
+        role: "{{ role }}"
+        node_id: "{{ node_id }}"
+
+    - name: Start Logstash Service
+      ansible.builtin.systemd:
+        name: logstash
+        state: started
+        enabled: yes
+
+
+# Metrics on grafana
+- name: Install prometheus and enable remote forwarding to Grafana cloud
+  hosts: prometheus_server
+  become: yes
+  gather_facts: true
+  vars:
+    ansible_user: ubuntu
+    grafana_cloud_api_key: "{{ lookup('env', 'GRAFANA_CLOUD_API_KEY') }}"
+    devnet_name: "{{ lookup('env', 'DEVNET_NAME') }}"
+    all_hosts: "{{ groups['snarkos_node_standard'] + groups['snarkos_node_malicious'] }}"
+
+  tasks:
+    - name: Print all hosts
+      debug:
+        var: all_hosts
+    - name: Copy docker-compose.yml
+      copy:
+        src: docker-compose.yml
+        dest: /home/ubuntu/docker-compose.yml
+        owner: ubuntu
+        group: ubuntu
+      become_user: ubuntu
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: "/usr/local/bin/docker-compose"
+        mode: 'u+x,g+x'
+
+    - name: Create YAML scrape target file of all nodes
+      ansible.builtin.template:
+        src: prometheus.yml
+        dest: /home/ubuntu/prometheus.yml
+
+    - name: Install unzip
+      ansible.builtin.package:
+        name: unzip
+        state: present
+
+    - name: Download, unzip, and set execute permissions on Grafana Agent
+      ansible.builtin.shell: |
+        curl -O -L "https://github.com/grafana/agent/releases/latest/download/grafana-agent-linux-amd64.zip" &&
+        unzip "grafana-agent-linux-amd64.zip" &&
+        chmod a+x grafana-agent-linux-amd64
+      args:
+        chdir: /home/ubuntu
+        creates: grafana-agent-linux-amd64
+
+    - name: Run docker-compose up
+      command: docker-compose up -d
+      args:
+        chdir: /home/ubuntu/
+
+
+- name: Run all snarkOS nodes
+  hosts: "snarkos_node_*"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Reload systemd to read new snarkos service file
+      systemd:
+        daemon_reload: yes
+      become: yes
+
+    - name: Restart snarkos service
+      systemd:
+        name: snarkos
+        state: restarted
+      become: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    - name: Ensure Docker Process Exporter for snarkos is running
+      community.docker.docker_container:
+        name: process-exporter-snarkos
+        image: ncabatoff/process-exporter
+        state: started
+        recreate: false
+        pull: yes
+        published_ports:
+          - "9256:9256"
+        volumes:
+          - "/proc:/host/proc"
+        command: "--procfs /host/proc -procnames snarkos"
+        privileged: yes
+        detach: yes
+        cleanup: true
+
+
+- name: Set up and run tx-cannon
+  hosts: "tx_cannon_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+  tasks:
+    - name: Install GitHub CLI
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Export tx-cannon GitHub token for gh CLI
+      ansible.builtin.set_fact:
+        gh_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+    - name: Clone or update tx-cannon
+      git:
+        repo: "https://{{ gh_token }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        dest: "/home/ubuntu/tx-cannon"
+        version: "mainnet"
+
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Download tx-cannon binary with GitHub CLI
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
+        --repo aleoHQ/tx-cannon
+        --pattern "tx-cannon*unknown-linux-gnu.zip"
+        --output "/usr/bin/tx-cannon.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ gh_token }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Make tx-cannon executable
+      file:
+        path: "/usr/bin/tx-cannon"
+        mode: '0755'
+
+- name: Run the tx-cannon network driver
+  hosts: "tx_cannon_node[0]"
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon with network driver" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run tx-cannon network driver
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon batch-execute --test tests/network_driver/network_driver.toml -e http://{{ test_network_url }}:3030 -r 9000001  >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 36000  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Run the constraint underreporting attack
+  hosts: "tx_cannon_node[2]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_node_malicious'][0]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in constraint underreporting mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the constraint underreporting attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in constraint underreporting mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the constraint underreporting attack targeting the honest node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Run the duplicate-transitions attack
+  hosts: "tx_cannon_node[3]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_node_malicious'][0]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in duplicate-transitions mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the duplicate-transitions attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in duplicate-transitions mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the duplicate-transitions attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Run the redeployment attack
+  hosts: "tx_cannon_node[4]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_node_malicious'][0]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in redeploy mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the redeploy attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in redeploy mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the redeploy attack targeting the honest node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Run the double spend attack
+  hosts: "tx_cannon_node[1]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_node_malicious'][0]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in double-spend mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the double spend attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in double-spend mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the double spend attack targeting the honest node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Pause execution
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Sleep for 10 minutes
+      pause:
+        minutes: 10
+
+- name: Fetch the tx cannon logs to the local machine
+  hosts: "tx_cannon_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+  tasks:
+    - name: Fetch tx-cannon logs targeting the malicious node
+      fetch:
+        src: "/home/ubuntu/tx-cannon/tx-cannon.log"
+        dest: "./{{ inventory_hostname }}-tx-cannon_malicious.log"
+        flat: yes
+      ignore_errors: yes  # Optional, to proceed even if fetching logs fails
+
+    - name: Fetch tx-cannon logs targeting the honest node
+      fetch:
+        src: "/home/ubuntu/tx-cannon/tx-cannon2.log"
+        dest: "./{{ inventory_hostname }}-tx-cannon_honest.log"
+        flat: yes
+      ignore_errors: yes  # Optional, to proceed even if fetching logs fails
