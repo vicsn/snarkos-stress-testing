@@ -2,7 +2,7 @@
 
 # General AWS configs
 variable "aws_region" {
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 provider "aws" {
@@ -22,7 +22,7 @@ variable "standard_node_instance_type" {
 
 variable "standard_node_count" {
   description = "Number of standard snarkOS nodes"
-  default     = 17
+  default     = 7
 }
 
 variable "malicious_node_instance_type" {
@@ -32,7 +32,7 @@ variable "malicious_node_instance_type" {
 
 variable "malicious_node_count" {
   description = "Number of malicious snarkOS nodes"
-  default     = 8
+  default     = 3
 }
 
 variable "default_instance_type" {

@@ -137,7 +137,7 @@
     - name: Download snarkOS binary with GitHub CLI
       shell: >
         # This should a tag built from the latest malice branch on snarkos-staging that has the ability to perform malicious peer flooding
-        TAG=test-malicious-peer-response-flood
+        TAG=malice-latest
 
         apt-get install -y unzip
 
