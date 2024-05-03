@@ -1,0 +1,53 @@
+- name: Print validator to stop
+  debug:
+    msg: "Validator to stop: {{ node }}"
+
+- name: Print previous node
+  debug:
+    msg: "Previous node: {{ comparison_node }}"
+
+- name: Stop snarkOS service on selected validator
+  delegate_to: "{{ node }}"
+  become: true
+  remote_user: ubuntu
+  ansible.builtin.systemd:
+    name: snarkos
+    state: stopped
+
+- name: Run snarkos clean 
+  delegate_to: "{{ node }}"
+  become: true
+  remote_user: ubuntu
+  ansible.builtin.shell:
+    cmd: "/usr/bin/snarkos clean"
+
+- name: Fully wipe data on validator
+  delegate_to: "{{ node }}"
+  become: true
+  remote_user: ubuntu
+  ansible.builtin.shell:
+    cmd: "rm -rf /home/ubuntu/.ledger-*"
+
+- name: Pause for 60 seconds
+  pause:
+    seconds: 60
+
+- name: Restart snarkOS service on validator 
+  delegate_to: "{{ node }}"
+  become: true
+  remote_user: ubuntu
+  ansible.builtin.systemd:
+    name: snarkos
+    state: restarted
+
+- name: Include tasks to retry. Configure max attempts and retry delay as needed.
+  include_tasks: check_heights.yml
+  vars:
+    node_to_check: "{{ node }}"
+    node_to_compare: "{{ comparison_node }}"
+    retry_delay: 10
+
+- name: Continue if synchronization is successful
+  debug:
+    msg: "Synchronization successful for node: {{ node }}"
+  when: sync_successful | default(false)
