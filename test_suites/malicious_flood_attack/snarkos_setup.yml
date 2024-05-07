@@ -183,11 +183,8 @@
 
     - name: Copy pregenerated transactions file
       ansible.builtin.copy:
-        src: "pregenerated_txs/{{ tx_id }}-e347f8636-10val-deploys.txt"
+        src: "pregenerated_txs/deployments.txt"
         dest: "/tmp/pregenerated_transactions.txt"
-      vars:
-        # the pregenerated transactions files start from index `0`, whereas the malicious node_ids start from index `(snarkos_node_standard | length)`
-        tx_id: "{{ (node_id | int) - (groups['snarkos_node_standard'] | length) }}"
       become: yes
 
 # logstash
