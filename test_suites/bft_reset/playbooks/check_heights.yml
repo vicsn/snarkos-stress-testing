@@ -5,10 +5,6 @@
       attempt_number: 0
     when: attempt_number is undefined
 
-  - name: wait 1 minute
-    pause:
-      seconds: 60
-
   - name: Print node 
     debug:
       msg: "Node: {{ node_to_check }}"
@@ -16,6 +12,10 @@
   - name: Print node to compare
     debug:
       msg: "Node to compare: {{ node_to_compare }}"
+
+  - name: wait 2 minutes
+    pause:
+      seconds: 120
 
   - name: Fetch the block from the node
     delegate_to: "{{ node_to_check }}"
@@ -25,7 +25,7 @@
       method: GET
       return_content: true
     register: node_current_block
-    retries: 5 
+    retries: 10 
     delay: 2 
     until: node_current_block.status == 200
 

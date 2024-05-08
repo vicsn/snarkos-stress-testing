@@ -21,6 +21,13 @@
   ansible.builtin.shell:
     cmd: "/usr/bin/snarkos clean"
 
+- name: Clear current proposal cache
+  delegate_to: "{{ node }}"
+  become: true
+  remote_user: ubuntu
+  ansible.builtin.shell:
+    cmd: "rm -f /home/ubuntu/.current-proposal-cache-0-*"
+
 - name: Fully wipe data on validator
   delegate_to: "{{ node }}"
   become: true
