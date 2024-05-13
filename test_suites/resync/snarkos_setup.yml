@@ -302,6 +302,7 @@
       shell: |
         cd /home/ubuntu/tx-cannon
         /usr/bin/tx-cannon batch-deploy --manifest tests/normal_network_traffic/normal_network_traffic.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
+        /usr/bin/tx-cannon batch-deploy --manifest tests/normal_network_traffic/double_color_ball.txt -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -e http://{{ test_network_url }}:3030 >> tx-cannon.log 2>&1
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
