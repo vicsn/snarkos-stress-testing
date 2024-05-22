@@ -19,8 +19,8 @@
 
 - name: Deploy the snarkos systemd service file
   template:
-    src: snarkos.service
-    dest: /etc/systemd/system/snarkos.service
+    src: snarkos-client.service
+    dest: /etc/systemd/system/snarkos-client.service
     mode: '0644'
   become: true
 
