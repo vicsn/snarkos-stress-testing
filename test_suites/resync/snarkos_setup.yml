@@ -166,7 +166,7 @@
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
-        --repo aleoHQ/snarkOS-staging
+        --repo ProvableHQ/snarkOS-staging
         --pattern "snarkos*unknown-linux-gnu.zip"
         --output "/usr/bin/snarkos.zip"
         --skip-existing
@@ -236,7 +236,7 @@
   tasks:
     - name: Clone or update tx-cannon
       git:
-        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/ProvableHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
 
@@ -266,7 +266,7 @@
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
-        --repo aleoHQ/tx-cannon
+        --repo ProvableHQ/tx-cannon
         --pattern "tx-cannon*unknown-linux-gnu.zip"
         --output "/usr/bin/tx-cannon.zip"
         --skip-existing

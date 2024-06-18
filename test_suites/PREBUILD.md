@@ -17,7 +17,7 @@ pre-built binaries.
 
 ### Prebuilt SnarkOS Binaries
 The SnarkOS binaries are built using `github actions` on the
-`AleoHQ/snarkOS-staging` repository.
+`ProvableHQ/snarkOS-staging` repository.
 
 The binaries can be installed by adding the following ansible steps to the
 `snarkos_setup.yml` file in the `Setup snarkOS nodes` task. This assumes your
@@ -31,7 +31,7 @@ The binaries can be installed by adding the following ansible steps to the
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
-        --repo aleoHQ/snarkOS-staging
+        --repo ProvableHQ/snarkOS-staging
         --pattern "snarkos*unknown-linux-gnu.zip"
         --output "/usr/bin/snarkos.zip"
         --skip-existing
@@ -53,7 +53,7 @@ These binaries are maintained to the latest mainnet changes so no further action
 
 ### Prebuilt Tx-Cannon Binaries
 The tx-cannon binaries are also built using `github actions` in
-`AleoHQ/tx-cannon` repository.
+`ProvableHQ/tx-cannon` repository.
 
 The tx-cannon binaries can be installed by adding the following ansible steps to
 the `snarkos_setup.yml` file in the `Set up and run tx-cannon` ansible task.
@@ -67,7 +67,7 @@ This assumes your `gh_token` is set and `gh` installed.
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
-        --repo aleoHQ/tx-cannon
+        --repo ProvableHQ/tx-cannon
         --pattern "tx-cannon*unknown-linux-gnu.zip"
         --output "/usr/bin/tx-cannon.zip"
         --skip-existing
@@ -91,7 +91,7 @@ If you need to build the binaries yourself, you can use the following steps to b
 ### Custom SnarkOS Binaries
 
 The steps:
-1. **Make a branch with your desired changes in the [snarkOS-staging](https://github.com/AleoHQ/snarkOS-staging)** branch
+1. **Make a branch with your desired changes in the [snarkOS-staging](https://github.com/ProvableHQ/snarkOS-staging)** branch
 2. **On the commit you want to build a binary from run:**
 ```bash
 git tag <your tag> && git push origin <your tag>
@@ -103,7 +103,7 @@ This will trigger a build on the `snarkOS-staging` branch
 Follow the steps below to build the tx-cannon binaries on github.
 
 The steps:
-1. **Make a branch with your desired changes in the [tx-cannon repo](https://github.com/AleoHQ/tx-cannon)**
+1. **Make a branch with your desired changes in the [tx-cannon repo](https://github.com/ProvableHQ/tx-cannon)**
 2. **On the commit you want to build a binary from run:**
 ```bash
 git tag <your tag> && git push origin <your tag>

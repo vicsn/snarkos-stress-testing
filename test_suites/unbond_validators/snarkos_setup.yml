@@ -64,7 +64,7 @@
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
-        --repo aleoHQ/snarkOS-staging
+        --repo ProvableHQ/snarkOS-staging
         --pattern "snarkos*unknown-linux-gnu.zip"
         --output "/usr/bin/snarkos.zip"
         --skip-existing
@@ -268,7 +268,7 @@
 
     - name: Clone or update tx-cannon
       git:
-        repo: "https://{{ gh_token }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        repo: "https://{{ gh_token }}:x-oauth-basic@github.com/ProvableHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
 
@@ -282,7 +282,7 @@
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
-        --repo aleoHQ/tx-cannon
+        --repo ProvableHQ/tx-cannon
         --pattern "tx-cannon*unknown-linux-gnu.zip"
         --output "/usr/bin/tx-cannon.zip"
         --skip-existing
@@ -300,7 +300,7 @@
         mode: '0755'
 
     # The network driver seems to make the tx-cannon instance respond better to the deployment.
-    # (see https://github.com/AleoHQ/stress-observability/blob/main/test_suites/finalize_scope_attacks/finalize_hash_10_validators/snarkos_setup.yml#L232-L248 )
+    # (see https://github.com/ProvableHQ/stress-observability/blob/main/test_suites/finalize_scope_attacks/finalize_hash_10_validators/snarkos_setup.yml#L232-L248 )
     - name: Timestamp before tx-cannon network driver
       debug:
         msg: "{{ now() }}"
@@ -340,7 +340,7 @@
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
-        --repo aleoHQ/snarkOS-staging
+        --repo ProvableHQ/snarkOS-staging
         --pattern "snarkos*unknown-linux-gnu.zip"
         --output "/usr/bin/snarkos.zip"
         --skip-existing

@@ -63,7 +63,7 @@
     - name: Download snarkOS binary with GitHub CLI
       shell: >
         GITHUB_TOKEN="{{ gh_token }}" gh release download "mainnet-staging-latest"
-        --repo AleoHQ/snarkOS-staging
+        --repo ProvableHQ/snarkOS-staging
         --pattern "snarkos*"
         --dir "/usr/bin"
         --skip-existing
@@ -260,7 +260,7 @@
   tasks:
     - name: Clone or update tx-cannon
       git:
-        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/ProvableHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
 
@@ -288,7 +288,7 @@
         apt-get update &&
         apt-get install -y unzip &&
         GITHUB_TOKEN="{{ lookup('env', 'GITHUB_TOKEN') }}" gh release download "mainnet-latest"
-        --repo aleoHQ/tx-cannon
+        --repo ProvableHQ/tx-cannon
         --pattern "tx-cannon*unknown-linux-gnu.zip"
         --output "/usr/bin/tx-cannon.zip"
         --skip-existing &&

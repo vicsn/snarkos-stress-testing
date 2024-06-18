@@ -41,7 +41,7 @@
 
     - name: Clone or update snarkOS
       git:
-        repo: 'https://github.com/AleoHQ/snarkOS.git'
+        repo: 'https://github.com/AleoNet/snarkOS.git'
         dest: "/home/ubuntu/snarkOS"
         version: "{{ branch }}"
         clone: yes

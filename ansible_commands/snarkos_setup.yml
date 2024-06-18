@@ -58,7 +58,7 @@
     - name: Download snarkOS binary with GitHub CLI
       shell: >
         GITHUB_TOKEN="{{ gh_token }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
+        --repo ProvableHQ/stress-observability
         --pattern "snarkos*"
         --dir "/usr/bin"
         --skip-existing

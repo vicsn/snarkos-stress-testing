@@ -2,7 +2,7 @@
 - name: Download snarkOS binary with GitHub CLI # noqa: no-changed-when
   shell: >
     GITHUB_TOKEN="{{ github_token }}" gh release download {{ snarkos_binary_tag }}
-    --repo aleoHQ/snarkOS-staging
+    --repo ProvableHQ/snarkOS-staging
     --pattern "snarkos*unknown-linux-gnu.zip"
     --output "/usr/bin/snarkos.zip"
     --clobber

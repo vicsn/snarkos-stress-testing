@@ -57,7 +57,7 @@
     - name: Download snarkOS binary with GitHub CLI
       shell: >
         GITHUB_TOKEN="{{ gh_token }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
+        --repo ProvableHQ/stress-observability
         --pattern "snarkos*"
         --dir "/usr/bin"
         --skip-existing
@@ -252,7 +252,7 @@
   tasks:
     - name: Clone or update tx-cannon
       git:
-        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+        repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/ProvableHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
 
@@ -278,7 +278,7 @@
     - name: Download tx-cannon binary with GitHub CLI
       shell: >
         GITHUB_TOKEN="{{ lookup('env', 'GITHUB_TOKEN') }}" gh release download "{{ binaries_tag }}"
-        --repo aleoHQ/stress-observability
+        --repo ProvableHQ/stress-observability
         --pattern "tx-cannon*"
         --dir "/usr/bin"
         --skip-existing

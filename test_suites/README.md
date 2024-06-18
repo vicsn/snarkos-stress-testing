@@ -70,7 +70,7 @@ Your test likely requires some custom setup steps. You can add these steps to th
 
 Prior to running a transaction cannon test, a tx-cannon test needs to be created:
 
-[A full guide on creating a tx-cannon test can be found here](https://github.com/AleoHQ/tx-cannon/blob/feat/save-deployments-to-file/CREATING_NEW_TESTS.md)
+[A full guide on creating a tx-cannon test can be found here](https://github.com/ProvableHQ/tx-cannon/blob/feat/save-deployments-to-file/CREATING_NEW_TESTS.md)
 
 ## Running the tests
 

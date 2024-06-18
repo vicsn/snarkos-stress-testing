@@ -216,7 +216,7 @@
 #   tasks:
 #     - name: Clone or update tx-cannon
 #       git:
-#         repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/AleoHQ/tx-cannon.git"
+#         repo: "https://{{ lookup('env', 'GITHUB_TOKEN') }}:x-oauth-basic@github.com/ProvableHQ/tx-cannon.git"
 #         dest: "/home/ubuntu/tx-cannon"
 #         version: "mainnet"
 
@@ -236,7 +236,7 @@
 
 
 #     # The network driver seems to make the tx-cannon instance respond better to the deployment.
-#     # (see https://github.com/AleoHQ/stress-observability/blob/main/test_suites/finalize_scope_attacks/finalize_hash_10_validators/snarkos_setup.yml#L232-L248 )
+#     # (see https://github.com/ProvableHQ/stress-observability/blob/main/test_suites/finalize_scope_attacks/finalize_hash_10_validators/snarkos_setup.yml#L232-L248 )
 #     - name: Timestamp before tx-cannon network driver
 #       debug:
 #         msg: "{{ now() }}"
