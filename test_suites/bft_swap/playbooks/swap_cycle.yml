@@ -1,0 +1,109 @@
+- name: Process each validator in the current group
+  debug:
+    msg: "Processing validator {{ node }}"
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
+
+- name: Print source node
+  debug:
+    msg: "Source node is {{ source_node }}"
+
+- name: Stop the validators in the current group
+  ansible.builtin.systemd:
+    name: snarkos
+    state: stopped
+  delegate_to: "{{ node }}"
+  become: true
+  remote_user: ubuntu
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
+
+- name: Pause for 60 seconds
+  pause:
+    seconds: 60
+
+- name: Remove existing .ledger-0-* directories on each validator
+  ansible.builtin.shell:
+    cmd: "rm -rf /home/ubuntu/.ledger-0-*"
+  delegate_to: "{{ node }}"
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
+  become: true
+  remote_user: ubuntu
+
+- name: Adjust permissions for .ledger-0-* directories 
+  ansible.builtin.file:
+    path: "/home/ubuntu/.ledger-0-*"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+    recurse: yes
+  delegate_to: "{{ source_node }}"
+  become: true
+  remote_user: ubuntu
+
+- name: Archive .ledger-0-* directories on source node
+  ansible.builtin.shell:
+    cmd: "tar -czf /tmp/ledger_backup.tar.gz /home/ubuntu/.ledger-0-*"
+  delegate_to: "{{ source_node }}"
+  remote_user: ubuntu
+
+- name: Fetch ledger backup from source node
+  ansible.builtin.fetch:
+    src: "/tmp/ledger_backup.tar.gz"
+    dest: "./ledger_backups/ledger_backup.tar.gz"
+    flat: yes
+  delegate_to: "{{ source_node }}"
+  remote_user: ubuntu
+
+- name: Copy ledger backup to each validator in the current group
+  ansible.builtin.copy:
+    src: "./ledger_backups/ledger_backup.tar.gz"
+    dest: "/tmp/ledger_backup.tar.gz"
+  delegate_to: "{{ node }}"
+  remote_user: ubuntu
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
+
+- name: Extract ledger tarball on each validator in the current group
+  ansible.builtin.shell:
+    cmd: "tar -xzf /tmp/ledger_backup.tar.gz -C /home/ubuntu/"
+  delegate_to: "{{ node }}"
+  remote_user: ubuntu
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
+
+- name: Pause for 60 seconds
+  pause:
+    seconds: 60
+
+- name: Restart the validators in the current group
+  ansible.builtin.systemd:
+    name: snarkos
+    state: restarted
+  delegate_to: "{{ node }}"
+  become: true
+  remote_user: ubuntu
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
+
+- name: Include tasks to retry. Configure max attempts and retry delay as needed.
+  include_tasks: check_heights.yml
+  vars:
+    node_to_check: "{{ node }}"
+    node_to_compare: "{{ source_node }}"
+    retry_delay: 10
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
+
+- name: Continue if synchronization is successful
+  debug:
+    msg: "Synchronization successful for node: {{ node }}"
+  when: sync_successful | default(false)
