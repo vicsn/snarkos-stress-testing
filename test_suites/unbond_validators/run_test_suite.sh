@@ -66,8 +66,9 @@ date
 echo
 ansible-playbook -i dynamic_inventory.aws_ec2.yml snarkos_setup.yml --extra-vars "test_network_url=${LB_URL}" 
 
-echo
-echo "All done running ansible-playbook as of"
-date
-echo
+# Optionally, wait for user input before destroying the infrastructure
+read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
+# Destroy the infrastructure
+echo "Destroying infrastructure..."
+terraform destroy -auto-approve 

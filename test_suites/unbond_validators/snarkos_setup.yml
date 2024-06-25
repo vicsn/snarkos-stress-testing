@@ -335,7 +335,7 @@
 
     - name: Download snarkOS binary with GitHub CLI 
       ansible.builtin.shell: >
-        TAG=mainnet-latest
+        TAG=mainnet-staging-latest
 
         apt-get install -y unzip
 
@@ -375,23 +375,30 @@
         msg: "{{ now() }}"
 
     - name: Try running tx-cannon unbonding 30% nodes
-      ansible.builtin.shell: 
-        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo unbond_public {{ committee_data.members[item[1]][0]}}u64 --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/mainnet/transaction/broadcast'"
+      ansible.builtin.shell:
+        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo unbond_public {{ item[1] }} {{ committee_data.members[item[1]][0] }}u64 --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/mainnet/transaction/broadcast'"
       args:
         executable: /bin/bash
       run_once: true
       delegate_to: "{{ groups['tx_cannon_node'][1] }}"
       loop: "{{ selected_nodes.stdout_lines | map('from_json') | list }}"
 
-
     - name: Pause the playbook for 2 hours
       ansible.builtin.pause:
         minutes: 120
 
+    - name: Set valid withdrawal addresses
+      set_fact:
+        valid_withdrawal_addresses:
+          - "aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pjsl2kha7fv7hvz2eqxs5dz0rg"
+          - "aleo12ux3gdauck0v60westgcpqj7v8rrcr3v346e4jtq04q7kkt22czsh808v2"
+          - "aleo1p9sg8gapg22p3j42tang7c8kqzp4lhe6mg77gx32yys2a5y7pq9sxh6wrd"
+          - "aleo1l4z0j5cn5s6u6tpuqcj6anh30uaxkdfzatt9seap0atjcqk6nq9qnm9eqf"
+          - "aleo1s3ws5tra87fjycnjrwsjcrnw2qxr8jfqqdugnf0xzqqw29q9m5pqem2u4t"
 
     - name: claim unbond
       ansible.builtin.shell: 
-        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo claim_unbond_public --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/mainnet/transaction/broadcast'"
+        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo claim_unbond_public {{ item[1] }} --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/mainnet/transaction/broadcast'"
       args:
         executable: /bin/bash
       run_once: true
@@ -407,16 +414,13 @@
         msg: "{{ now() }}"
 
     - name: Try running tx-cannon rebonding 30% nodes
-      ansible.builtin.shell: 
-        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo bond_public {{ item[1] }} 50000000000000u64 --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/mainnet/transaction/broadcast'"
+      ansible.builtin.shell:
+        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo bond_validator {{ valid_withdrawal_addresses[idx] }} 50000000000000u64 5u8 --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/mainnet/transaction/broadcast'"
       args:
         executable: /bin/bash
       run_once: true
       register: shell_output
       delegate_to: "{{ groups['tx_cannon_node'][1] }}"
       loop: "{{ selected_nodes.stdout_lines | map('from_json') | list }}"
-
-
-
-
-
+      loop_control:
+        index_var: idx
