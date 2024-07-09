@@ -105,5 +105,5 @@
 
 - name: Continue if synchronization is successful
   debug:
-    msg: "Synchronization successful for node: {{ node }}"
+    msg: "Synchronization successful"
   when: sync_successful | default(false)
