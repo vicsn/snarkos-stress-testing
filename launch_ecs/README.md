@@ -19,3 +19,7 @@ Your task, service and cluster will be created in us-west-1, you can see it here
 You can find log files under your service.  Click the service then click the logs tab you find under the service.  https://us-west-1.console.aws.amazon.com/ecs/v2/clusters/tx-cannon-cluster/services/tx-cannon-service/logs?region=us-west-1
 
 
+## Relevant console links
+You can find log files under your service.  Click the service then click the logs tab you find under the service.  https://us-west-1.console.aws.amazon.com/ecs/v2/clusters/tx-cannon-cluster/services/tx-cannon-service/logs?region=us-west-1
+
+

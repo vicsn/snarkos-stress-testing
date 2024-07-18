@@ -30,8 +30,8 @@ resource "aws_ecs_task_definition" "tx_cannon_task" {
   memory                   = 16384         # Specify the memory the container requires
   cpu                      = 8192         # Specify the CPU the container requires
   execution_role_arn       = "${aws_iam_role.ecsTaskExecutionRole.arn}"
-  # runtime_platform {
-  #   operating_system_family =  "LINUX"
-  #   cpu_architecture        = "ARM64"
-  # }
+  runtime_platform {
+    operating_system_family =  "LINUX"
+    cpu_architecture        = "ARM64"
+  }
 }

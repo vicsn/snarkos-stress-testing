@@ -10,7 +10,7 @@ variable "desired_count" {
 
 variable "image" {
     #default = "149381701027.dkr.ecr.us-west-1.amazonaws.com/tx-cannon:latest"
-    default = "public.ecr.aws/x1h2o8i6/tx-cannon:latest"
+    default = "public.ecr.aws/x1h2o8i6/tx-cannon:latest-arm64"
 }
 
 variable "tx_cannon_command" {
