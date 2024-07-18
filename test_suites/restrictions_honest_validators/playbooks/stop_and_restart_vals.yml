@@ -1,0 +1,38 @@
+- name: Wait for SSH to become available
+  hosts: all
+  remote_user: ubuntu
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH to become ready
+      wait_for_connection:
+
+
+# ------------------------------------------------
+# Start restarting the snarkOS network
+
+- name: Set up and start snarkOS network for validators
+  hosts: snarkos_node
+  become: true
+  serial: 1
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+  tasks:
+    - name: Stop snarkos service
+      systemd:
+        name: snarkos
+        state: stopped
+      become: true
+
+    # Sleep for 30 seconds
+    - name: Wait for 1 minute
+      pause:
+        seconds: 30
+  
+    - name: Start restricted snarkos service
+      systemd:
+        name: snarkos-restricted
+        state: restarted
+      become: true
+    
+  tags: snarkos

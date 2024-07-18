@@ -1,0 +1,112 @@
+# Get load balancer DNS name
+- name: Gather information about all ELBs
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Get info about all classic ELBs
+      community.aws.elb_classic_lb_info:
+        names: snarkos-lb
+        region: us-west-1
+      register: elb_info
+
+    - name: Set DNS name as a fact for all hosts
+      set_fact:
+        snarkos_lb_dns: "{{ elb_info.elbs[0].dns_name }}"
+      delegate_to: 127.0.0.1
+      run_once: true
+
+    - ansible.builtin.debug:
+        msg: "The DNS name of snarkos-lb is {{ hostvars['localhost']['snarkos_lb_dns'] }}"
+
+  #   - name: Wait for the network to be healthy
+  #     uri:
+  #       url: "http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030/mainnet/latest/height"
+  #       method: GET
+  #       status_code: 200
+  #       timeout: 10
+  #     register: result
+  #     until: result.status == 200
+  #     retries: 10
+  #     delay: 10
+  # tags: tx-cannon
+
+# prepare the cannons
+- name: Install and Configure tx-cannon on all nodes
+  hosts: "tx_cannon_*"
+  become: true
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+  pre_tasks:
+    - name: Set host_public_ip
+      set_fact:
+        host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+  roles:
+    - txcannon_setup
+    - logstash_txcannon_setup
+  tags: tx-cannon
+
+
+# ------------------------------------------------
+# Fire the cannons
+
+- name: NetworkDriver
+  hosts: tx_cannon_networkdriver
+  become: true
+  vars_files:
+    - vars.yml
+  vars:
+    txcannon_command: tx-cannon batch-transfer -e http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030 -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 1 -a aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pjsl2kha7fv7hvz2eqxs5dz0rg
+  remote_user: ubuntu
+  roles:
+    - txcannon_service
+  tags: tx-cannon
+
+- name: BatchTransfer
+  hosts: tx_cannon_batchtransfer
+  become: true
+  vars_files:
+    - vars.yml
+  vars:
+    txcannon_command: tx-cannon batch-transfer -e http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030 -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 1 -a aleo10unn23a4z4jh2ea4g2n9fa7vz5mxzd2jf5nxpmv7f2f2sh3ur5rstqnpcg
+  remote_user: ubuntu
+  roles:
+    - txcannon_service
+  tags: tx-cannon
+
+# ------------------------------------------------
+# Start the snarkOS network
+
+- name: Set up and start snarkOS network for validators
+  hosts: snarkos_node
+  become: true
+  vars_files:
+    - vars.yml
+  remote_user: ubuntu
+  tasks:
+    - name: Restart snarkos service
+      systemd:
+        name: snarkos
+        state: restarted
+      become: true
+
+    # Sleep for 1 minute
+    - name: Wait for 1 minute
+      pause:
+        minutes: 1
+
+- name: debug/print the block height
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Fetch the current block from the load balancer
+      uri:
+        url: "http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030/mainnet/block/latest"
+        method: GET
+        return_content: true
+      register: lb_current_block
+      delegate_to:
+    - name: debug the block height
+      debug:
+        msg: "{{ lb_current_block.json['header']['metadata']['height'] }}"
+

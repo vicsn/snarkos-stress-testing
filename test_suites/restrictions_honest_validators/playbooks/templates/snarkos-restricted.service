@@ -1,0 +1,9 @@
+[Unit]
+Description=snarkOS Node Service
+
+[Service]
+User=root
+WorkingDirectory=/home/ubuntu
+ExecStart=/usr/bin/{{ snarkos_command_restricted }}
+Restart=no
+LimitNOFILE=65535
