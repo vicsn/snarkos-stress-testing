@@ -8,7 +8,7 @@ WorkingDirectory=/home/ubuntu
 Environment="VERBOSITY={{ ansible_env.VERBOSITY }}"
 Environment="NODE_ID={{ ansible_env.NODE_ID }}"
 Environment="NUM_INSTANCES={{ ansible_env.NUM_INSTANCES }}"
-ExecStart=/usr/bin/snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --client --verbosity ${VERBOSITY} --dev ${NODE_ID} --rest-rps 9999999 --dev-num-validators ${NUM_INSTANCES}
+ExecStart=/usr/bin/snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --client --verbosity ${VERBOSITY} --dev ${NODE_ID} --rest-rps 9999999 --dev-num-validators ${NUM_INSTANCES} --rest 0.0.0.0:3030
 Restart=no
 
 [Install]
