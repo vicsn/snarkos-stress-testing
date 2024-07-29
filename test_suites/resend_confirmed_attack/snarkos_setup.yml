@@ -83,8 +83,12 @@
   tasks:
     - name: Download snarkOS binary with GitHub CLI
       shell: >
+        # @runner 
+        # The test should pass on `mainnet-staging-latest`. 
+        # However, to see (in the logs) that confirmed transactions were skipped, use `v0.0.0.0-test-log-skipped-transmission`.
+        # TAG=mainnet-staging-latest
         TAG=mainnet-staging-latest
-
+        
         apt-get install -y unzip
 
         GITHUB_TOKEN="{{ gh_token }}" gh release download ${TAG}
@@ -139,7 +143,7 @@
   tasks:
     - name: Download snarkOS binary with GitHub CLI
       shell: >
-        TAG=test-malicious-double-spend-1
+        TAG=malice-latest
 
         apt-get install -y unzip
 
