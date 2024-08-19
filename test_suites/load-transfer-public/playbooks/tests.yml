@@ -43,14 +43,23 @@
     - logstash_txcannon_setup
   tags: tx-cannon
 
-# Batch transfer continuously to simulate TPS
-- name: Batch transfer
+# Default command: batch transfer continuously to simulate TPS
+- name: Batch transfer or fake execute based on toggle
   hosts: tx_cannon_node
   become: true
   vars_files:
     - vars.yml
-  vars:
-    txcannon_command: tx-cannon batch-transfer -e http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030 -r 90000001 --funding-account APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --amount 1 -w 5 -a aleo1hhzgdct6257yqj9wav3qqgnsjtnr2484frtqcjfva93yshywxypqs0wwa7
+  pre_tasks:
+    - name: Set txcannon_command based on use_fake_execute toggle
+      set_fact:
+        txcannon_command: >-
+          {{
+            (use_fake_execute | default(false)) 
+            | ternary(
+              'tx-cannon fake-execute --test tests/network_driver/network_driver_single_tx_fake.toml -e http://' + hostvars['localhost']['snarkos_lb_dns'] + ':3030 -r 90000001 -c 4',
+              'tx-cannon batch-transfer -e http://' + hostvars['localhost']['snarkos_lb_dns'] + ':3030 -r 90000001 --funding-account APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --amount 1 -w 5 -a aleo1hhzgdct6257yqj9wav3qqgnsjtnr2484frtqcjfva93yshywxypqs0wwa7'
+            )
+          }}
   remote_user: ubuntu
   roles:
     - txcannon_service

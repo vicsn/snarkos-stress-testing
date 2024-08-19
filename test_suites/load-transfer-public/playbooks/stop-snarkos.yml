@@ -1,0 +1,10 @@
+- name: Stop snarkOS service
+  hosts: snarkos_node
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Stop snarkOS
+      systemd:
+        name: snarkos
+        state: stopped
+  tags: stop_snarkos

@@ -15,6 +15,15 @@ These configurations have defaults and are optional to set.
 
 `./run_test_suite.sh` will attempt to run test end to end, but this is only recommended for stable and complete tests.
 
+## Running fake transactions
+
+This will attempt to run the test with fake transactions end to end for 10 minutes, then stop snarkos and download the logs and ledger folders.
+
+- Ensure the `snarkos_binary_tag` in the `vars.yml` supports fake transactions
+- Potentially adjust the number of validators or tx-cannons in `variables.tf`
+- Run `./run_test_suite_fake_tx.sh`
+- From the `analysis_scripts` folder, run `analysis_01_prepare_logfile.py` and `analysis_02_analyze_logfile.py`
+
 ## Running steps individually
 
 ### Create infrastructure

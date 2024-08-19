@@ -43,6 +43,10 @@ resource "aws_instance" "snarkos_node" {
   }
 }
 
+output "validator_ips" {
+  value = [for instance in aws_instance.snarkos_node : instance.public_ip]
+}
+
 # Load Balancer for snarkOS nodes
 data "aws_availability_zones" "available" {
   state = "available"
