@@ -38,6 +38,10 @@ events = [
 
 event_df = df[df['Message'].str.contains('|'.join(events), na=False)]
 
+# for debugging
+# store the event_df in a csv file
+# event_df.to_csv(f'event_df_val{val_index}.csv', index=False)
+
 class Block:
     def __init__(self, height, timestamp):
         self.height = height
@@ -188,7 +192,7 @@ class Block:
                 print(f"Negative value found in times of block {self.height}")
         return times_none_is_0
     
-    def get_time_to_start_prepare_advance_to_next_quorum_block(self):
+    def get_time_for_subdag_processing(self):
         # get last end_certificate_collection_time of associated rounds
         last_end_certificate_collection_time = None
         for r in self.associated_rounds:
@@ -202,13 +206,13 @@ class Block:
             print(f"No certificate collection before start_prepare_advance_to_next_quorum_block for block {self.height}")
             return 0
 
-    def time_to_start_check_next_block(self):
-        return (self.start_time_check_next_block - self.start_time_prepare_advance_to_next_quorum_block).total_seconds()
-    
-    def time_to_start_advance_to_next_block(self):
-        return (self.start_time_advance_to_next_block - self.start_time_check_next_block).total_seconds()
-    
-    def time_to_end_advance_to_next_block(self):
+    def get_time_in_prepare_advance_to_next_quorum_block(self):
+        return (self.end_time_prepare_advance_to_next_quorum_block - self.start_time_prepare_advance_to_next_quorum_block).total_seconds()
+
+    def time_in_check_next_block(self):
+        return (self.end_time_check_next_block - self.start_time_check_next_block).total_seconds()
+
+    def time_in_advance_to_next_block(self):
         return (self.end_time_advance_to_next_block - self.start_time_advance_to_next_block).total_seconds()
 
 class Round:
@@ -424,10 +428,10 @@ block_heights = []
 proposal_gen_times = []
 certificate_gen_times = []
 certificate_col_times = []
-prepare_adv_times = []
+subdag_processing_times = []
+prepare_advance_to_next_quorum_block_times = []
 check_next_block_times = []
-#advance_next_block_times = []
-end_advance_block_times = []
+advance_next_block_times = []
 unaccounted_times = []
 
 #previous_block_end_time = 0 
@@ -439,28 +443,27 @@ for block in blocks.values():
     proposal_gen_time = block.get_individual_rounds_proposal_generation_time()
     certificate_gen_time = block.get_individual_rounds_certificate_generation_time()
     certificate_col_time = block.get_individual_rounds_certificate_collection_time()
-    prepare_adv_time = block.get_time_to_start_prepare_advance_to_next_quorum_block()
-    check_next_block_time = block.time_to_start_check_next_block()
-    advance_next_block_time = block.time_to_start_advance_to_next_block()
-    end_advance_block_time = block.time_to_end_advance_to_next_block()
+    subdag_processing_time = block.get_time_for_subdag_processing()
+    time_in_advance_to_next_quorum_block = block.get_time_in_prepare_advance_to_next_quorum_block()
+    check_next_block_time = block.time_in_check_next_block()
+    advance_next_block_time = block.time_in_advance_to_next_block()
 
     # Compute the unaccounted time for each block.
     unaccounted_time = 0
     if block.height != 1:
         block_gen_time = (block.end_time_advance_to_next_block - proposal_gen_start).total_seconds()
-        unaccounted_time = block_gen_time - end_advance_block_time - advance_next_block_time - check_next_block_time - prepare_adv_time - sum(certificate_col_time) - sum(certificate_gen_time) - sum(proposal_gen_time)
+        unaccounted_time = block_gen_time - advance_next_block_time - check_next_block_time - time_in_advance_to_next_quorum_block - subdag_processing_time - sum(certificate_col_time) - sum(certificate_gen_time) - sum(proposal_gen_time)
 
     # Collect the times for later visualization.
     block_heights.append(block.height)
     proposal_gen_times.append(proposal_gen_time)
     certificate_gen_times.append(certificate_gen_time)
     certificate_col_times.append(certificate_col_time)
-    prepare_adv_times.append(prepare_adv_time)
+    subdag_processing_times.append(subdag_processing_time)
+    prepare_advance_to_next_quorum_block_times.append(time_in_advance_to_next_quorum_block)
     check_next_block_times.append(check_next_block_time)
-    #advance_next_block_times.append(advance_next_block_time)
-    end_advance_block_times.append(end_advance_block_time)
+    advance_next_block_times.append(advance_next_block_time)
     unaccounted_times.append(unaccounted_time)
-
 
 def flatten_list_of_lists(lol):
     return [item for sublist in lol for item in sublist]
@@ -475,10 +478,10 @@ bottoms = np.zeros(len(block_heights))
 proposal_color = 'blue'
 certificate_color = 'green'
 collection_color = 'red'
-prepare_adv_color = 'orange'
-check_next_color = 'purple'
-advance_next_color = 'cyan'
-end_advance_color = 'magenta'
+subdag_processing_color = 'orange'
+prepare_advance_color = 'purple'
+check_next_color = 'cyan'
+advance_next_color = 'magenta'
 unaccounted_color = 'black'
 
 # Iterate over each block to stack bars
@@ -505,17 +508,17 @@ for i in range(len(block_heights)):
         bottoms[i] += certificate_col_times[i][j]
 
 # Stack the remaining times (prepare, check, advance, and end) for each block
-ax.bar(block_heights, prepare_adv_times, bottom=bottoms, label='Time in prepare_advance_to_next_quorum_block', color=prepare_adv_color)
-bottoms = [b + p for b, p in zip(bottoms, prepare_adv_times)]  # Update the bottoms after adding each bar
+ax.bar(block_heights, subdag_processing_times, bottom=bottoms, label='Time processing subdag', color=subdag_processing_color)
+bottoms = [b + p for b, p in zip(bottoms, subdag_processing_times)]  # Update the bottoms after adding each bar
+
+ax.bar(block_heights, prepare_advance_to_next_quorum_block_times, bottom=bottoms, label='Time in prepare_advance_to_next_quorum_block', color=prepare_advance_color)
+bottoms = [b + p for b, p in zip(bottoms, prepare_advance_to_next_quorum_block_times)]
 
 ax.bar(block_heights, check_next_block_times, bottom=bottoms, label='Time in check_next_block', color=check_next_color)
 bottoms = [b + c for b, c in zip(bottoms, check_next_block_times)]
 
-#ax.bar(block_heights, advance_next_block_times, bottom=bottoms, label='Time in advance_to_next_block', color=advance_next_color)
-#bottoms = [b + a for b, a in zip(bottoms, advance_next_block_times)]
-
-ax.bar(block_heights, end_advance_block_times, bottom=bottoms, label='Time in advance_to_next_block', color=end_advance_color)
-bottoms = [b + e for b, e in zip(bottoms, end_advance_block_times)]
+ax.bar(block_heights, advance_next_block_times, bottom=bottoms, label='Time in advance_to_next_block', color=advance_next_color)
+bottoms = [b + a for b, a in zip(bottoms, advance_next_block_times)]
 
 # Stack the unaccounted time for each block
 ax.bar(block_heights, unaccounted_times, bottom=bottoms, label='Unaccounted Time', color=unaccounted_color)
@@ -526,7 +529,6 @@ ax.set_xlabel('Block Height')
 ax.set_ylabel('Time')
 ax.set_title(f'Stacked Bar Chart of Block Times, index {val_index} of {num_val} validators')
 ax.legend()
-
 
 
 blocks_durations2 = []
@@ -540,11 +542,6 @@ plt.show()
 
 # Save the figure
 fig.savefig(f'1_stacked_bar_chart_block_times_val{val_index}.png')
-
-
-
-
-
 
 
 # Another bar chart with number of transmissions per block
