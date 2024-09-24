@@ -1,0 +1,11 @@
+- name: Split pregenerated deployments and submit them in parallel
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Run the python program
+      command: python3 split_deployments_and_submit_parallel.py
+      register: out
+  
+    - name: Print the output
+      debug:
+        var: out.stdout_lines

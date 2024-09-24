@@ -1,0 +1,51 @@
+---
+- name: Clone or update snarkOS
+  git:
+    repo: "https://{{ github_token }}@github.com/{{ snarkos_repo | regex_replace('^https?://github\\.com/', '') }}"
+    dest: "/home/ubuntu/snarkOS"
+    version: "{{ snarkos_git_hash }}"
+    clone: true
+    update: true
+    force: true
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install Ubuntu dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - curl
+      - clang
+      - gcc
+      - libssl-dev
+      - llvm
+      - make
+      - pkg-config
+      - tmux
+      - xz-utils
+      - ufw
+    state: present
+  register: apt_result
+  retries: 5
+  delay: 60
+  until: apt_result is success
+
+- name: Install Rust programming language
+  ansible.builtin.shell:
+    cmd: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+  args:
+    creates: "$HOME/.cargo/bin/rustup"
+
+- name: Source cargo env and install snarkOS with git CLI
+  ansible.builtin.shell:
+    cmd: "source $HOME/.cargo/env && cargo install --locked --path ."
+  args:
+    executable: /bin/bash
+    chdir: /home/ubuntu/snarkOS
+  environment:
+    HOME: "{{ ansible_env.HOME }}"
+    CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  become: true

@@ -1,7 +1,0 @@
-./aws-logs
-./logs
-./.DS_Store
-./.history
-
-*.json
-*.txt

@@ -1,0 +1,79 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 1m
+  external_labels:
+    origin_prometheus: {{ devnet_name }}
+remote_write:
+  - url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
+    basic_auth:
+      username: 1272055
+      password: {{ grafana_cloud_api_key }}
+scrape_configs:
+  - job_name: 'snarkos'
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+
+      {% for host in groups['snarkos_validator'] | union(groups['snarkos_client']) %}
+
+      - targets: ["{{ host }}:9000"]
+        labels:
+          group: "snarkos"
+          instance_type: "{{ hostvars[host]['instance_type'] }}"
+      {% endfor %}
+      
+  - job_name: 'Process_Exporter_Validators'
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+
+      {% for host in groups['snarkos_validator'] | union(groups['snarkos_client']) %}
+
+      - targets: ["{{ host }}:9256"]
+        labels:
+          group: "process_exporter_validators"
+          instance_type: "{{ hostvars[host]['instance_type'] }}"
+      {% endfor %}
+
+  - job_name: 'snarkos_client'
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+
+      {% for host in groups['snarkos_client'] %}
+
+      - targets: ["{{ host }}:9000"]
+        labels:
+          group: "snarkos_client"
+          instance_type: "{{ hostvars[host]['instance_type'] }}"
+      {% endfor %}
+
+  - job_name: 'Process_Exporter_Clients'
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+
+      {% for host in groups['snarkos_client'] %}
+
+      - targets: ["{{ host }}:9256"]
+        labels:
+          group: "process_exporter_clients"
+          instance_type: "{{ hostvars[host]['instance_type'] }}"
+      {% endfor %}

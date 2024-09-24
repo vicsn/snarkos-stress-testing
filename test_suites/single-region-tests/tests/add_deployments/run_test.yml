@@ -1,0 +1,90 @@
+# ------------------------------------------------
+# tx-cannon
+
+# Get load balancer DNS name
+- name: Gather information about all ELBs
+  hosts: localhost
+  gather_facts: no
+  remote_user: ubuntu
+  tasks:
+    - name: Wait for the network to be healthly
+      uri:
+        url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 10
+  tags: tx-cannon
+
+# prepare the cannons
+- name: Install and Configure tx-cannon on all nodes
+  hosts: tx_cannon_node
+  become: true
+  remote_user: ubuntu
+  roles:
+    - txcannon_setup
+    - logstash_txcannon_setup
+  tags: tx-cannon
+
+# run deploy tx-cannon
+- name: Deploy programs
+  hosts: tx_cannon_node
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Deploy base programs
+      ansible.builtin.shell:
+        cmd: tx-cannon deploy -p /home/ubuntu/tx-cannon/tests/ridiculous_finalize_hash/{{ program }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH
+      loop:
+        - ridiculous_finalize_hash.aleo
+        - large_bhp_256_500.aleo
+        - large_bhp_256_1000.aleo
+        - large_bhp_256_2000.aleo
+        - large_bhp_256_5000.aleo
+        - large_bhp_256_10000.aleo
+        - large_bhp_256_20000.aleo
+        - large_bhp_256_50000.aleo
+      loop_control:
+        loop_var: program
+
+    - name: Deploy more base programs
+      ansible.builtin.shell:
+        cmd: tx-cannon batch-deploy --manifest {{ manifest }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH 
+      loop:
+        - tests/normal_network_traffic/normal_network_traffic.txt
+        - tests/normal_network_traffic/double_color_ball.txt
+      loop_control:
+        loop_var: manifest
+
+    - name: Wait for multiple endpoints to be ready
+      vars:
+        endpoints:
+          - "http://localhost:3030/mainnet/program/hello_hello.aleo"
+          - "http://localhost:3030/mainnet/program/double_color_ball.aleo"
+          - "http://localhost:3030/mainnet/program/calculator.aleo"
+          - "http://localhost:3030/mainnet/program/temperatureconverter.aleo"
+          - "http://localhost:3030/mainnet/program/animals_nft_v30.aleo"
+          - "http://localhost:3030/mainnet/program/ideaground_friends_beta9.aleo"
+          - "http://localhost:3030/mainnet/program/cassino_game_test_fp.aleo"
+          - "http://localhost:3030/mainnet/program/twoadicity_mmbbn88.aleo"
+          - "http://localhost:3030/mainnet/program/ideaground_friends_beta1.aleo"
+          - "http://localhost:3030/mainnet/program/ans_coupon_card_v1.aleo"
+      block:
+        - name: Check each endpoint
+          uri:
+            url: "{{ item }}"
+            method: GET
+            status_code: 200
+            timeout: 10
+          register: result
+          until: result.status == 200
+          retries: 10
+          delay: 2
+          loop: "{{ endpoints }}"
+      run_once: true
+      delegate_to: "{{ groups['snarkos_validator'][1] }}"
+  tags: tx-cannon-deploy
+

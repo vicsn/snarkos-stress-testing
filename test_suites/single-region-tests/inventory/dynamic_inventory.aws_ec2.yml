@@ -1,0 +1,32 @@
+plugin: amazon.aws.aws_ec2
+
+regions: us-west-2
+
+profile: ephnet
+
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "tx-cannon-node"
+  - key: tags.Name
+    prefix: ""
+    separator: ""
+  - key: tags.Validator
+    prefix: "clients_on_validator_"
+    separator: ""
+
+filters:
+  instance-state-name: running
+  "tag:Devnet": "single-region-tests"
+  "tag:Role":
+    - "snarkos-validator"
+    - "prometheus-server"
+    - "snarkos-client"
+    - "tx-cannon-node"
+
+compose:
+  ansible_host: public_ip_address

@@ -1,0 +1,313 @@
+- name: Install malicious snarkos
+  hosts: snarkos_validator[1]
+  remote_user: ubuntu
+  become: true
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_validator_facts.yml
+
+    - name: set malice specific facts
+      set_fact:
+        malicemode: Environment="RoundsFarAhead=1"
+        snarkos_binary_name: snarkos-malice
+      run_once: true
+
+    - name: Set snarkos command with peers and validators
+      set_fact:
+        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ validator_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"
+  roles:
+    - snarkos_service
+
+- name: Set up and run tx-cannon
+  hosts: "tx_cannon_node"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+  tasks:
+    - name: Install GitHub CLI
+      shell: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Clone or update tx-cannon
+      remote_user: ubuntu
+      git:
+        repo: "https://{{ github_token }}@github.com/ProvableHQ/tx-cannon.git"
+        dest: "/home/ubuntu/tx-cannon"
+        version: "mainnet"
+
+    - name: Gather facts from all nodes
+      setup:
+
+    - name: Download tx-cannon binary with GitHub CLI
+      shell: >
+        TAG=mainnet-latest
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ github_token }}" gh release download ${TAG}
+        --repo ProvableHQ/tx-cannon
+        --pattern "tx-cannon*unknown-linux-gnu.zip"
+        --output "/usr/bin/tx-cannon.zip"
+        --skip-existing
+
+        unzip -o /usr/bin/tx-cannon.zip -d /usr/bin
+      environment:
+        GITHUB_TOKEN: "{{ github_token }}"
+      args:
+        executable: /bin/bash
+      become: yes
+
+    - name: Make tx-cannon executable
+      file:
+        path: "/usr/bin/tx-cannon"
+        mode: '0755'
+
+- name: Run the double spend attack
+  hosts: "tx_cannon_node[0]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_validator'][1]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in double-spend mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the double spend attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in double-spend mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the double spend attack targeting the honest node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Run the constraint underreporting attack
+  hosts: "tx_cannon_node[1]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_validator'][1]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in constraint underreporting mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the constraint underreporting attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in constraint underreporting mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the constraint underreporting attack targeting the honest node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Run the duplicate-transitions attack
+  hosts: "tx_cannon_node[2]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_validator'][1]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in duplicate-transitions mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the duplicate-transitions attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in duplicate-transitions mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the duplicate-transitions attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Run the redeployment attack
+  hosts: "tx_cannon_node[3]"
+  become: yes
+  remote_user: ubuntu
+  vars:
+    verbosity: "1"
+    malicious_ip: "{{ hostvars[groups['snarkos_validator'][1]]['public_ip_address'] }}"
+  tasks:
+    - name: Print the malicious IP
+      debug:
+        var: malicious_ip
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in redeploy mode" >> /home/ubuntu/tx-cannon/tx-cannon.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the redeploy attack targeting the malicious node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt >> tx-cannon.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+    - name: Write log message before running tx-cannon
+      shell: |
+        echo "Starting tx-cannon in redeploy mode" >> /home/ubuntu/tx-cannon/tx-cannon2.log
+      args:
+        executable: /bin/bash
+
+    - name: Run the redeploy attack targeting the honest node
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt >> tx-cannon2.log 2>&1'
+      args:
+        executable: /bin/bash
+      async: 3600  # Adjust based on expected duration of the tx-cannon run
+      poll: 0
+
+- name: Pause execution
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Sleep for 10 minutes
+      pause:
+        minutes: 10
+
+# - name: Fetch the tx cannon logs to the local machine
+#   hosts: "tx_cannon_node"
+#   become: yes
+#   remote_user: ubuntu
+#   vars:
+#     verbosity: "1"
+#   tasks:
+#     - name: Fetch tx-cannon logs targeting the malicious node
+#       fetch:
+#         src: "/home/ubuntu/tx-cannon/tx-cannon.log"
+#         dest: "./{{ inventory_hostname }}-tx-cannon_malicious.log"
+#         flat: yes
+#       ignore_errors: yes  # Optional, to proceed even if fetching logs fails
+
+#     - name: Fetch tx-cannon logs targeting the honest node
+#       fetch:
+#         src: "/home/ubuntu/tx-cannon/tx-cannon2.log"
+#         dest: "./{{ inventory_hostname }}-tx-cannon_honest.log"
+#         flat: yes
+#       ignore_errors: yes  # Optional, to proceed even if fetching logs fails
+
+- name: Undo malicemode on validators
+  hosts: snarkos_validator[1]
+  remote_user: ubuntu
+  become: true
+  pre_tasks:
+    - name: Stop the malice validators
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove existing .ledger-* directories on malice validators
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
+
+    - name: set malice specific facts
+      set_fact:
+        malicemode: ""
+        snarkos_binary_name: snarkos
+
+    - name: Set snarkos command with peers and validators
+      set_fact:
+        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ validator_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"
+  roles:
+    - snarkos_service
+
+- name: Undo malicemode state on clients
+  hosts: snarkos_client[1]
+  remote_user: ubuntu
+  become: true
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_client_facts.yml
+
+    - name: Stop the clients
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove existing .ledger-* directories on clients
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
+  roles:
+    - snarkos_service
+  tags: snarkos_client

@@ -1,0 +1,20 @@
+---
+- name: Ensure Docker service is started
+  service:
+    name: docker
+    state: started
+
+- name: Copy Process Exporter docker-compose.yml
+  template:
+    src: docker-compose.yml
+    dest: /home/ubuntu/docker-compose.yml
+    owner: ubuntu
+    group: ubuntu
+    mode: '0664'
+  become: true
+  become_user: ubuntu
+
+- name: Run docker-compose up # noqa: no-changed-when
+  command:
+    cmd: docker-compose up -d --force-recreate
+    chdir: /home/ubuntu/

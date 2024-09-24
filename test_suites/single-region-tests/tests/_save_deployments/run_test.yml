@@ -1,0 +1,77 @@
+# ------------------------------------------------
+# tx-cannon
+
+# Get load balancer DNS name
+- name: Gather information about all ELBs
+  hosts: localhost
+  gather_facts: no
+  remote_user: ubuntu
+  tasks:
+    - name: Wait for the network to be healthly
+      uri:
+        url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 10
+  tags: tx-cannon
+
+# prepare the cannons
+- name: Install and configure tx-cannon and snarkos on all nodes
+  hosts: tx_cannon_node
+  become: true
+  remote_user: ubuntu
+  roles:
+    - txcannon_setup
+    - logstash_txcannon_setup
+    - snarkos_install_binary
+  tags: tx-cannon
+
+# NOTE: the following task can hang, make sure to properly await its completion
+
+- name: GENERATE THE DEPLOYMENTS!
+  hosts: tx_cannon_node
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Set node_id based on instance tag
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+        num_validators: "{{ groups['snarkos_validator'] | length }}"
+
+    - name: Run tx-cannon
+      shell: |
+        cd /home/ubuntu/tx-cannon
+        python3 tests/scripts/tx_pregeneration.py --transaction_type deployment --num_validators {{ num_validators }} --num_transactions {{ num_deployments }} --num_proofs_in_parallel {{ prover_parallelization }} --program_file {{ program_file }} --program_suffix {{ program_suffix }}
+      args:
+        executable: /bin/bash
+      vars:
+        program_file: "/home/ubuntu/tx-cannon/tests/1M_constraint_deployment_100_programs_50_nodes/program_original.txt"
+        program_suffix: "{{ node_id }}"
+        # the default snarkOS rate-limits allow 8 per second for 10 minutes per validator, spread over the different number of tx-cannon workers
+        # however, 1000 deployments already cost as much as a month's budget so we go with that
+        num_deployments: "{{ (5 / (groups['tx_cannon_node'] | length)) | float | int }}" 
+        prover_parallelization: "1" # suitable for a c5.4xlarge
+      register: out
+      become: yes
+      async: 3600 # 1 hour
+      poll: 30
+    
+    - name: Print output
+      debug:
+        var: out.stdout_lines
+
+    # Repeat a fact setting so we can --start-at-task easily if the previous task hangs
+    - name: Set node_id based on instance tag 2
+      set_fact:
+        node_id: "{{ tags['Dev'] }}"
+        num_validators: "{{ groups['snarkos_validator'] | length }}"
+
+    - name: Fetch pregenerated transactions
+      fetch:
+        src: "/home/ubuntu/tx-cannon/program_deployments/all_deployments.txt"
+        dest: "../../transaction_files/{{ num_validators }}val-deploys-{{ node_id }}.txt"
+        flat: yes

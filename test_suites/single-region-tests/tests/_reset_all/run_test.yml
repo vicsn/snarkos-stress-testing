@@ -1,0 +1,43 @@
+- name: Reset validators
+  hosts: snarkos_validator
+  remote_user: ubuntu
+  become: true
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_validator_facts.yml
+
+    - name: Stop the honest validators
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Stop the malice validators
+      systemd:
+        name: snarkos-malice
+        state: stopped
+      ignore_errors: yes # in case we never deployed malice
+
+    - name: Remove existing ledger and batch proposal directories on validators
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-* && rm -rf /home/ubuntu/.current-proposal-cache*"
+  roles:
+    - snarkos_service
+  tags: snarkos
+
+- name: Reset clients
+  hosts: snarkos_client
+  remote_user: ubuntu
+  become: true
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_client_facts.yml
+
+    - name: Stop the clients
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove existing .ledger-* directories on clients
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
+  roles:
+    - snarkos_service
+  tags: snarkos_client

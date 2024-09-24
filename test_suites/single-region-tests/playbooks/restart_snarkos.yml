@@ -1,0 +1,11 @@
+---
+- name: Restart snarkOS nodes
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Restart snarkos service
+      systemd:
+        name: snarkos
+        state: restarted
+  tags: restart_snarkos

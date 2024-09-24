@@ -1,0 +1,44 @@
+metricbeat.modules:
+  - module: system
+    metricsets:
+      - cpu             # CPU usage
+      - load            # CPU load averages
+      - memory          # Memory usage
+      - network         # Network IO
+      - process         # Per process metrics
+      - process_summary # Process summary
+      - uptime          # System Uptime
+      - socket_summary  # Socket summary
+      - core            # Per CPU core usage
+      - diskio          # Disk IO
+      - filesystem      # File system usage for each mountpoint
+      - fsstat          # File system summary metrics
+      - socket          # Sockets and connection info (linux only)
+      - service         # systemd service information
+    enabled: true
+    period: 10s
+    processes: ['snarkos']
+
+  - module: prometheus
+    period: 10s
+    hosts: ["localhost:9000"]
+    metrics_path: '/metrics'
+    metrics_filters:
+      include: ["snarkos_.*"]
+
+fields_under_root: true
+fields:
+  node_public_ip: "{{ host_public_ip | default('unknown') }}"
+  commit_hash: "{{ commit_hash | default('unknown') }}"
+  {% for key, value in tags.items() %}
+tags_{{ key | lower }}: "{{ value }}"
+  {% endfor %}
+
+output.elasticsearch:
+  index: "snarkos-metrics-{{ devnet_name | lower }}"
+  api_key: "{{ elastic_api_key }}"
+
+cloud.id: "{{ cloud_id }}"
+
+setup.template.name: "snarkos-metrics"
+setup.template.pattern: "snarkos-metrics-*"

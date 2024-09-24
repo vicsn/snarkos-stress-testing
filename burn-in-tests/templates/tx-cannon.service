@@ -1,6 +1,0 @@
-[Service]
-User=ubuntu
-WorkingDirectory=/home/ubuntu/tx-cannon
-ExecStart=/usr/bin/tx-cannon batch-transfer -e http://{{ node_to_hit }}:3030 -r 90000001 --funding-account {{ funding_account }} --amount 1 -w 5 -a {{ receiver_address }}
-Type=simple
-Restart=on-failure

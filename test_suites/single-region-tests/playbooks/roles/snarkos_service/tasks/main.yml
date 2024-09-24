@@ -1,0 +1,31 @@
+---
+- name: Set snarkOS binary path based on installation method
+  set_fact:
+    snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
+
+- name: Deploy the snarkos systemd service file
+  template:
+    src: snarkos.service
+    dest: /etc/systemd/system/snarkos.service
+    mode: '0644'
+  become: true
+
+- name: Slurp the snarkos service file
+  slurp:
+    src: /etc/systemd/system/snarkos.service
+  register: snarkos_service_file
+
+# - name: Decode and print the snarkos service file contents
+#   debug:
+#     msg: "{{ snarkos_service_file['content'] | b64decode }}"
+
+- name: Reload systemd to read new snarkos service file
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: Restart snarkos service
+  systemd:
+    name: snarkos
+    state: restarted
+  become: true

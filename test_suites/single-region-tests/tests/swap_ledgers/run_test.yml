@@ -1,0 +1,22 @@
+- name: Run test 1 times
+  hosts: localhost
+  tasks:
+    - name: Swap ledgers 1 at a time
+      include_tasks: swap.yml
+      loop: "{{ range(0, num_instances) }}"
+      loop_control:
+        loop_var: cycle_index
+      vars:
+        batched_groups: "{{ groups['snarkos_validator'] | batch(1) | list }}"
+        current_group: "{{ batched_groups[cycle_index | int % (batched_groups | length)] }}"
+        source_node: "{{ groups['snarkos_validator'] | difference(current_group) | first }}"
+
+    - name: Swap ledgers of half the nodes at a time
+      include_tasks: swap.yml
+      loop: "{{ range(0, 2) }}"
+      loop_control:
+        loop_var: cycle_index
+      vars:
+        batched_groups: "{{ groups['snarkos_validator'] | batch(half_of_nodes) | list }}"
+        current_group: "{{ batched_groups[cycle_index | int % (batched_groups | length)] }}"
+        source_node: "{{ groups['snarkos_validator'] | difference(current_group) | first }}"

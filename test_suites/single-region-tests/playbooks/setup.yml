@@ -1,0 +1,137 @@
+- name: Wait for SSH to become available
+  hosts: all
+  remote_user: ubuntu
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH to become ready
+      wait_for_connection:
+
+# ------------------------------------------------
+# snarkOS installation
+
+- name: Install snarkOS
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Check if snarkos_binary_tag is defined
+      set_fact:
+        use_binary: "{{ snarkos_binary_tag is defined and snarkos_binary_tag | length > 0 }}"
+
+    - name: Install snarkOS from binary
+      include_role:
+        name: snarkos_install_binary
+      when: use_binary
+
+    - name: Build snarkOS from git
+      include_role:
+        name: snarkos_build_from_git
+      when: not use_binary
+
+    - name: Download malice snarkOS binary with GitHub CLI
+      shell: >
+        TAG="{{ snarkos_malice_tag }}"
+
+        apt-get install -y unzip
+
+        GITHUB_TOKEN="{{ github_token }}" gh release download ${TAG}
+        --repo ProvableHQ/snarkOS-staging
+        --pattern "snarkos*unknown-linux-gnu.zip"
+        --output "/tmp/snarkos-malicious.zip"
+        --skip-existing
+
+        unzip -o /tmp/snarkos-malicious.zip -d /tmp/snarkos-malicious
+
+        mv /tmp/snarkos-malicious/snarkos /usr/bin/snarkos-malice
+      args:
+        executable: /bin/bash
+
+  tags: snarkos_install
+
+# ------------------------------------------------
+# snarkOS Process Exporter
+
+- name: Install and Configure Process Exporter
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  roles:
+    - process_exporter_setup
+  tags: process_exporter
+
+# ------------------------------------------------
+# Logstash
+
+- name: Install and Configure Logstash
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: logging_enrichment.yml
+  roles:
+    - logstash_setup
+  tags: logstash
+
+# ------------------------------------------------
+# Metricbeat
+
+- name: Install and Configure Metricbeat
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: logging_enrichment.yml
+  roles:
+    - metricbeat_setup
+  tags: metricbeat
+
+# ------------------------------------------------
+# Filebeat
+
+- name: Install and Configure Filebeat
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: logging_enrichment.yml
+  roles:
+    - filebeat_setup
+  tags: filebeat
+
+# ------------------------------------------------
+# Prometheus for Grafana metrics
+
+- name: Install and Configure Prometheus
+  hosts: prometheus_server
+  become: true
+  remote_user: ubuntu
+  gather_facts: true
+  roles:
+    - prometheus_setup_with_clients
+  tags: prometheus
+
+# ------------------------------------------------
+# snarkOS validators
+
+- name: Set up and start snarkOS network for validators
+  hosts: snarkos_validator
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: set_validator_facts.yml
+  roles:
+    - snarkos_service
+  tags: snarkos
+
+# ------------------------------------------------
+# snarkOS clients
+
+- name: Set up and start snarkOS network for clients
+  hosts: snarkos_client
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: set_client_facts.yml
+  roles:
+    - snarkos_service
+  tags: snarkos_client

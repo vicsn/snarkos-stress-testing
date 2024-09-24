@@ -45,3 +45,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 **/node_modules/
+
+ip_addresses.txt
+output.json
+programs_to_deploy

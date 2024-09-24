@@ -1,0 +1,27 @@
+- name: Gather facts from all nodes
+  setup:
+
+- name: Determine the number of validators
+  set_fact:
+    num_instances: "{{ groups['snarkos_validator'] | length }}"
+  run_once: true
+
+- name: Assign client to validator index
+  set_fact:
+    validator_index: "{{ tags['Validator'] | int }}"
+
+- name: Set validator address
+  set_fact:
+    validator_address: "{{ hostvars[groups['snarkos_validator'][validator_index | int]]['public_ip_address'] }}"
+
+- name: Set dev_id based on instance tag
+  set_fact:
+    dev_id: "{{ (num_instances | int) + (tags['Dev'] | int) }}"
+
+- name: Set snarkos command with the assigned validator
+  set_fact:
+    snarkos_command: "snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_address }}:4130 --dev {{ dev_id }} --dev-num-validators {{ num_instances }} --rest-rps 90000000"
+
+# - name: Debug snarkos command
+#   debug:
+#     msg: "The snarkos command for this client is: {{ snarkos_command }}"

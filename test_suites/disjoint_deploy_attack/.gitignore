@@ -1,8 +1,0 @@
-# Files to ignore
-output.json
-ip_addresses.txt
-.DS_Store
-*.log
-
-# Directories to ignore
-programs_to_deploy/split/

@@ -1,0 +1,111 @@
+variable "devnet_name" {
+  description = "Unique name for this devnet deployment"
+  default     = "single-region-tests"
+}
+
+variable "instance_type" {
+  description = "Instance type for snarkOS validators"
+  default     = "m7i.4xlarge"
+}
+
+variable "instance_count" {
+  description = "Number of snarkOS validators"
+  default     = 10
+}
+
+# ------------------------------------------------
+# Clients
+
+locals {
+  client_instance_config = [
+    { type = "m7i.2xlarge", count = 3, validator = 0 },
+    { type = "m7i.2xlarge", count = 3, validator = 1 },
+    { type = "m7i.2xlarge", count = 3, validator = 2 },
+    { type = "m7i.2xlarge", count = 3, validator = 3 },
+    { type = "m7i.2xlarge", count = 3, validator = 4 },
+    { type = "m7i.2xlarge", count = 3, validator = 5 },
+    { type = "m7i.2xlarge", count = 3, validator = 6 },
+    { type = "m7i.2xlarge", count = 3, validator = 7 },
+    { type = "m7i.2xlarge", count = 3, validator = 8 },
+    { type = "m7i.2xlarge", count = 3, validator = 9 }
+  ]
+
+  snarkos_clients = flatten([
+    for config_idx, config in local.client_instance_config : [
+      for i in range(config.count) : {
+        type = config.type,
+        index = i,
+        validator = config.validator
+      }
+    ]
+  ])
+}
+
+# ------------------------------------------------
+# ECS Cannons
+
+variable "existing_cluster_name" {
+  description = "Name of the existing ECS cluster to use"
+  default     = "tx-cannon"
+  type        = string
+}
+
+variable "ecr_repository_url" {
+  description = "URL of the ECR repository containing the tx-cannon image"
+  default     = "637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon"
+}
+
+# tx_cannon_services
+variable "tx_cannon_services" {
+  description = "Map of tx-cannon services with their respective commands and task counts"
+  type = map(object({
+    tx_command = string
+    task_count = number
+  }))
+  default = {
+    BatchTransfer = {
+      tx_command = "tx-cannon batch-transfer -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 1 -a aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pjsl2kha7fv7hvz2eqxs5dz0rg --network mainnet"
+      task_count = 100
+    },
+    BatchDeploy = {
+      tx_command = "tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_1.txt -k APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --randomize --redeploys 10000000 --concurrent-deployments 3 --network mainnet"
+      task_count = 5
+    }
+    InvalidSolutions = {
+      tx_command = "tx-cannon generate-solutions -c 1000 -a aleo1s3ws5tra87fjycnjrwsjcrnw2qxr8jfqqdugnf0xzqqw29q9m5pqem2u4t --garbage --network mainnet"
+      task_count = 1
+    }
+    ValidSolutions = {
+      tx_command = "tx-cannon generate-solutions -c 1000 -a aleo1s3ws5tra87fjycnjrwsjcrnw2qxr8jfqqdugnf0xzqqw29q9m5pqem2u4t --network mainnet"
+      task_count = 20
+    }
+    RejectedAborted = {
+      tx_command = "tx-cannon malice -k APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt --repetitions 900000 --underreport-variables 20 --network mainnet"
+      task_count = 10
+    }
+    BatchBond1 = {
+      tx_command = "tx-cannon batch-bond --delegator-start-index 0 --num-delegators 2570 -f APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --num-validators 10 --fund-amount 100100000000 --bond-amount 100000000000 -c 3 --network mainnet"
+      task_count = 1
+    }
+    BatchBond2 = {
+      tx_command = "tx-cannon batch-bond --delegator-start-index 2571 --num-delegators 2570 -f APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --num-validators 10 --fund-amount 100100000000 --bond-amount 100000000000 -c 3 --network mainnet"
+      task_count = 1
+    }
+    BlockRequest = {
+      tx_command = "tx-cannon request block --start 0 --end 105 -r 900000000 --network mainnet"
+      task_count = 1
+    }
+    FakeTransfer = {
+      tx_command = "tx-cannon fake-execute --test tests/network_driver/network_driver_single_tx_fake.toml -r 90000001 -c 4 --network mainnet"
+      task_count = 1
+    }
+    # Add more services as needed
+    # tx-cannon malice -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --redeploy --double-spend --duplicate-transitions --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt --underreport-constraints 10 --repetitions 90000000000001
+    
+    # the following require running add_deployments
+    # tx-cannon batch-execute --test tests/ridiculous_finalize_hash/bhp_hash_ramp_up.toml 
+    # tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_1.toml 
+    # tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_2.toml
+    # tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_3.toml
+  }
+}

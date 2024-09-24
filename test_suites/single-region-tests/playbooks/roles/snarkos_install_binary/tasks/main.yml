@@ -1,0 +1,24 @@
+---
+- name: Check if snarkos already present
+  ansible.builtin.stat:
+    path: /usr/bin/snarkos
+  register: file_check
+
+- name: Download snarkOS binary with GitHub CLI # noqa: no-changed-when
+  shell: >
+    GITHUB_TOKEN="{{ github_token }}" gh release download {{ snarkos_binary_tag }}
+    --repo aleoHQ/snarkOS-staging
+    --pattern "snarkos*unknown-linux-gnu.zip"
+    --output "/usr/bin/snarkos.zip"
+    --clobber
+
+    unzip -o /usr/bin/snarkos.zip -d /usr/bin
+  args:
+    executable: /bin/bash
+  become: true
+  when: not file_check.stat.exists
+
+- name: Make snarkos executable
+  file:
+    path: /usr/bin/snarkos
+    mode: "0755"

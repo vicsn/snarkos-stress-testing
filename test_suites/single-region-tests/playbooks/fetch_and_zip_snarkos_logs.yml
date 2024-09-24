@@ -1,0 +1,38 @@
+---
+- name: Handle snarkOS logs with detailed and cleaned naming
+  hosts: snarkos_validator
+  become: true
+  remote_user: ubuntu
+  gather_facts: true
+
+  tasks:
+    - name: Get current commit hash
+      shell: git rev-parse HEAD
+      args:
+        chdir: "/home/ubuntu/snarkOS"
+        executable: /bin/bash
+      register: current_commit_hash
+
+    - name: Set cleaned file name with commit hash, timestamp, tags, and hostname
+      set_fact:
+        detailed_log_filename: "{{ current_commit_hash.stdout[:7] }}_{{ ansible_date_time.iso8601 }}_{{ tags['Role'] }}_{{ tags['Dev'] }}_{{ ansible_hostname }}_snarkos.log"
+        detailed_archive_filename: "{{ current_commit_hash.stdout[:7] }}_{{ ansible_date_time.iso8601 }}_{{ tags['Role'] }}_{{ tags['Dev'] }}_{{ ansible_hostname }}_snarkos.tar.gz"
+
+    - name: Copy and rename snarkos.log to a temporary file with detailed information
+      command: cp /tmp/snarkos.log /tmp/{{ detailed_log_filename }}
+
+    - name: Create a tar.gz archive of the detailed log file
+      ansible.builtin.shell: tar -czf /tmp/{{ detailed_archive_filename }} -C /tmp {{ detailed_log_filename }}
+      args:
+        removes: /tmp/{{ detailed_log_filename }}
+
+    - name: Fetch the detailed tar.gz log file
+      fetch:
+        src: /tmp/{{ detailed_archive_filename }}
+        dest: "./logs/"
+        flat: yes
+
+    - name: Clean up the temporary tar.gz file on the remote
+      file:
+        path: /tmp/{{ detailed_archive_filename }}
+        state: absent

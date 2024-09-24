@@ -1,0 +1,38 @@
+---
+- name: Add Elastic GPG key
+  ansible.builtin.shell:
+    cmd: "wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes --dearmor -o /usr/share/keyrings/elastic-keyring.gpg"
+  args:
+    creates: /usr/share/keyrings/elastic-keyring.gpg
+
+- name: Add Elastic APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
+    state: present
+    filename: elastic-8.x
+
+- name: Update APT cache
+  ansible.builtin.apt:
+    update_cache: yes
+
+# Sleep for 0.5 seconds to avoid lock contention
+- name: Sleep for 0.5 seconds
+  ansible.builtin.shell:
+    cmd: "sleep 0.5"
+
+- name: Install Metricbeat
+  ansible.builtin.apt:
+    name: metricbeat
+    state: latest
+
+- name: Copy Metricbeat Configuration Template for snarkOS
+  ansible.builtin.template:
+    src: metricbeat.yml
+    dest: /etc/metricbeat/metricbeat.yml
+    mode: "0644"
+
+- name: Restart Metricbeat service
+  systemd:
+    name: metricbeat
+    state: restarted
+  become: true

@@ -1,0 +1,37 @@
+- name: Check if snarkos_binary_tag is defined
+  set_fact:
+    use_binary: "{{ snarkos_binary_tag is defined and snarkos_binary_tag | length > 0 }}"
+
+- name: Get commit hash for binary installation
+  block:
+    - name: Slurp the commit hash
+      ansible.builtin.slurp:
+        src: '/usr/bin/SNARKOS_COMMIT_HASH'
+      register: file_content_encoded
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
+  when: use_binary
+
+- name: Get commit hash for git installation
+  block:
+    - name: Get current commit hash
+      shell: git rev-parse HEAD
+      args:
+        chdir: "/home/ubuntu/snarkOS"
+        executable: /bin/bash
+      register: current_commit_hash
+
+    - name: Set commit hash
+      set_fact:
+        commit_hash: "{{ current_commit_hash.stdout }}"
+  when: not use_binary
+
+- name: Print current commit hash
+  debug:
+    msg: "The current commit hash is {{ commit_hash }}"
+
+- name: Set host_public_ip
+  set_fact:
+    host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"

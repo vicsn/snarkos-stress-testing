@@ -1,0 +1,2 @@
+- name: Run Test
+  import_playbook: ../tests/{{ test_name }}/run_test.yml

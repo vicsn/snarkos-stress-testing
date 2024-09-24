@@ -1,0 +1,65 @@
+---
+- name: Manage snarkOS nodes
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Stop snarkos service
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Wait for 10 seconds
+      pause:
+        seconds: 10
+
+    - name: Find ledger directories
+      find:
+        paths: "/home/ubuntu/"
+        patterns: ".ledger-*-*"
+        use_regex: false
+        file_type: directory
+        hidden: true  # Ensuring hidden files are considered
+      register: directories_to_delete
+
+    - name: Debug found directories
+      debug:
+        msg: "Found directories: {{ directories_to_delete.files | map(attribute='path') | list }}"
+
+    - name: Remove found directories
+      file:
+        paths:
+          - "/home/ubuntu/"
+          - "/"
+        state: absent
+      with_items: "{{ directories_to_delete.files }}"
+      when: directories_to_delete.matched > 0
+
+    - name: Find proposal cache files
+      find:
+        paths:
+          - "/home/ubuntu/"
+          - "/"
+        patterns: ".current-proposal-cache-*-*"
+        use_regex: false
+        file_type: file
+        hidden: true  # Ensuring hidden files are considered
+      register: files_to_delete
+
+    - name: Debug found files
+      debug:
+        msg: "Found files: {{ files_to_delete.files | map(attribute='path') | list }}"
+
+    - name: Remove found files
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      with_items: "{{ files_to_delete.files }}"
+      when: files_to_delete.matched > 0
+
+    - name: Remove snarkos log file
+      file:
+        path: /tmp/snarkos.log
+        state: absent
+
+  tags: manage_snarkos

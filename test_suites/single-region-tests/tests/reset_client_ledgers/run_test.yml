@@ -1,0 +1,32 @@
+- name: Reset clients
+  hosts: snarkos_client
+  remote_user: ubuntu
+  become: true
+  serial: 1
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_client_facts.yml
+
+    - name: Stop the honest clients
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Stop the malice clients
+      systemd:
+        name: snarkos-malice
+        state: stopped
+      ignore_errors: yes # in case we never deployed malice
+
+    - name: Remove existing ledgers on clients
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
+  post_tasks:
+    - name: Check if the node is synced.
+      include_tasks: ../../playbooks/is_synced.yml
+      vars:
+        node_to_check: localhost
+        node_to_compare: test_network_url
+
+  roles:
+    - snarkos_service
+  tags: snarkos_client

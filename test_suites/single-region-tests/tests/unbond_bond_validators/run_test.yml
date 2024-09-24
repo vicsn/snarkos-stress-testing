@@ -1,0 +1,102 @@
+# ------------------------------------------------
+# tx-cannon
+
+# Get load balancer DNS name
+- name: Gather information about all ELBs
+  hosts: localhost
+  gather_facts: no
+  remote_user: ubuntu
+  tasks:
+    - name: Wait for the network to be healthly
+      uri:
+        url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 10
+  tags: tx-cannon
+
+# prepare the bond cannons
+- name: Install and Configure tx-cannon on all nodes
+  hosts: tx_cannon_node[0]
+  become: true
+  remote_user: ubuntu
+  roles:
+    - txcannon_setup
+    - logstash_txcannon_setup
+  tags: tx-cannon
+
+# prepare the unbond cannons
+- name: Install and Configure tx-cannon on all nodes
+  hosts: tx_cannon_node[1]
+  become: true
+  remote_user: ubuntu
+  roles:
+    - txcannon_setup
+    - logstash_txcannon_setup
+  tags: tx-cannon
+
+# Fetch and print committee data
+- name: Fetch pre-bond/unbond committee data
+  hosts: localhost 
+  gather_facts: no
+  tasks:
+    - name: Get current committee data
+      uri:
+        url: "http://{{ hostvars['localhost']['test_network_url'] }}:3030/mainnet/committee/latest"
+        method: GET
+        return_content: yes
+      register: committee_data
+
+    - name: Print pre-bond/unbond committee data
+      debug:
+        msg: "{{ committee_data.json }}"
+
+# run bond tx-cannon
+- name: Bond validators
+  hosts: tx_cannon_node[0]
+  become: true
+  remote_user: ubuntu
+  vars:
+    txcannon_command: tx-cannon batch-execute --test tests/bond_public_validators/10_devnet_validator_bond_public.toml --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 --repetitions 500 --concurrent-transactions 50
+  roles:
+    - txcannon_service
+  tags: tx-cannon-bond
+
+# run unbond tx-cannon
+- name: Unbond validators
+  hosts: tx_cannon_node[1]
+  become: true
+  vars:
+    txcannon_command: tx-cannon batch-execute --test tests/bond_public_validators/10_devnet_validator_unbond_public.toml --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 --repetitions 500 --concurrent-transactions 50
+  remote_user: ubuntu
+  roles:
+    - txcannon_service
+  tags: tx-cannon-unbond
+
+- name: Wait
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Wait
+      pause:
+        minutes: 10
+
+# Fetch and print committee data
+- name: Fetch post-bond/unbond committee data
+  hosts: localhost 
+  gather_facts: no
+  tasks:
+    - name: Get current committee data
+      uri:
+        url: "http://{{ hostvars['localhost']['test_network_url'] }}:3030/mainnet/committee/latest"
+        method: GET
+        return_content: yes
+      register: committee_data
+
+    - name: Print post-bond/unbond committee data
+      debug:
+        msg: "{{ committee_data.json }}"
