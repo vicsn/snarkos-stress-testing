@@ -1,8 +1,9 @@
 terraform {
-  required_providers {
-    aws = {
-      source = "hashicorp/aws"
-    }
+  backend "s3" {
+    bucket         = "ephnet-terraform-state-bucket-eq"
+    key            = "terraform/state/single-region-tests/terraform.tfstate"
+    region         = "us-west-2"
+    profile        = "ephnet"
   }
 }
 
@@ -56,9 +57,9 @@ module "tx-cannon" {
 # snarkOS validators
 
 resource "aws_instance" "snarkos_validator" {
-  count         = var.instance_count
+  count         = var.validator_instance_count
   ami           = module.stress_base_ami.ami_id
-  instance_type = var.instance_type
+  instance_type = var.validator_instance_type
   key_name      = aws_key_pair.generated_key.key_name
 
   security_groups = [module.sg.security_group_name]
@@ -155,7 +156,7 @@ output "instance_ips" {
 
 resource "aws_instance" "prometheus_server" {
   ami           = module.stress_base_ami.ami_id
-  instance_type = var.instance_type
+  instance_type = var.client_instance_type
   key_name      = aws_key_pair.generated_key.key_name
   security_groups = [module.sg.security_group_name]
 

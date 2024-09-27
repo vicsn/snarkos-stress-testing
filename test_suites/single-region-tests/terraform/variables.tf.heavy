@@ -3,14 +3,24 @@ variable "devnet_name" {
   default     = "single-region-tests"
 }
 
-variable "instance_type" {
+variable "validator_instance_type" {
   description = "Instance type for snarkOS validators"
   default     = "m7i.4xlarge"
 }
 
-variable "instance_count" {
+variable "client_instance_type" {
+  description = "Instance type for snarkOS validators"
+  default     = "m7i.4xlarge"
+}
+
+variable "validator_instance_count" {
   description = "Number of snarkOS validators"
   default     = 10
+}
+
+variable "client_instance_count" {
+  description = "Number of snarkOS validators"
+  default     = 3
 }
 
 # ------------------------------------------------
@@ -18,16 +28,16 @@ variable "instance_count" {
 
 locals {
   client_instance_config = [
-    { type = "m7i.2xlarge", count = 3, validator = 0 },
-    { type = "m7i.2xlarge", count = 3, validator = 1 },
-    { type = "m7i.2xlarge", count = 3, validator = 2 },
-    { type = "m7i.2xlarge", count = 3, validator = 3 },
-    { type = "m7i.2xlarge", count = 3, validator = 4 },
-    { type = "m7i.2xlarge", count = 3, validator = 5 },
-    { type = "m7i.2xlarge", count = 3, validator = 6 },
-    { type = "m7i.2xlarge", count = 3, validator = 7 },
-    { type = "m7i.2xlarge", count = 3, validator = 8 },
-    { type = "m7i.2xlarge", count = 3, validator = 9 }
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 0 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 1 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 2 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 3 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 4 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 5 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 6 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 7 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 8 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 9 }
   ]
 
   snarkos_clients = flatten([
@@ -66,7 +76,7 @@ variable "tx_cannon_services" {
     BatchTransfer = {
       tx_command = "tx-cannon batch-transfer -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 1 -a aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pjsl2kha7fv7hvz2eqxs5dz0rg --network mainnet"
       task_count = 100
-    },
+    }
     BatchDeploy = {
       tx_command = "tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_1.txt -k APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --randomize --redeploys 10000000 --concurrent-deployments 3 --network mainnet"
       task_count = 5

@@ -1,0 +1,80 @@
+variable "devnet_name" {
+  description = "Unique name for this devnet deployment"
+  default     = "single-region-tests"
+}
+
+variable "validator_instance_type" {
+  description = "Instance type for snarkOS validators"
+  default     = "m7i.2xlarge"
+}
+
+variable "client_instance_type" {
+  description = "Instance type for snarkOS validators"
+  default     = "m7i.2xlarge"
+}
+
+variable "validator_instance_count" {
+  description = "Number of snarkOS validators"
+  default     = 5
+}
+
+variable "client_instance_count" {
+  description = "Number of snarkOS validators"
+  default     = 1
+}
+
+# ------------------------------------------------
+# Clients
+
+locals {
+  client_instance_config = [
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 0 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 1 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 2 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 3 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 4 }
+  ]
+
+  snarkos_clients = flatten([
+    for config_idx, config in local.client_instance_config : [
+      for i in range(config.count) : {
+        type = config.type,
+        index = i,
+        validator = config.validator
+      }
+    ]
+  ])
+}
+
+# ------------------------------------------------
+# ECS Cannons
+
+variable "existing_cluster_name" {
+  description = "Name of the existing ECS cluster to use"
+  default     = "tx-cannon"
+  type        = string
+}
+
+variable "ecr_repository_url" {
+  description = "URL of the ECR repository containing the tx-cannon image"
+  default     = "637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon"
+}
+
+# tx_cannon_services
+variable "tx_cannon_services" {
+  description = "Map of tx-cannon services with their respective commands and task counts"
+  type = map(object({
+    tx_command = string
+    task_count = number
+  }))
+  default = {
+    BatchTransfer = {
+      tx_command = "tx-cannon batch-transfer -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 1 -a aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pjsl2kha7fv7hvz2eqxs5dz0rg --network mainnet"
+      task_count = 1
+    }
+    BatchDeploy = {
+      tx_command = "tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_1.txt -k APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --randomize --redeploys 10000000 --concurrent-deployments 3 --network mainnet"
+      task_count = 1
+    }
+  }
+}

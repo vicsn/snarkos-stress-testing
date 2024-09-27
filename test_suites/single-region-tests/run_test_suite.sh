@@ -87,13 +87,22 @@ else
 fi
 
 # Ask if terraform should be run
-read -p "Do you want to run Terraform? (y/n): " RUN_TERRAFORM
+read -p "Do you want to run Terraform? (h)eavy / (l)ight / (n)o ): " RUN_TERRAFORM
 # Ask if the nodes should be setup.
 read -p "Do you want to run setup of all services? (y/n): " RUN_SETUP
 
 # Optionally initialize and apply Terraform
-if [ "$RUN_TERRAFORM" == "y" ]; then
+if [ "$RUN_TERRAFORM" == "h" ]; then
+    cp $PARENT_DIR/terraform/variables.tf.heavy $PARENT_DIR/terraform/variables.tf
     init_and_apply_terraform
+elif [ "$RUN_TERRAFORM" == "l" ]; then
+    cp $PARENT_DIR/terraform/variables.tf.light $PARENT_DIR/terraform/variables.tf
+    init_and_apply_terraform
+elif [ "$RUN_TERRAFORM" == "n" ]; then
+    echo "Skipping Terraform..."
+else
+    echo "Invalid option. Exiting..."
+    exit 1
 fi
 
 # Get the load balancer DNS name and ip addresses

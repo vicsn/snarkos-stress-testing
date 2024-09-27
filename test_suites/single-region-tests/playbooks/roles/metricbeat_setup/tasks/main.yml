@@ -15,15 +15,14 @@
   ansible.builtin.apt:
     update_cache: yes
 
-# Sleep for 0.5 seconds to avoid lock contention
-- name: Sleep for 0.5 seconds
-  ansible.builtin.shell:
-    cmd: "sleep 0.5"
-
 - name: Install Metricbeat
   ansible.builtin.apt:
     name: metricbeat
     state: latest
+  register: apt_result
+  retries: 5
+  delay: 30
+  until: apt_result is success
 
 - name: Copy Metricbeat Configuration Template for snarkOS
   ansible.builtin.template:

@@ -19,6 +19,10 @@
   ansible.builtin.apt:
     name: filebeat
     state: latest
+  register: apt_result
+  retries: 5
+  delay: 30
+  until: apt_result is success
 
 - name: Copy Filebeat Configuration Template for snarkOS
   ansible.builtin.template:

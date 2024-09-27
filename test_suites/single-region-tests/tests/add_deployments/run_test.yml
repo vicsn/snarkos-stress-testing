@@ -40,30 +40,27 @@
         cmd: tx-cannon deploy -p /home/ubuntu/tx-cannon/tests/ridiculous_finalize_hash/{{ program }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH
       loop:
         - ridiculous_finalize_hash.aleo
-        - large_bhp_256_500.aleo
-        - large_bhp_256_1000.aleo
-        - large_bhp_256_2000.aleo
-        - large_bhp_256_5000.aleo
-        - large_bhp_256_10000.aleo
-        - large_bhp_256_20000.aleo
-        - large_bhp_256_50000.aleo
       loop_control:
         loop_var: program
+      register: deploy_results
 
-    - name: Deploy more base programs
+    - name: Deploy more base programs, three times to circumvent deployment limits
       ansible.builtin.shell:
         cmd: tx-cannon batch-deploy --manifest {{ manifest }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH 
       loop:
-        - tests/normal_network_traffic/normal_network_traffic.txt
-        - tests/normal_network_traffic/double_color_ball.txt
+        - /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt
+        - /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt
+        - /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt
       loop_control:
         loop_var: manifest
-
+        pause: 10
+      register: deploy_results
+    
     - name: Wait for multiple endpoints to be ready
       vars:
         endpoints:
+          - "http://localhost:3030/mainnet/program/ridiculous_finalize_hash.aleo"
           - "http://localhost:3030/mainnet/program/hello_hello.aleo"
-          - "http://localhost:3030/mainnet/program/double_color_ball.aleo"
           - "http://localhost:3030/mainnet/program/calculator.aleo"
           - "http://localhost:3030/mainnet/program/temperatureconverter.aleo"
           - "http://localhost:3030/mainnet/program/animals_nft_v30.aleo"
@@ -81,7 +78,7 @@
             timeout: 10
           register: result
           until: result.status == 200
-          retries: 10
+          retries: 5
           delay: 2
           loop: "{{ endpoints }}"
       run_once: true
