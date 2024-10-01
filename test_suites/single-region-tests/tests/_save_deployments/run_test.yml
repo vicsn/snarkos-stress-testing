@@ -53,22 +53,17 @@
         program_suffix: "{{ node_id }}"
         # the default snarkOS rate-limits allow 8 per second for 10 minutes per validator, spread over the different number of tx-cannon workers
         # however, 1000 deployments already cost as much as a month's budget so we go with that
-        num_deployments: "{{ (5 / (groups['tx_cannon_node'] | length)) | float | int }}" 
-        prover_parallelization: "1" # suitable for a c5.4xlarge
+        num_deployments: "{{ (300 / (groups['tx_cannon_node'] | length)) | float | int }}" 
+        prover_parallelization: "4" # suitable for a c5.4xlarge
       register: out
       become: yes
-      async: 3600 # 1 hour
-      poll: 30
+      async: 36000 # 10 hours
+      poll: 60
+      # ignore_errors: yes
     
     - name: Print output
       debug:
         var: out.stdout_lines
-
-    # Repeat a fact setting so we can --start-at-task easily if the previous task hangs
-    - name: Set node_id based on instance tag 2
-      set_fact:
-        node_id: "{{ tags['Dev'] }}"
-        num_validators: "{{ groups['snarkos_validator'] | length }}"
 
     - name: Fetch pregenerated transactions
       fetch:

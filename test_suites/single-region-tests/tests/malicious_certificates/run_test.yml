@@ -33,7 +33,16 @@
       set_fact:
         malicemode: ""
         snarkos_binary_name: snarkos
-      run_once: true 
+      run_once: true
+
+    - name: stop snarkos
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove existing .ledger-* directories on malice validators
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
 
     - name: Set snarkos command with peers and validators
       set_fact:

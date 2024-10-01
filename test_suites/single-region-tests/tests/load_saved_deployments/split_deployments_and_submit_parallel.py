@@ -32,8 +32,11 @@ def main():
     with open(ip_addresses_path, "r") as f:
         ip_addresses = f.readlines()
 
-    num_pregenerated_txs_files = 5
     num_validators = len(ip_addresses)
+
+    # Read how many pregenerated txs files are there giving num_validators
+    num_pregenerated_txs_files_path = os.path.join(os.getcwd(), "..", "..", "transaction_files")
+    num_pregenerated_txs_files = len([name for name in os.listdir(num_pregenerated_txs_files_path) if f"{num_validators}val-deploys" in name])
     
     # Read pregenerated txs
     txs = []

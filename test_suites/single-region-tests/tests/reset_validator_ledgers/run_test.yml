@@ -25,7 +25,7 @@
       include_tasks: ../../playbooks/is_synced.yml
       vars:
         node_to_check: localhost
-        node_to_compare: test_network_url
+        node_to_compare: "{{ test_network_url }}"
 
   roles:
     - snarkos_service

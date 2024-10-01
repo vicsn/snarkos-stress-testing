@@ -38,7 +38,7 @@
         --repo ProvableHQ/snarkOS-staging
         --pattern "snarkos*unknown-linux-gnu.zip"
         --output "/tmp/snarkos-malicious.zip"
-        --skip-existing
+        --clobber
 
         unzip -o /tmp/snarkos-malicious.zip -d /tmp/snarkos-malicious
 

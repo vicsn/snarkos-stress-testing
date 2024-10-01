@@ -22,7 +22,7 @@ init_and_apply_terraform() {
 }
 
 run_test() {
-    echo "${bold}Running test: $SELECTED${normal}"
+    echo "${bold}$(date +"%T") - Running test: $SELECTED${normal}"
 
     # Run any pre-test script
     if [ -x "$PARENT_DIR/tests/$SELECTED/pre-test.sh" ]; then
@@ -114,6 +114,11 @@ terraform output -json instance_ips > output.json && jq -r '.[]' output.json > .
 if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
     ansible-playbook setup.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+elif [ "$RUN_SETUP" == "n" ]; then
+    echo "Skipping setup..."
+else
+    echo "Invalid option. Exiting..."
+    exit 1
 fi
 
 # If running all tests, run them in series
