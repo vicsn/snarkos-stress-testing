@@ -47,6 +47,8 @@ Temporary Items
 **/node_modules/
 
 ip_addresses.txt
+client_ip_addresses.txt
+lb_url.txt
 output.json
 programs_to_deploy
 variables.tf

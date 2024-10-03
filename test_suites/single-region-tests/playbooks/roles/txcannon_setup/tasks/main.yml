@@ -4,6 +4,7 @@
     repo: https://{{ github_token }}:x-oauth-basic@github.com/ProvableHQ/tx-cannon.git
     dest: /home/ubuntu/tx-cannon
     version: mainnet
+    force: yes
 
 - name: Download tx-cannon binary with GitHub CLI # noqa: no-changed-when
   shell: >

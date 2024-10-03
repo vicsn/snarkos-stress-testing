@@ -46,7 +46,7 @@
 
     - name: Deploy more base programs, three times to circumvent deployment limits
       ansible.builtin.shell:
-        cmd: tx-cannon batch-deploy --manifest {{ manifest }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH 
+        cmd: tx-cannon batch-deploy --manifest {{ manifest }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH 
       loop:
         - /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt
         - /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt

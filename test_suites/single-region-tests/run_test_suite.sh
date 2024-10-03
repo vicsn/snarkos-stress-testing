@@ -19,6 +19,12 @@ init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
     terraform init
     terraform apply -auto-approve
+    # Save the load balancer DNS name
+    terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
+    LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+    # Save updated IP addresses
+    cd "$PARENT_DIR/playbooks"
+    ansible-playbook ips.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
 }
 
 run_test() {
@@ -105,10 +111,8 @@ else
     exit 1
 fi
 
-# Get the load balancer DNS name and ip addresses
-cd $PARENT_DIR/terraform
-LB_URL=$(terraform output -raw snarkos_lb_dns_name)
-terraform output -json instance_ips > output.json && jq -r '.[]' output.json > ../ip_addresses.txt
+# Read the load balancer DNS name from lb_url.txt
+LB_URL=$(cat $PARENT_DIR/lb_url.txt)
 
 # Optionally run Ansible playbook to setup services
 if [ "$RUN_SETUP" == "y" ]; then

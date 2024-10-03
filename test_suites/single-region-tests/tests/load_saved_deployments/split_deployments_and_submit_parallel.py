@@ -36,12 +36,13 @@ def main():
 
     # Read how many pregenerated txs files are there giving num_validators
     num_pregenerated_txs_files_path = os.path.join(os.getcwd(), "..", "..", "transaction_files")
-    num_pregenerated_txs_files = len([name for name in os.listdir(num_pregenerated_txs_files_path) if f"{num_validators}val-deploys" in name])
+    num_pregenerated_txs_files = len([name for name in os.listdir(num_pregenerated_txs_files_path) if f"deploys-{num_validators}val-" in name])
     
+    print(num_pregenerated_txs_files)
     # Read pregenerated txs
     txs = []
     for i in range(num_pregenerated_txs_files):
-        tx_path = os.path.join(os.getcwd(), "..", "..", "transaction_files", f"{num_validators}val-deploys-{i}.txt")
+        tx_path = os.path.join(os.getcwd(), "..", "..", "transaction_files", f"deploys-{num_validators}val-{i}.txt")
         if not os.path.exists(tx_path):
                 print(f"Missing transaction file {tx_path}, exiting...")
                 exit()
@@ -55,14 +56,13 @@ def main():
         os.makedirs(deployments_split_folder_path)
 
     number_of_programs = len(txs)
-    number_of_validators = len(ip_addresses)
     print("number of programs: ", number_of_programs)
-
-    programs_per_validator = number_of_programs // number_of_validators
+    programs_per_validator = number_of_programs // num_validators
+    assert programs_per_validator > 0, "Not enough programs to split among validators"
 
     deployment_counter = 0
     deployment_paths = []
-    for i in range(number_of_validators):
+    for i in range(num_validators):
         deployment_path = os.path.join(deployments_split_folder_path, f"deployments_{i}.txt")
         deployment_paths.append(deployment_path)
 
@@ -81,9 +81,9 @@ def main():
     start = time.time()
 
     # Use ProcessPoolExecutor to parallelize the execution
-    with ProcessPoolExecutor(max_workers=number_of_validators) as executor:
+    with ProcessPoolExecutor(max_workers=num_validators) as executor:
         # Schedule the execute_command calls and use as_completed to block until they are done
-        futures = {executor.submit(send_transactions, deployment_paths[i], ip_addresses[i].strip()): i for i in range(number_of_validators)}
+        futures = {executor.submit(send_transactions, deployment_paths[i], ip_addresses[i].strip()): i for i in range(num_validators)}
         for future in as_completed(futures):
             i = futures[future]
             try:
@@ -92,7 +92,7 @@ def main():
             except Exception as exc:
                 print(f'Generated an exception: {exc}')
             else:
-                print(f'Validator {i} completed')
+                print(f'Validator {i} - {ip_addresses[i].strip()} completed')
     
     # end measure time
     end = time.time()

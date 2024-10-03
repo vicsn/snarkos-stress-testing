@@ -16,6 +16,7 @@ module "stress_base_ami" {
 ## Building and publishing
 
 ```bash
+packer init tress-test-base.json.pkr.hcl 
 packer build stress-test-base.json.pkr.hcl 
 ```
 

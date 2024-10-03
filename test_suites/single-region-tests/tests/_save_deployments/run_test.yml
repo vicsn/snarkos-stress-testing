@@ -54,7 +54,7 @@
         # the default snarkOS rate-limits allow 8 per second for 10 minutes per validator, spread over the different number of tx-cannon workers
         # however, 1000 deployments already cost as much as a month's budget so we go with that
         num_deployments: "{{ (300 / (groups['tx_cannon_node'] | length)) | float | int }}" 
-        prover_parallelization: "4" # suitable for a c5.4xlarge
+        prover_parallelization: "3" # suitable for a c5.4xlarge
       register: out
       become: yes
       async: 36000 # 10 hours
@@ -68,5 +68,5 @@
     - name: Fetch pregenerated transactions
       fetch:
         src: "/home/ubuntu/tx-cannon/program_deployments/all_deployments.txt"
-        dest: "../../transaction_files/{{ num_validators }}val-deploys-{{ node_id }}.txt"
+        dest: "../../transaction_files/deploys-{{ num_validators }}val-{{ node_id }}.txt"
         flat: yes
