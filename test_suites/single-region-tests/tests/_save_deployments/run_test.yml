@@ -1,24 +1,6 @@
 # ------------------------------------------------
 # tx-cannon
 
-# Get load balancer DNS name
-- name: Gather information about all ELBs
-  hosts: localhost
-  gather_facts: no
-  remote_user: ubuntu
-  tasks:
-    - name: Wait for the network to be healthly
-      uri:
-        url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
-        method: GET
-        status_code: 200
-        timeout: 10
-      register: result
-      until: result.status == 200
-      retries: 10
-      delay: 10
-  tags: tx-cannon
-
 # prepare the cannons
 - name: Install and configure tx-cannon and snarkos on all nodes
   hosts: tx_cannon_node
@@ -30,17 +12,35 @@
     - snarkos_install_binary
   tags: tx-cannon
 
-# NOTE: the following task can hang, make sure to properly await its completion
-
 - name: GENERATE THE DEPLOYMENTS!
   hosts: tx_cannon_node
   become: true
   remote_user: ubuntu
   tasks:
-    - name: Set node_id based on instance tag
+    - name: Ask the user for the number of validators in the target network
+      pause:
+        prompt: "How many validators do you expect in the target network?"
+      register: num_validators
+
+    - name: Ask the user for the number of deployments to generate (multiple of num_validators * num_tx_cannons)
+      pause:
+        prompt: "How many deployments do you want to generate in total?"
+      register: total_deployments
+
+    - name: Set facts from user input
+      set_fact:
+        num_validators: "{{ num_validators.user_input }}"
+        total_deployments: "{{ total_deployments.user_input }}"
+      run_once: true
+
+    - name: Assert that we're generating enough deployments
+      assert:
+        that: "(total_deployments | int) % ((num_validators | int) * (groups['tx_cannon_node'] | length)) == 0"
+        fail_msg: "The total number of deployments must be divisible by the number of validators and the number of tx-cannon nodes"
+
+    - name: Set node id
       set_fact:
         node_id: "{{ tags['Dev'] }}"
-        num_validators: "{{ groups['snarkos_validator'] | length }}"
 
     - name: Run tx-cannon
       shell: |
@@ -53,20 +53,25 @@
         program_suffix: "{{ node_id }}"
         # the default snarkOS rate-limits allow 8 per second for 10 minutes per validator, spread over the different number of tx-cannon workers
         # however, 1000 deployments already cost as much as a month's budget so we go with that
-        num_deployments: "{{ (300 / (groups['tx_cannon_node'] | length)) | float | int }}" 
+        num_deployments: "{{ ((total_deployments | int) / (groups['tx_cannon_node'] | length)) | float | int }}" 
         prover_parallelization: "3" # suitable for a c5.4xlarge
       register: out
       become: yes
       async: 36000 # 10 hours
       poll: 60
-      # ignore_errors: yes
     
     - name: Print output
       debug:
         var: out.stdout_lines
+
+    # - name: Set facts to skip ahead using start-at-task
+    #   set_fact:
+    #     node_id: "{{ tags['Dev'] }}"
+    #     num_validators: 25
 
     - name: Fetch pregenerated transactions
       fetch:
         src: "/home/ubuntu/tx-cannon/program_deployments/all_deployments.txt"
         dest: "../../transaction_files/deploys-{{ num_validators }}val-{{ node_id }}.txt"
         flat: yes
+  tags: tx-cannon

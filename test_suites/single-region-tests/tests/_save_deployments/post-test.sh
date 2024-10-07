@@ -2,7 +2,7 @@
 
 # We should be cd-ed into the test folder
 
-cd ../../terraform
+cd ../../terraform_tx_cannon
 # Remove tx-cannon nodes.
 echo "Removing tx-cannon nodes"
-terraform apply -auto-approve -var="add_tx_cannons=false" | grep -E 'Plan|Resources'
+terraform destroy -parallelism=50 -auto-approve | grep -E 'Plan|Resources'

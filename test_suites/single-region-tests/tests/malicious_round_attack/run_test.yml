@@ -15,13 +15,15 @@
 
     - name: set malice specific facts
       set_fact:
-        malicemode: Environment="RoundsFarAhead=1"
+        malicemode: |
+          Environment="RoundsFarAhead=1"
+          Environment="ROUND_ADVANCE=10"
         snarkos_binary_name: snarkos-malice
       run_once: true
 
     - name: Set snarkos command with peers and validators
       set_fact:
-        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ validator_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"
+        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"
   roles:
     - snarkos_service
 
@@ -43,8 +45,36 @@
         snarkos_binary_name: snarkos
       run_once: true 
 
+    - name: stop snarkos
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove existing .ledger-* directories on malice validators
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
+
     - name: Set snarkos command with peers and validators
       set_fact:
-        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ validator_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"
+        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"
   roles:
     - snarkos_service
+
+- name: Undo malicemode state on clients
+  hosts: snarkos_client[1]
+  remote_user: ubuntu
+  become: true
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_client_facts.yml
+
+    - name: Stop the clients
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove existing .ledger-* directories on clients
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
+  roles:
+    - snarkos_service
+  tags: snarkos_client

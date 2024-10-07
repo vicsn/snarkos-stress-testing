@@ -1,0 +1,26 @@
+- name: Fetch logs from validators
+  hosts: snarkos_validator
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_validator_facts.yml
+  tasks:
+    - name: Fetch logs
+      fetch:
+        src: "/tmp/snarkos.log"
+        dest: "../../log_files/val-{{ node_id }}.txt"
+        flat: yes
+    
+
+- name: Fetch logs from clients
+  hosts: snarkos_client
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: ../../playbooks/set_client_facts.yml
+  tasks:
+    - name: Fetch logs
+      fetch:
+        src: "/tmp/snarkos.log"
+        dest: "../../log_files/client-{{ node_id }}.txt"
+        flat: yes

@@ -94,7 +94,7 @@
     loop_var: node
 
 - name: Include tasks to retry. Configure max attempts and retry delay as needed.
-  include_tasks: ../../is_synced.yml
+  include_tasks: ../../playbooks/is_synced.yml
   vars:
     node_to_check: "{{ node }}"
     node_to_compare: "{{ source_node }}"

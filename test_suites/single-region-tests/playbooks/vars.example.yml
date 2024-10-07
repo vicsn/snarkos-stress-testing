@@ -10,7 +10,7 @@ github_token: "your_github_token_here" # link to generate: https://github.com/se
 # For binary installation:
 snarkos_binary_tag: "mainnet-latest"
 tx_cannon_binary_tag: "mainnet-latest"
-snarkos_malice_tag: "malice-22510524b"
+snarkos_malice_tag: "malice-2349f3eda" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs
 snarkos_repo: "https://github.com/AleoNet/snarkOS.git"
 # For git-based installation:
 # snarkos_git_hash: "mainnet-staging"

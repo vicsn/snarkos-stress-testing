@@ -15,12 +15,13 @@ variable "client_instance_type" {
 
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 10
+  default     = 25
 }
 
 variable "client_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 3
+  default     = 1 # More would surpass vCPU limit
+}
 }
 
 # ------------------------------------------------
@@ -37,7 +38,22 @@ locals {
     { type = var.client_instance_type, count = var.client_instance_count, validator = 6 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 7 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 8 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 9 }
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 9 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 10 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 11 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 12 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 13 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 14 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 15 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 16 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 17 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 18 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 19 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 20 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 21 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 22 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 23 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 24 }
   ]
 
   snarkos_clients = flatten([

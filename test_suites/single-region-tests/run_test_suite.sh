@@ -9,9 +9,14 @@ normal=$(tput sgr0)
 # Function to clean up resources using Terraform
 cleanup() {
     echo "An error occurred. Destroying infrastructure to avoid unnecessary costs..."
+
     read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+
     cd "$PARENT_DIR/terraform"
-    terraform destroy -auto-approve
+    terraform destroy -auto-approve -parallelism=50
+
+    cd "$PARENT_DIR/terraform_tx_cannon"
+    terraform destroy -auto-approve -parallelism=50
 }
 
 # Function to init and apply Terraform
@@ -127,10 +132,11 @@ fi
 
 # If running all tests, run them in series
 if [ "$SELECTED" == "all" ]; then
-    echo "Running all tests... (skipping '_save_deployments' and '_reset_all')"
+    echo Running all tests...
     for test in "${TESTS[@]}"; do
-        # Skip the '_save_deployments' and '_reset_all'
-        if [ "$test" == "_save_deployments" ] || [ "$test" == "_reset_all" ]; then
+        # Skip if the first letter of "$test" is an underscore
+        if [[ "$test" == _* ]]; then
+            echo "Skipping $test"
             continue
         fi
         export SELECTED=$test
@@ -147,4 +153,6 @@ read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 # Destroy the infrastructure
 echo "Destroying infrastructure..."
 cd "$PARENT_DIR/terraform"
-terraform destroy -auto-approve -parallelism=200
+terraform destroy -auto-approve -parallelism=50
+cd "$PARENT_DIR/terraform_tx_cannon"
+terraform destroy -auto-approve -parallelism=50

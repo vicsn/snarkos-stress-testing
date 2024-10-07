@@ -1,9 +1,17 @@
 - name: Run test 1 times
-  hosts: localhost
+  hosts: snarkos_validator
+  user: ubuntu
+  # pre_tasks:
+  #   - include_tasks: ../../playbooks/set_validator_facts.yml
   tasks:
+    - name: set num_instances
+      set_fact:
+        num_instances: "{{ groups['snarkos_validator'] | length }}"
+      run_once: true
+
     - name: Swap ledgers 1 at a time
       include_tasks: swap.yml
-      loop: "{{ range(0, num_instances) }}"
+      loop: "{{ range(0, num_instances | int) }}"
       loop_control:
         loop_var: cycle_index
       vars:
@@ -17,6 +25,6 @@
       loop_control:
         loop_var: cycle_index
       vars:
-        batched_groups: "{{ groups['snarkos_validator'] | batch(half_of_nodes) | list }}"
+        batched_groups: "{{ groups['snarkos_validator'] | batch((num_instances / 2 | int)) | list }}"
         current_group: "{{ batched_groups[cycle_index | int % (batched_groups | length)] }}"
         source_node: "{{ groups['snarkos_validator'] | difference(current_group) | first }}"

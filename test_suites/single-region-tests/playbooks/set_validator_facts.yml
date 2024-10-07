@@ -10,12 +10,12 @@
 - name: set instance-specific facts
   set_fact:
     formatted_validator_ips: "{{ groups['snarkos_validator'] | map('extract', hostvars, ['public_ip_address']) | map('regex_replace', '^(.*)$', '\\1:5000') | join(',') }}"
-    validator_id: "{{ tags['Dev'] }}"
+    node_id: "{{ tags['Dev'] }}"
 
 - name: Collect client IPs for the current validator
   set_fact:
-    validator_client_ips: "{{ groups['snarkos_client'] | map('extract', hostvars) | selectattr('tags.Validator', 'equalto', validator_id | string) | map(attribute='public_ip_address') | map('regex_replace', '^(.*)$', '\\1:4130') | join(',') }}"
+    validator_client_ips: "{{ groups['snarkos_client'] | map('extract', hostvars) | selectattr('tags.Validator', 'equalto', node_id | string) | map(attribute='public_ip_address') | map('regex_replace', '^(.*)$', '\\1:4130') | join(',') }}"
 
 - name: Set snarkos command with peers and validators
   set_fact:
-    snarkos_command: "snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ validator_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"
+    snarkos_command: "snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs"

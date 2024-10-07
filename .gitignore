@@ -52,3 +52,4 @@ lb_url.txt
 output.json
 programs_to_deploy
 variables.tf
+log_files

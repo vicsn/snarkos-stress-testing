@@ -26,18 +26,17 @@
   set_fact:
     client_addresses: "{{ client_addresses | regex_replace('([^,]+)', '\\1:4130') }}"
 
-- name: Set dev_id based on instance tag
+- name: Set node_id based on instance tag
   set_fact:
-    dev_id: "{{ (num_instances | int) + 100*(validator_index | int) + 10000*(tags['Dev'] | int) }}"
+    node_id: "{{ (num_instances | int) + 100*(validator_index | int) + 10000*(tags['Dev'] | int) }}"
 
 - name: Assert that num_instances is lower than 100
   assert:
     that:
       - (num_instances | int) < 100
-    fail_msg: "The client dev_id indexing assumes less than 100 validators."
-    success_msg: ""
+    fail_msg: "The client node_id indexing assumes less than 100 validators."
 
 - name: Set snarkos command with the assigned validator
   set_fact:
-    snarkos_command: "snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_address }}:4130,{{ client_addresses }} --dev {{ dev_id }} --dev-num-validators {{ num_instances }} --rest-rps 90000000"
+    snarkos_command: "snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_address }}:4130,{{ client_addresses }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --rest-rps 90000000"
 
