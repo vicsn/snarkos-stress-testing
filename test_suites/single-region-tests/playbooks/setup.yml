@@ -49,6 +49,44 @@
   tags: snarkos_install
 
 # ------------------------------------------------
+# flamegraph
+
+- name: Install flamegraph dependencies
+  hosts: snarkos_validator
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: set_validator_facts.yml
+  tasks:
+    - name: Capture kernel version
+      command: uname -r
+      register: kernel_version
+      when: create_flamegraph and node_id == flamegraph_node_id
+
+    - name: Install flamegraph dependencies
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      with_items:
+        - linux-tools-common
+        - linux-tools-generic
+        - linux-tools-{{ kernel_version.stdout }}
+        - build-essential
+      when: create_flamegraph and node_id == flamegraph_node_id
+  
+    - name: Install Rustup and flamegraph # As advised by https://github.com/flamegraph-rs/flamegraph
+      shell: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+        . "$HOME/.cargo/env"
+
+        cargo install flamegraph
+      args:
+        executable: /bin/bash
+      when: create_flamegraph and node_id == flamegraph_node_id
+
+# ------------------------------------------------
 # snarkOS Process Exporter
 
 - name: Install and Configure Process Exporter

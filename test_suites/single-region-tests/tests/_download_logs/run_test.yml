@@ -10,7 +10,33 @@
         src: "/tmp/snarkos.log"
         dest: "../../log_files/val-{{ node_id }}.txt"
         flat: yes
-    
+
+    - name: Stop snarkos
+      systemd:
+        name: snarkos
+        state: stopped
+      when: create_flamegraph and node_id == flamegraph_node_id
+
+    - name: Generate flamegraph
+      shell: |
+        /root/.cargo/bin/flamegraph --perfdata /home/ubuntu/perf.data
+      args:
+        executable: /bin/bash
+        chdir: /home/ubuntu
+      when: create_flamegraph and node_id == flamegraph_node_id
+
+    - name: Fetch flamegraph
+      fetch:
+        src: "/home/ubuntu/flamegraph.svg"
+        dest: "../../log_files/val-{{ flamegraph_node_id }}.svg"
+        flat: yes
+      when: create_flamegraph and node_id == flamegraph_node_id
+
+    - name: Start snarkos
+      systemd:
+        name: snarkos
+        state: stopped
+      when: create_flamegraph and node_id == flamegraph_node_id
 
 - name: Fetch logs from clients
   hosts: snarkos_client

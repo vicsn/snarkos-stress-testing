@@ -3,6 +3,11 @@
   set_fact:
     snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
 
+- name: Set optional flamegraph facts
+  set_fact:
+    snarkos_bin_path: "/root/.cargo/bin/flamegraph -o /tmp/snarkos_flamegraph.svg -- {{ snarkos_bin_path}}"
+  when: create_flamegraph and node_id == flamegraph_node_id
+
 - name: Deploy the snarkos systemd service file
   template:
     src: snarkos.service
