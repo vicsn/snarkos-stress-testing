@@ -9,7 +9,7 @@
   tasks:
     - name: Wait for the network to be healthly
       uri:
-        url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/latest/height"
         method: GET
         status_code: 200
         timeout: 10
@@ -59,16 +59,16 @@
     - name: Wait for multiple endpoints to be ready
       vars:
         endpoints:
-          - "http://localhost:3030/mainnet/program/ridiculous_finalize_hash.aleo"
-          - "http://localhost:3030/mainnet/program/hello_hello.aleo"
-          - "http://localhost:3030/mainnet/program/calculator.aleo"
-          - "http://localhost:3030/mainnet/program/temperatureconverter.aleo"
-          - "http://localhost:3030/mainnet/program/animals_nft_v30.aleo"
-          - "http://localhost:3030/mainnet/program/ideaground_friends_beta9.aleo"
-          - "http://localhost:3030/mainnet/program/cassino_game_test_fp.aleo"
-          - "http://localhost:3030/mainnet/program/twoadicity_mmbbn88.aleo"
-          - "http://localhost:3030/mainnet/program/ideaground_friends_beta1.aleo"
-          - "http://localhost:3030/mainnet/program/ans_coupon_card_v1.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/ridiculous_finalize_hash.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/hello_hello.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/calculator.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/temperatureconverter.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/animals_nft_v30.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/ideaground_friends_beta9.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/cassino_game_test_fp.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/twoadicity_mmbbn88.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/ideaground_friends_beta1.aleo"
+          - "http://localhost:3030/{{ snarkos_network }}/program/ans_coupon_card_v1.aleo"
       block:
         - name: Check each endpoint
           uri:

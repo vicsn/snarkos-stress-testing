@@ -21,10 +21,9 @@
 
 These configurations have defaults and are optional to set.
 
-- Default region is `us-west-2`
-- Set region in `inventory/dynamic_inventory.aws_ec2.yml` and `terraform/provider.tf`
-    - Region can be left blank in `dynamic_inventory.aws_ec2.yml` to scan all regions but will be significantly slower
-- Set instance type and count in `terraform/variables.yml`
+- Set instance type and count in `terraform/vars.tf*`
+- Set devnet name in `playbooks/vars.yml` and `inventory/dynamic_inventory.aws_ec2.yml`.
+- Default network is `mainnet`, you can change it in `terraform/vars.tf*` and `playbooks/vars.yml`.
 
 ## Authentication
 
@@ -39,6 +38,7 @@ Authentication happens via Google SSO:
 
 - [Grafana](https://aleostresstest.grafana.net/d/single-region-tests/single-region-tests?from=now-3h&to=now&refresh=)
 - [Elastic](https://eq-external.kb.eu-north-1.aws.elastic-cloud.com:9243/app/discover#/)
+- If ECR logging is enabled, [AWS console](https://us-west-2.console.aws.amazon.com/ecs/v2/clusters?region=us-west-2)
 
 ## Running multiple devnets in parallel
 
@@ -47,6 +47,9 @@ Should be possible by changing the `devnet_name` in `playbooks/vars.yml`. Note t
 ## Changing the region
 
 Should be possible, but there may be stuff you need to update:
+- Default region is `us-west-2`
+- Set region in `inventory/dynamic_inventory.aws_ec2.yml` and `terraform/provider.tf`
+    - Region can be left blank in `dynamic_inventory.aws_ec2.yml` to scan all regions but will be significantly slower
 - Pushing a base image to the new region using [packer](../../special_devnets/packer/)
 - Creating a new ECS cluster
 - Pushing the tx-cannon image to [the ECR](https://docs.aws.amazon.com/AmazonECR/latest/userguide/getting-started-cli.html)

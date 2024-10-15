@@ -17,7 +17,7 @@
   - name: Fetch the block from the node
     remote_user: ubuntu
     uri:
-      url: "http://{{ node_to_check }}:3030/mainnet/block/latest"
+      url: "http://{{ node_to_check }}:3030/{{ snarkos_network }}/block/latest"
       method: GET
       return_content: true
     register: node_current_block
@@ -28,7 +28,7 @@
   - name: Fetch the block from the node to compare
     remote_user: ubuntu
     uri:
-      url: "http://{{ node_to_compare }}:3030/mainnet/block/latest"
+      url: "http://{{ node_to_compare }}:3030/{{ snarkos_network }}/block/latest"
       method: GET
       return_content: true
     register: node_current_block_compare

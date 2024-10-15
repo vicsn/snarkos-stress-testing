@@ -29,7 +29,7 @@
 #
 #    - name: Check if the node is back alive and up to date
 #      uri:
-#        url: "http://{{ hostvars[groups['snarkos_node'][ansible_play_batch.index(inventory_hostname)]]['public_ip_address']}}:3030/mainnet/program/credits.aleo"
+#        url: "http://{{ hostvars[groups['snarkos_node'][ansible_play_batch.index(inventory_hostname)]]['public_ip_address']}}:3030/{{ snarkos_network }}/program/credits.aleo"
 #        method: GET
 #        status_code: 200
 #        timeout: 10

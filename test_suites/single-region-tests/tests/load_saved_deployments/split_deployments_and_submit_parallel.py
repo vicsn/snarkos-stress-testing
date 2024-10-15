@@ -1,10 +1,11 @@
 import os
+import sys
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
 
 # Function to send transactions to a validator without surpassing the rate limit.
-def send_transactions(deployments_path, ip_address):
+def send_transactions(deployments_path, ip_address, network):
     results = []
     with open(deployments_path, "r") as f:
         i = 0
@@ -12,7 +13,7 @@ def send_transactions(deployments_path, ip_address):
             # sleep 1 second every 5 txs. This is a simplified way to throttle the txs to stay below the rate-limit.
             if i % 5 == 0:
                 time.sleep(1)
-            cmd = f"curl http://{ip_address}:3030/mainnet/transaction/broadcast -X POST -H \"Content-Type: application/json\" -d '{tx}'"
+            cmd = f"curl http://{ip_address}:3030/{network}/transaction/broadcast -X POST -H \"Content-Type: application/json\" -d '{tx}'"
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = result.stdout.decode().strip()
             error = result.stderr.decode().strip()
@@ -22,6 +23,13 @@ def send_transactions(deployments_path, ip_address):
     return results
 
 def main():
+
+    # Error if no argument was passed.
+    if len(sys.argv) < 2:
+        print("Please provide the network type as an argument")
+        exit()
+    # Set network from first argument.
+    network = sys.argv[1]
 
     # Read ip_addresses.txt
     ip_addresses_path = os.path.join(os.getcwd(), "..", "..", "ip_addresses.txt")
@@ -83,7 +91,7 @@ def main():
     # Use ProcessPoolExecutor to parallelize the execution
     with ProcessPoolExecutor(max_workers=num_validators) as executor:
         # Schedule the execute_command calls and use as_completed to block until they are done
-        futures = {executor.submit(send_transactions, deployment_paths[i], ip_addresses[i].strip()): i for i in range(num_validators)}
+        futures = {executor.submit(send_transactions, deployment_paths[i], ip_addresses[i].strip(), network): i for i in range(num_validators)}
         for future in as_completed(futures):
             i = futures[future]
             try:

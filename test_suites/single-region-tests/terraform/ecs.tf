@@ -46,7 +46,7 @@ resource "aws_ecs_task_definition" "tx_cannon_tasks" {
       image = "${var.ecr_repository_url}:latest"
       environment = [
         { name = "SNARKOS_URL", value = "http://${aws_elb.snarkos_lb.dns_name}:3030" },
-        { name = "TX_COMMAND", value = each.value.tx_command }
+        { name = "TX_COMMAND", value = "${each.value.tx_command} ${local.snarkos_network}" }
       ]
       # NOTE: ECS logging configuration is commented out due to high costs.
       # Only enable if absolutely necessary for debugging.

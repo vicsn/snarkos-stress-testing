@@ -3,6 +3,14 @@
 # Define the file containing IP addresses
 ipFile="../../ip_addresses.txt"
 
+# Error if no argument was passed.
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <network>"
+    exit 1
+fi
+# Set network from first argument.
+network=$1
+
 # Initialize maximum block height variable
 maxBlockHeight=0
 
@@ -10,7 +18,7 @@ echo "Fetching the maximum block height from each node..."
 while IFS= read -r ip
 do
     # Fetch the latest block height from each IP
-    blockHeight=$(curl -s "http://$ip:3030/mainnet/latest/height")
+    blockHeight=$(curl -s "http://$ip:3030/$network/latest/height")
 
     # Update maxBlockHeight if the current block height is greater
     if [[ "$blockHeight" -gt "$maxBlockHeight" ]]; then
@@ -28,7 +36,7 @@ echo "Verifying that all nodes have reached the maximum block height..."
 allNodesUpdated=true
 while IFS= read -r ip
 do
-    currentHeight=$(curl -s "http://$ip:3030/mainnet/latest/height")
+    currentHeight=$(curl -s "http://$ip:3030/$network/latest/height")
     if [[ "$currentHeight" -lt "$maxBlockHeight" ]]; then
         allNodesUpdated=false
         echo "Node $ip has not reached the maximum block height of $maxBlockHeight. Current height: $currentHeight"
@@ -50,7 +58,7 @@ echo "Fetching the block hash at the maximum block height from each node..."
 while IFS= read -r ip
 do
     # Fetch the block for the maxBlockHeight
-    response=$(curl -s "http://$ip:3030/mainnet/block/$maxBlockHeight")
+    response=$(curl -s "http://$ip:3030/$network/block/$maxBlockHeight")
     blockHash=$(echo $response | jq -r '.block_hash')
 
     # Append the block hash to the blockHashes string

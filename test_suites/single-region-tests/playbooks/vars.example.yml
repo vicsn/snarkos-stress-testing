@@ -21,6 +21,8 @@ snarkos_repo: "https://github.com/AleoNet/snarkOS.git"
 
 # Application vars
 snarkos_verbosity: "1"
+snarkos_network: mainnet
+snarkos_network_int: 0 # mainnet is 0, testnet is 1, canarynet is 2
 
 # Ansible vars
 #ansible_python_interpreter: /usr/bin/python3.10

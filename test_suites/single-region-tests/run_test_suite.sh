@@ -49,7 +49,7 @@ run_test() {
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
         cd "$PARENT_DIR/tests/$SELECTED/"
-        "./check.sh"
+        "./check.sh $NETWORK"
     fi
 
     # Run any post-test script
@@ -118,6 +118,8 @@ fi
 
 # Read the load balancer DNS name from lb_url.txt
 LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+# Read the network from $PARENT_DIR/playbooks/vars.yml
+export NETWORK=$(grep "network:" $PARENT_DIR/playbooks/vars.yml | cut -d " " -f2)
 
 # Optionally run Ansible playbook to setup services
 if [ "$RUN_SETUP" == "y" ]; then

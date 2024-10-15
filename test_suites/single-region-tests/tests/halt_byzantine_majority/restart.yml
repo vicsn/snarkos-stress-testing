@@ -37,7 +37,7 @@
 
 - name: Fetch the current block height
   ansible.builtin.uri:
-    url: "http://{{ test_network_url }}:3030/mainnet/block/latest"
+    url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
     method: GET
     return_content: true
   register: current_block
@@ -49,7 +49,7 @@
     
 - name: Wait for the network to progress by one block
   ansible.builtin.uri:
-    url: "http://{{ test_network_url }}:3030/mainnet/block/latest"
+    url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
     method: GET
     return_content: true
   register: next_block

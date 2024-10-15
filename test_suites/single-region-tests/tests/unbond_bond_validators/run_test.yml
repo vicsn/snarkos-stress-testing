@@ -9,7 +9,7 @@
   tasks:
     - name: Wait for the network to be healthly
       uri:
-        url: "http://{{ test_network_url }}:3030/mainnet/latest/height"
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/latest/height"
         method: GET
         status_code: 200
         timeout: 10
@@ -46,7 +46,7 @@
   tasks:
     - name: Get current committee data
       uri:
-        url: "http://{{ hostvars['localhost']['test_network_url'] }}:3030/mainnet/committee/latest"
+        url: "http://{{ hostvars['localhost']['test_network_url'] }}:3030/{{ snarkos_network }}/committee/latest"
         method: GET
         return_content: yes
       register: committee_data
@@ -92,7 +92,7 @@
   tasks:
     - name: Get current committee data
       uri:
-        url: "http://{{ hostvars['localhost']['test_network_url'] }}:3030/mainnet/committee/latest"
+        url: "http://{{ hostvars['localhost']['test_network_url'] }}:3030/{{ snarkos_network }}/committee/latest"
         method: GET
         return_content: yes
       register: committee_data
