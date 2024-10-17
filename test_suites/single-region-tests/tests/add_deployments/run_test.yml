@@ -37,7 +37,7 @@
   tasks:
     - name: Deploy base programs
       ansible.builtin.shell:
-        cmd: tx-cannon deploy -p /home/ubuntu/tx-cannon/tests/ridiculous_finalize_hash/{{ program }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH
+        cmd: tx-cannon deploy -p /home/ubuntu/tx-cannon/tests/ridiculous_finalize_hash/{{ program }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
       loop:
         - ridiculous_finalize_hash.aleo
       loop_control:
@@ -46,7 +46,7 @@
 
     - name: Deploy more base programs, three times to circumvent deployment limits
       ansible.builtin.shell:
-        cmd: tx-cannon batch-deploy --manifest {{ manifest }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH 
+        cmd: tx-cannon batch-deploy --manifest {{ manifest }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --network {{ snarkos_network }} > /home/ubuntu/txcannon2.log 2>&1
       loop:
         - /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt
         - /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt

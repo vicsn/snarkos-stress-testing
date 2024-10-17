@@ -13,7 +13,7 @@
 
     - name: Set snarkos command with peers and validators
       set_fact:
-        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs --network {{ snarkos_network_int }}"
+        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 4294967294 --no-dev-txs --network {{ snarkos_network_int }}"
   roles:
     - snarkos_service
 
@@ -289,7 +289,7 @@
 
     - name: Set snarkos command with peers and validators
       set_fact:
-        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 10 --no-dev-txs --network {{ snarkos_network_int }}"
+        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps 4294967294 --no-dev-txs --network {{ snarkos_network_int }}"
   roles:
     - snarkos_service
 

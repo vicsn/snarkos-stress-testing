@@ -135,7 +135,7 @@ resource "aws_elb" "snarkos_lb" {
     target              = "HTTP:3030/${local.snarkos_network}/latest/height"
   }
 
-  instances = [for i in aws_instance.snarkos_client : i.id]
+  instances = [for i in aws_instance.snarkos_validator : i.id]
 
   tags = {
     Name = "${var.devnet_name}-snarkos-lb"

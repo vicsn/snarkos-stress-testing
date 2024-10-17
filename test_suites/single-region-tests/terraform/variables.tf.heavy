@@ -5,12 +5,12 @@ variable "devnet_name" {
 
 variable "validator_instance_type" {
   description = "Instance type for snarkOS validators"
-  default     = "m7i.4xlarge"
+  default     = "m7i.8xlarge"
 }
 
 variable "client_instance_type" {
   description = "Instance type for snarkOS validators"
-  default     = "m7i.4xlarge"
+  default     = "m7i.8xlarge"
 }
 
 variable "validator_instance_count" {
@@ -27,7 +27,7 @@ variable "client_instance_count" {
 # Clients
 
 locals {
-  snarkos_network = "mainnet"
+  snarkos_network = "testnet"
 
   client_instance_config = [
     { type = var.client_instance_type, count = var.client_instance_count, validator = 0 },
@@ -40,21 +40,7 @@ locals {
     { type = var.client_instance_type, count = var.client_instance_count, validator = 7 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 8 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 9 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 10 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 11 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 12 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 13 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 14 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 15 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 16 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 17 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 18 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 19 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 20 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 21 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 22 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 23 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 24 }
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 10 }
   ]
 
   snarkos_clients = flatten([
@@ -120,11 +106,11 @@ variable "tx_cannon_services" {
     }
     BlockRequest = {
       tx_command = "tx-cannon request block --start 0 --end 105 -r 900000000 --network"
-      task_count = 5
+      task_count = 0 # NOTE: recommended set to 0 when shooting straight at validators
     }
     FakeTransfer = {
       tx_command = "tx-cannon fake-execute --test tests/network_driver/network_driver_single_tx_fake.toml -r 90000001 -c 8 --network"
-      task_count = 5
+      task_count = 0 # NOTE: recommended set to 0 when shooting straight at validators
     }
     # Add more services as needed
     # tx-cannon malice -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --redeploy --double-spend --duplicate-transitions --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt --underreport-constraints 10 --repetitions 90000000000001

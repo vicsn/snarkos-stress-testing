@@ -72,6 +72,7 @@
         - linux-tools-common
         - linux-tools-generic
         - linux-tools-{{ kernel_version.stdout }}
+        - linux-image-$(uname -r)-dbgsym
         - build-essential
       when: create_flamegraph and node_id == flamegraph_node_id
   
