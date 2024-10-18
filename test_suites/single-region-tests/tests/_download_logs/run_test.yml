@@ -5,12 +5,6 @@
   pre_tasks:
     - include_tasks: ../../playbooks/set_validator_facts.yml
   tasks:
-    - name: Fetch logs
-      fetch:
-        src: "/tmp/snarkos.log"
-        dest: "../../log_files/val-{{ node_id }}.txt"
-        flat: yes
-
     - name: Stop snarkos
       systemd:
         name: snarkos
@@ -37,6 +31,12 @@
         name: snarkos
         state: stopped
       when: create_flamegraph and node_id == flamegraph_node_id
+
+    - name: Fetch logs
+      fetch:
+        src: "/tmp/snarkos.log"
+        dest: "../../log_files/val-{{ node_id }}.txt"
+        flat: yes
 
 - name: Fetch logs from clients
   hosts: snarkos_client
