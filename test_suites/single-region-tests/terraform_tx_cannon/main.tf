@@ -39,3 +39,8 @@ module "tx-cannon" {
   tx_cannon_instance_count = var.tx_cannon_instance_count
   tx_cannon_instance_type = var.tx_cannon_instance_type
 }
+
+variable "devnet_name" {
+  description = "Unique name for this devnet deployment"
+  default     = "single-region-tests"
+}
