@@ -4,6 +4,7 @@ This folder contains scripts for analyzing and visualizing the logs:
 * to visualize the consensus process of validators.
 * to visualize the syncing of nodes (validators or clients).
 * to analyze the transaction propagation for validators.
+* to visualize the peer message processing times for validators.
 
 It also contains a common log preparation file `analysis_01_prepare_logfile.py` that you need to run first. For this, you need to pass a relative path with the `--logpath` argument. For example, `python3 analysis_01_prepare_logfile.py --logpath aws-logs/client-0.log` will create a file `aws-logs/prepared_client-0.log`. You can also pass an entire folder of logs, e.g., `python3 analysis_01_prepare_logfile.py --logpath aws-logs` will create a folder `prepared_aws-logs`. Which mode you need depends on the task, please refer to the descriptions below.
 
@@ -30,5 +31,12 @@ To visualize the validator or client syncing, and to compute the syncing speed, 
 To analyze the tx propagation:
 * Run a network with tx-cannons and obtain the logs of all validators.
 * Place the logs in a subfolder here.
-* Run the preparation script for the entire folder of logs. Example command: `python3 analysis_01_prepare_logfile.py --logpath aws-logs`
+* Run the preparation script for the entire folder of logs. Example command: `python3 analysis_01_prepare_logfile.py --logpath aws-logs`.
 * Run `analysis_02_val_tx_propagation_analysis.py`, which creates plots and outputs statistics of the transaction propagation. Example command: `python3 analysis_02_val_tx_propagation_analysis.py --logpath prepared_aws-logs`.
+
+# Validator peer message profiling
+To visualize the validator peer message processing:
+* Obtain logs from a snarkOS validator that runs a `malice` branch, thus outputting `profiling` logs.
+* Place the logs in a subfolder here (e.g., `/aws-logs/`).
+* Run the preparation script for the entire folder of logs. Example command: `python3 analysis_01_prepare_logfile.py --logpath aws-logs` (you can alternatively run it only for a single file).
+* Run `analysis_02_analyze_logfile.py`, which creates a plot, and also prints if detecting an unexpected order of logs. Example command: `python3 analysis_02_val_consensus_profiling.py --logfile aws-logs/prepared_validator-0.log`.
