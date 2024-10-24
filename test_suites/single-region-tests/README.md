@@ -9,36 +9,32 @@
     - `brew install ansible`
 - [Install AWS CLI](https://aws.amazon.com/cli/)
     - `brew install awscli`
-- Create a new hosted Grafana instance using the provided grafana.json
-- Create a new hosted Elastic (Kibana) instance
 - Use Github actions to build and release a snarkOS binary on github.com/ProvableHQ/snarkos-staging
 
 ## Configuration
 
-- Copy `playbooks/vars.example.yml` to `playbooks/vars.yml` and fill in the required fields
+- Copy `playbooks/vars.example.yml` to `playbooks/vars.yml` and fill in the required fields.
+- You can change instance types and counts in `terraform/vars.tf*`
+- You can change the network in `terraform/vars.tf*` and `playbooks/vars.yml`.
 
-## Optional Configuration
-
-These configurations have defaults and are optional to set.
-
-- Set instance type and count in `terraform/vars.tf*`
-- Set devnet name in `playbooks/vars.yml` and `inventory/dynamic_inventory.aws_ec2.yml`.
-- Default network is `mainnet`, you can change it in `terraform/vars.tf*` and `playbooks/vars.yml`.
-
-## Authentication
+## AWS authentication
 
 Authentication happens via Google SSO:
-- Via e.g. `drive.google.com`, go to the top right apps icon, click on the app called "AWS access portal".
+- Via `drive.google.com`, go to the top right apps icon, click on the app called "AWS access portal".
 - Choose a scope and click on "Access keys".
 - Follow the steps to authenticate using `aws configure sso`.
   - The profile name should be the same as the profile in `terraform/provider.tf`.
 - After initial setup, you can use `aws sso login --profile <profile>` 
 
+## Running your devnet
+
+`./run_test_suite.sh` will allow you to choose infra to set up and tests to run.
+
 ## Monitoring
 
-- [Grafana](https://aleostresstest.grafana.net/d/single-region-tests/single-region-tests?from=now-3h&to=now&refresh=)
-- [Elastic](https://eq-external.kb.eu-north-1.aws.elastic-cloud.com:9243/app/discover#/)
-- If ECR logging is enabled, [AWS console](https://us-west-2.console.aws.amazon.com/ecs/v2/clusters?region=us-west-2)
+- [Grafana](https://aleostresstest.grafana.net/d/single-region-tests/single-region-tests?from=now-3h&to=now&refresh=) can be used with `devnet_name=single-region-tests`. If you change your `devnet_name`, you'll need to customize and import `grafana.json` to a new dashboard.
+- [Elastic](https://eq-external.kb.eu-north-1.aws.elastic-cloud.com:9243/app/discover#/).
+- If ECR logging is enabled, [AWS console](https://us-west-2.console.aws.amazon.com/ecs/v2/clusters?region=us-west-2).
 
 ## Running multiple devnets in parallel
 
@@ -57,10 +53,6 @@ Should be possible, but there may be stuff you need to update:
 - Creating a new Elastic instance
 
 And there may also be stuff you want to keep the same, e.g. the Terraform S3 bucket.
-
-## Running
-
-`./run_test_suite.sh` will allow you to choose infra to set up and tests to run.
 
 ## Usage of keymaterial
 

@@ -17,7 +17,7 @@
 
     - name: Copy pregenerated transactions file
       ansible.builtin.copy:
-        src: "../../transaction_files/deploys-{{ num_instances }}val-{{ node_id }}.txt"
+        src: "../../transaction_files/deploys-{{ snarkos_network }}-{{ num_instances }}val-{{ node_id }}.txt"
         dest: "/tmp/pregenerated_transactions.txt"
       become: yes
   roles:

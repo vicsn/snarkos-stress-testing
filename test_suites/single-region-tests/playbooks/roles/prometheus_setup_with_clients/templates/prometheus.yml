@@ -44,6 +44,23 @@ scrape_configs:
           instance_type: "{{ hostvars[host]['instance_type'] }}"
       {% endfor %}
 
+  - job_name: 'Node_Exporter_Validators'
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+
+      {% for host in groups['snarkos_validator'] %}
+
+      - targets: ["{{ host }}:9100"]
+        labels:
+          group: "node_exporter_validators"
+          instance_type: "{{ hostvars[host]['instance_type'] }}"
+      {% endfor %}
+
   - job_name: 'snarkos_client'
     honor_timestamps: true
     scrape_interval: 15s
@@ -75,5 +92,22 @@ scrape_configs:
       - targets: ["{{ host }}:9256"]
         labels:
           group: "process_exporter_clients"
+          instance_type: "{{ hostvars[host]['instance_type'] }}"
+      {% endfor %}
+
+  - job_name: 'Node_Exporter_Clients'
+    honor_timestamps: true
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+
+      {% for host in groups['snarkos_client'] %}
+
+      - targets: ["{{ host }}:9100"]
+        labels:
+          group: "node_exporter_clients"
           instance_type: "{{ hostvars[host]['instance_type'] }}"
       {% endfor %}

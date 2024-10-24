@@ -44,13 +44,13 @@ def main():
 
     # Read how many pregenerated txs files are there giving num_validators
     num_pregenerated_txs_files_path = os.path.join(os.getcwd(), "..", "..", "transaction_files")
-    num_pregenerated_txs_files = len([name for name in os.listdir(num_pregenerated_txs_files_path) if f"deploys-{num_validators}val-" in name])
+    num_pregenerated_txs_files = len([name for name in os.listdir(num_pregenerated_txs_files_path) if f"deploys-{ network }-{num_validators}val-" in name])
     
     print(num_pregenerated_txs_files)
     # Read pregenerated txs
     txs = []
     for i in range(num_pregenerated_txs_files):
-        tx_path = os.path.join(os.getcwd(), "..", "..", "transaction_files", f"deploys-{num_validators}val-{i}.txt")
+        tx_path = os.path.join(os.getcwd(), "..", "..", "transaction_files", f"deploys-{ network }-{num_validators}val-{i}.txt")
         if not os.path.exists(tx_path):
                 print(f"Missing transaction file {tx_path}, exiting...")
                 exit()

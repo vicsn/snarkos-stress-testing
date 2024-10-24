@@ -98,6 +98,17 @@
   tags: process_exporter
 
 # ------------------------------------------------
+# snarkOS Node Exporter
+
+- name: Install and Configure Node Exporter
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  roles:
+    - node_exporter_setup
+  tags: node_exporter
+
+# ------------------------------------------------
 # Logstash
 
 - name: Install and Configure Logstash

@@ -45,7 +45,7 @@
     - name: Run tx-cannon
       shell: |
         cd /home/ubuntu/tx-cannon
-        python3 tests/scripts/tx_pregeneration.py --transaction_type deployment --num_validators {{ num_validators }} --num_transactions {{ num_deployments }} --num_proofs_in_parallel {{ prover_parallelization }} --program_file {{ program_file }} --program_suffix {{ program_suffix }}
+        python3 tests/scripts/tx_pregeneration.py --transaction_type deployment --num_validators {{ num_validators }} --num_transactions {{ num_deployments }} --num_proofs_in_parallel {{ prover_parallelization }} --program_file {{ program_file }} --program_suffix {{ program_suffix }} --network {{ snarkos_network_int }} 
       args:
         executable: /bin/bash
       vars:
@@ -72,6 +72,6 @@
     - name: Fetch pregenerated transactions
       fetch:
         src: "/home/ubuntu/tx-cannon/program_deployments/all_deployments.txt"
-        dest: "../../transaction_files/deploys-{{ num_validators }}val-{{ node_id }}.txt"
+        dest: "../../transaction_files/deploys-{{ snarkos_network }}-{{ num_validators }}val-{{ node_id }}.txt"
         flat: yes
   tags: tx-cannon

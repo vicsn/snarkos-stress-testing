@@ -4,10 +4,10 @@
     name: docker
     state: started
 
-- name: Copy Process Exporter docker-compose.yml
+- name: Copy Node Exporter docker-compose.yml
   template:
     src: docker-compose.yml
-    dest: /home/ubuntu/docker-compose-process-exporter.yml
+    dest: /home/ubuntu/docker-compose-node-exporter.yml
     owner: ubuntu
     group: ubuntu
     mode: '0664'
@@ -16,5 +16,5 @@
 
 - name: Run docker-compose up # noqa: no-changed-when
   command:
-    cmd: docker-compose -f docker-compose-process-exporter.yml up -d --force-recreate
+    cmd: docker-compose -f docker-compose-node-exporter.yml up -d --force-recreate
     chdir: /home/ubuntu/

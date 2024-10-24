@@ -81,26 +81,22 @@ else
     echo "SSH key already exists. Skipping generation..."
 fi
 
+# Ask if terraform should be run
+read -p "Do you want to provision machines? (h)eavy / (l)ight / (n)o ): " RUN_TERRAFORM
+# Ask if the nodes should be setup.
+read -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
+# Ask if any tests should be run
+read -p "Do you want to select a test to run? (y/n): " RUN_TESTS
+
 # Find and list all tests
 TESTS=($(find tests -maxdepth 1 -mindepth 1 -type d | while read f; do basename "$f"; done | sort))
 export TESTS
 
-# Optionally a test name was passed as first argument.
-if [ $# -eq 1 ]; then
-    SELECTED=$1
-    if [ ! -d "$PARENT_DIR/tests/$SELECTED" ]; then
-        echo "Invalid test: $SELECTED"
-        exit 1
-    fi
-else
+# Optionally select test to run
+if [ "$RUN_TESTS" == "y" ]; then
     # first select the test to run
     source select_test.sh
 fi
-
-# Ask if terraform should be run
-read -p "Do you want to run Terraform? (h)eavy / (l)ight / (n)o ): " RUN_TERRAFORM
-# Ask if the nodes should be setup.
-read -p "Do you want to run setup of all services? (y/n): " RUN_SETUP
 
 # Optionally initialize and apply Terraform
 if [ "$RUN_TERRAFORM" == "h" ]; then
@@ -132,21 +128,24 @@ else
     exit 1
 fi
 
-# If running all tests, run them in series
-if [ "$SELECTED" == "all" ]; then
-    echo Running all tests...
-    for test in "${TESTS[@]}"; do
-        # Skip if the first letter of "$test" is an underscore
-        if [[ "$test" == _* ]]; then
-            echo "Skipping $test"
-            continue
-        fi
-        export SELECTED=$test
+# Optionally run tests
+if [ "$RUN_TESTS" != "y" ]; then
+    # If running all tests, run them in series
+    if [ "$SELECTED" == "all" ]; then
+        echo Running all tests...
+        for test in "${TESTS[@]}"; do
+            # Skip if the first letter of "$test" is an underscore
+            if [[ "$test" == _* ]]; then
+                echo "Skipping $test"
+                continue
+            fi
+            export SELECTED=$test
+            run_test
+        done
+    # Else run the selected test
+    else
         run_test
-    done
-# Else run the selected test
-else
-    run_test
+    fi
 fi
 
 # Wait for user input before destroying the infrastructure
