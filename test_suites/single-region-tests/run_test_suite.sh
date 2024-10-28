@@ -129,7 +129,7 @@ else
 fi
 
 # Optionally run tests
-if [ "$RUN_TESTS" != "y" ]; then
+if [ "$RUN_TESTS" == "y" ]; then
     # If running all tests, run them in series
     if [ "$SELECTED" == "all" ]; then
         echo Running all tests...

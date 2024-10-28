@@ -15,7 +15,7 @@ variable "client_instance_type" {
 
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 25
+  default     = 40
 }
 
 variable "client_instance_count" {
@@ -78,15 +78,15 @@ variable "tx_cannon_services" {
   default = {
     BatchTransfer = {
       tx_command = "tx-cannon batch-transfer -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 1 -a aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pjsl2kha7fv7hvz2eqxs5dz0rg --network"
-      task_count = 100
+      task_count = 1
     }
     BatchDeploy = {
       tx_command = "tx-cannon batch-deploy --manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_1.txt -a APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG,APrivateKey1zkp2RWGDcde3efb89rjhME1VYA8QMxcxep5DShNBR6n8Yjh,APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --randomize --redeploys 10000000 --concurrent-deployments 3 --network"
-      task_count = 10
+      task_count = 1
     }
     InvalidSolutions = {
       tx_command = "tx-cannon generate-solutions -c 1000 -a aleo1s3ws5tra87fjycnjrwsjcrnw2qxr8jfqqdugnf0xzqqw29q9m5pqem2u4t --garbage --network"
-      task_count = 5
+      task_count = 1
     }
     ValidSolutions = {
       tx_command = "tx-cannon generate-solutions -c 1000 -a aleo1s3ws5tra87fjycnjrwsjcrnw2qxr8jfqqdugnf0xzqqw29q9m5pqem2u4t --network"
