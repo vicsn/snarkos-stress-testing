@@ -18,7 +18,7 @@ echo "Fetching the maximum block height from each node..."
 while IFS= read -r ip
 do
     # Fetch the latest block height from each IP
-    blockHeight=$(curl -s "http://$ip:3030/$network/latest/height")
+    blockHeight=$(curl -s "http://$ip:3030/$network/block/height/latest")
 
     # Update maxBlockHeight if the current block height is greater
     if [[ "$blockHeight" -gt "$maxBlockHeight" ]]; then
@@ -36,7 +36,7 @@ echo "Verifying that all nodes have reached the maximum block height..."
 allNodesUpdated=true
 while IFS= read -r ip
 do
-    currentHeight=$(curl -s "http://$ip:3030/$network/latest/height")
+    currentHeight=$(curl -s "http://$ip:3030/$network/block/height/latest")
     if [[ "$currentHeight" -lt "$maxBlockHeight" ]]; then
         allNodesUpdated=false
         echo "Node $ip has not reached the maximum block height of $maxBlockHeight. Current height: $currentHeight"

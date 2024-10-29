@@ -8,4 +8,3 @@ WorkingDirectory=/home/ubuntu
 ExecStart={{ snarkos_bin_path }}/{{ snarkos_command }}
 Restart=no
 LimitNOFILE=65535
-DefaultLimitCORE=infinity

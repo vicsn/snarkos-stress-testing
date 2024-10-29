@@ -20,7 +20,7 @@
 
   #   - name: Wait for the network to be healthy
   #     uri:
-  #       url: "http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030/mainnet/latest/height"
+  #       url: "http://{{ hostvars['localhost']['snarkos_lb_dns'] }}:3030/mainnet/block/height/latest"
   #       method: GET
   #       status_code: 200
   #       timeout: 10

@@ -184,3 +184,20 @@
   roles:
     - snarkos_service
   tags: snarkos_client
+
+# ------------------------------------------------
+# Optionall restart validators if creating a flamegraph to avoid measuring genesis block creation
+
+- name: Optionally restart snarkOS validators
+  hosts: snarkos_validator
+  become: true
+  remote_user: ubuntu
+  pre_tasks:
+    - include_tasks: set_validator_facts.yml
+  tasks:
+    - name: Restart snarkOS validators
+      systemd:
+        name: snarkos
+        state: restarted
+      when: create_flamegraph
+  tags: snarkos

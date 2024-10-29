@@ -38,5 +38,5 @@
 
 - name: Set snarkos command with the assigned validator
   set_fact:
-    snarkos_command: "snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_address }}:4130,{{ client_addresses }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --rest-rps 4294967294 --network {{ snarkos_network_int }}"
+    snarkos_command: "snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_address }}:4130,{{ client_addresses }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --rest-rps {{ rest_rps }} --network {{ snarkos_network_int }}"
 

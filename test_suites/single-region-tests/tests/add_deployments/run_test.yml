@@ -9,7 +9,7 @@
   tasks:
     - name: Wait for the network to be healthly
       uri:
-        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/latest/height"
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/height/latest"
         method: GET
         status_code: 200
         timeout: 10

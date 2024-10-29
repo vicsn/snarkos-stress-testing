@@ -40,3 +40,7 @@ To visualize the validator peer message processing:
 * Place the logs in a subfolder here (e.g., `/aws-logs/`).
 * Run the preparation script for the entire folder of logs. Example command: `python3 analysis_01_prepare_logfile.py --logpath aws-logs` (you can alternatively run it only for a single file).
 * Run `analysis_02_analyze_logfile.py`, which creates a plot, and also prints if detecting an unexpected order of logs. Example command: `python3 analysis_02_val_consensus_profiling.py --logfile aws-logs/prepared_validator-0.log`.
+
+# Flamegraph analysis
+To count frequently occuring tasks from a flamegraph, you can use:
+`python3 analysis_flamegraph_svg.py ../test_suites/single-region-tests/log_files/val-0.svg`

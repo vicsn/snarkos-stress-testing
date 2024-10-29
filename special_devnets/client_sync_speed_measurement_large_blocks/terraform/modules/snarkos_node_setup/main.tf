@@ -151,7 +151,7 @@ resource "aws_elb" "snarkos_lb" {
     unhealthy_threshold = 2
     timeout             = 3
     interval            = 30
-    target              = "HTTP:3030/mainnet/latest/height"
+    target              = "HTTP:3030/mainnet/block/height/latest"
   }
 
   instances = [for i in aws_instance.snarkos_node : i.id]
