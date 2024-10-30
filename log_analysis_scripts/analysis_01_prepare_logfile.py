@@ -57,7 +57,7 @@ def main():
 
         # iterate over all log files in the folder
         for file in os.listdir(args.logpath):
-            if file.endswith(".log"):
+            if file.endswith(".log") or file.endswith(".txt"):
                 log_file_path = os.path.join(args.logpath, file)
                 core_logic(log_file_path, os.path.join(new_log_folder_path, "prepared_"+file))
     else:

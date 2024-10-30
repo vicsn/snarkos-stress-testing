@@ -109,7 +109,7 @@ variable "tx_cannon_services" {
       task_count = 0 # NOTE: recommended set to 0 when shooting straight at validators
     }
     FakeTransfer = {
-      tx_command = "tx-cannon fake-execute --test tests/network_driver/network_driver_single_tx_fake.toml -r 90000001 -c 8 --network"
+      tx_command = "tx-cannon batch-transfer -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 0.000001 -a aleo1dlndvxrkpc20wt2kwm42cl6r28w8nghe7y67g6qdeyx0fn7t8q9sjw3nf8 --fake --network"
       task_count = 0 # NOTE: recommended set to 0 when shooting straight at validators
     }
     # Add more services as needed
