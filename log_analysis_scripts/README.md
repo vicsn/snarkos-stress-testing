@@ -39,7 +39,7 @@ To visualize the validator peer message processing:
 * Obtain logs from a snarkOS validator that runs a `malice` branch, thus outputting `profiling` logs.
 * Place the logs in a subfolder here (e.g., `/aws-logs/`).
 * Run the preparation script for the entire folder of logs. Example command: `python3 analysis_01_prepare_logfile.py --logpath aws-logs` (you can alternatively run it only for a single file).
-* Run `analysis_02_analyze_logfile.py`, which creates a plot, and also prints if detecting an unexpected order of logs. Example command: `python3 analysis_02_val_consensus_profiling.py --logfile aws-logs/prepared_validator-0.log`.
+* Run `analysis_02_analyze_logfile.py`, which creates a plot, and also prints if detecting an unexpected order of logs. Example command: `python3 analysis_02_val_consensus_profiling.py --logpath aws-logs/prepared_validator-0.log`. The `--logpath` argument is required, you can also pass an entire folder to compute an average across validators. Furthermore, you can pass an optional integer `--round_start_avg` argument to compute the printed average values from a later round (e.g., after the tx-cannon was active), and an optional integer `--round_limit` argument to limit the plotting and the printed average values up to a certain amount (e.g., before the network tear down process was initiated). 
 
 # Flamegraph analysis
 To count frequently occuring tasks from a flamegraph, you can use:
