@@ -8,7 +8,7 @@ normal=$(tput sgr0)
 
 # Function to clean up resources using Terraform
 cleanup() {
-    echo "An error occurred. Destroying infrastructure to avoid unnecessary costs..."
+    echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
 
     read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
@@ -30,6 +30,11 @@ init_and_apply_terraform() {
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
     ansible-playbook ips.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+
+    # Tell it like it is
+    if [ "$(uname)" == "Darwin" ]; then
+        say "Finished running Terraform"
+    fi
 }
 
 run_test() {
@@ -57,6 +62,11 @@ run_test() {
         echo "Running post-test script..."
         cd "$PARENT_DIR/tests/$SELECTED/"
         "./post-test.sh"
+    fi
+
+    # Tell it like it is
+    if [ "$(uname)" == "Darwin" ]; then
+        say "Finished running $SELECTED"
     fi
 }
 
@@ -121,6 +131,9 @@ export NETWORK=$(grep "network:" $PARENT_DIR/playbooks/vars.yml | cut -d " " -f2
 if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
     ansible-playbook setup.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    if [ "$(uname)" == "Darwin" ]; then
+        say "Finished running setup"
+    fi
 elif [ "$RUN_SETUP" == "n" ]; then
     echo "Skipping setup..."
 else
