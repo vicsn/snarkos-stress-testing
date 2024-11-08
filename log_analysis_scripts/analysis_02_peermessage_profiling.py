@@ -24,6 +24,8 @@ class Round:
 
         self.peers_for_completed_batch_processing = set()
 
+        self.stored_batch_certificate_times = {}
+
     def get_average_duration_in_process_batch_propose_from_peer_fetching_transmissions(self):
         durations = []
         # print warn message if self.peers_for_completed_batch_processing is empty
@@ -70,16 +72,25 @@ class Round:
     
     def get_average_duration_in_process_batch_certified_from_peer_fetching_transmissions(self):
         durations = []
+        block_gen_time_list = []
         # iterate over peer_ips in self.process_batch_certified
         for peer_ip in self.process_batch_certified_from_peer_fetching_transmissions_start_times:
             # check if the peer_ip is in self.process_batch_certified_from_peer_fetching_transmissions_end_times
             if peer_ip in self.process_batch_certified_from_peer_fetching_transmissions_end_times:
                 # calculate the duration and append it to durations
-                durations.append((self.process_batch_certified_from_peer_fetching_transmissions_end_times[peer_ip] - self.process_batch_certified_from_peer_fetching_transmissions_start_times[peer_ip]).total_seconds())
+                duration = (self.process_batch_certified_from_peer_fetching_transmissions_end_times[peer_ip] - self.process_batch_certified_from_peer_fetching_transmissions_start_times[peer_ip]).total_seconds()
+                block_gen_time = 0
+                if peer_ip in self.stored_batch_certificate_times:
+                    block_gen_time = (self.process_batch_certified_from_peer_fetching_transmissions_end_times[peer_ip] - self.stored_batch_certificate_times[peer_ip]).total_seconds()
+                if block_gen_time < 0:
+                    print(f"Warning: block_gen_time is negative: {block_gen_time}, round {self.round_number}")
+                    block_gen_time = 0
+                block_gen_time_list.append(block_gen_time)
+                durations.append(duration - block_gen_time)
             else:
                 print(f"Error: peer_ip {peer_ip} not found in self.process_batch_certified_from_peer_fetching_transmissions_end_times, round {self.round_number}")
         # return the average of durations
-        return np.mean(durations)
+        return np.mean(durations), np.mean(block_gen_time_list)
 
     def get_average_duration_in_process_batch_certified_from_peer_without_fetching_transmissions(self):
         durations = []
@@ -92,13 +103,14 @@ class Round:
                 durations.append((self.process_batch_certified_from_peer_end_times[peer_ip] - self.process_batch_certified_from_peer_start_times[peer_ip]).total_seconds())
             else:
                 print(f"Error: peer_ip {peer_ip} not found in self.process_batch_certified_from_peer_end_times, round {self.round_number}")
+        average_duration_in_process_batch_certified_from_peer_fetching_transmissions, average_block_gen_time = self.get_average_duration_in_process_batch_certified_from_peer_fetching_transmissions()
         # return the average of durations
-        return np.mean(durations) - self.get_average_duration_in_process_batch_certified_from_peer_fetching_transmissions()
+        return np.mean(durations) - average_duration_in_process_batch_certified_from_peer_fetching_transmissions - average_block_gen_time
 
 def main():
     # Setup argument parser
     parser = argparse.ArgumentParser(description='Process log files and filter them by time.')
-    parser.add_argument('--logpath', required=True, help='The relative path to the log file or folder for averaging across validators.')
+    parser.add_argument('--logpath', required=False, help='The relative path to the log file or folder for averaging across validators.')
     parser.add_argument('--round_start_avg', required=False, help='The start round for the averages', default=1)
     parser.add_argument('--round_limit', required=False, help='The end round for the averages and the plot')
 
@@ -229,6 +241,7 @@ def load_validator_file(absolute_log_path):
         "profiling - received PrimaryPing for round",
         "profiling - fetching transmissions from BatchCertificate for round",
         "profiling - fetched transmissions from BatchCertificate for round",
+        "Stored a batch certificate for round",
     ]
 
     event_df = df[df['Message'].str.contains('|'.join(events), na=False)]
@@ -370,6 +383,21 @@ def load_validator_file(absolute_log_path):
             else:
                 print(f"Warning: peer_ip {peer_ip} already found in self.process_batch_certified_from_peer_fetching_transmissions_end_times, round {round_number} - this might be expected")
 
+        # if message example: Stored a batch certificate for round 1 from '35.86.237.86:5000'
+        if "Stored a batch certificate for round" in row['Message'] and "from" in row['Message']:
+            round_number = int(row['Message'].split('Stored a batch certificate for round ')[1].split(' from')[0])
+            peer_ip = row['Message'].split(' from ')[1]
+            # remove ' and ' from the peer_ip
+            peer_ip = peer_ip[1:-1]
+
+            if round_number not in rounds:
+                rounds[round_number] = Round(round_number)
+
+            if peer_ip not in rounds[round_number].stored_batch_certificate_times:
+                rounds[round_number].stored_batch_certificate_times[peer_ip] = row['Timestamp']
+            else:
+                print(f"Warning: peer_ip {peer_ip} already found in self.stored_batch_certificate_times, round {round_number} - this might be expected")
+
     list_avg_propose_no_fetch = []
     list_avg_propose_fetch = []
     list_avg_signature = []
@@ -385,7 +413,7 @@ def load_validator_file(absolute_log_path):
         avg_propose_fetch = round.get_average_duration_in_process_batch_propose_from_peer_fetching_transmissions()
         avg_signature = round.get_average_duration_in_process_batch_signature_from_peer() # only one working for 53
         avg_certified_no_fetch = round.get_average_duration_in_process_batch_certified_from_peer_without_fetching_transmissions()
-        avg_certified_fetch = round.get_average_duration_in_process_batch_certified_from_peer_fetching_transmissions()
+        avg_certified_fetch, _ = round.get_average_duration_in_process_batch_certified_from_peer_fetching_transmissions()
 
         list_avg_propose_no_fetch.append(avg_propose_no_fetch)
         list_avg_propose_fetch.append(avg_propose_fetch)
