@@ -85,7 +85,15 @@ def main():
 
     print(f"Number of TXs in unconfirmed_tx_dict: {len(unconfirmed_tx_dict)} (in mempool)")
     print(f"Number of TXs in sending_request_dict: {len(sending_request_dict)} (sending request)")
-    print(f"Number of TXs found in both dicts: {i}, share of sending_request_dict: {i/len(sending_request_dict)*100:.2f}%, share of unconfirmed_tx_dict: {i/len(unconfirmed_tx_dict)*100:.2f}%")
+    print(f"Number of TXs found in both dicts: {i}")
+    if len(sending_request_dict) > 0:
+        print(f"\tShare of sending_request_dict: {i/len(sending_request_dict)*100:.2f}%")
+    else:
+        print(f"\tShare of sending_request_dict is undefined.")
+    if len(unconfirmed_tx_dict) > 0:
+        print(f"\tShare of unconfirmed_tx_dict: {i/len(unconfirmed_tx_dict)*100:.2f}%")
+    else:
+        print(f"\tShare of unconfirmed_tx_dict is undefined.")
 
 # Run the main function
 if __name__ == "__main__":
