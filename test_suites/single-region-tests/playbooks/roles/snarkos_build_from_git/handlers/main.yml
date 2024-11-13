@@ -1,0 +1,5 @@
+- name: Restart snarkos service
+  systemd:
+    name: snarkos
+    state: restarted
+    enabled: yes

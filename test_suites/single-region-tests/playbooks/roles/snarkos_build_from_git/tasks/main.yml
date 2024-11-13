@@ -39,13 +39,39 @@
   args:
     creates: "$HOME/.cargo/bin/rustup"
 
+- name: Initialize envs_dict
+  set_fact:
+    envs_dict: {}
+
+- name: Parse envs into a dictionary using dict filter
+  set_fact:
+    envs_dict: "{{ dict(envs | default('') | split(' ') | map('split', '=', 1)) }}"
+  when: envs is defined and envs != ""
+
+- name: Debug envs_dict
+  debug:
+    var: envs_dict
+  when: envs is defined and envs != ""
+
+- name: Set features flag
+  set_fact:
+    featureflags: >-
+      {{
+        "" if (features is not defined or features | length == 0)
+        else "--features {{ features }}"
+      }}
+
 - name: Source cargo env and install snarkOS with git CLI
   ansible.builtin.shell:
-    cmd: "source $HOME/.cargo/env && cargo install --locked --path ."
+    cmd: "source $HOME/.cargo/env && cargo install --locked --path . {{ features_flag }}"
   args:
     executable: /bin/bash
     chdir: /home/ubuntu/snarkOS
-  environment:
-    HOME: "{{ ansible_env.HOME }}"
-    CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  environment: >-
+    {{
+      {
+        'HOME': ansible_env.HOME,
+        'CARGO_NET_GIT_FETCH_WITH_CLI': 'true'
+      } | combine(envs_dict | default({}))
+    }}
   become: true

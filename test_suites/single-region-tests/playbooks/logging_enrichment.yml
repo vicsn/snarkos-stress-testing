@@ -1,6 +1,7 @@
-- name: Check if snarkos_binary_tag is defined
+- name: Set commit hash fact from snarkos_git_hash if local build is used
   set_fact:
-    use_binary: "{{ snarkos_binary_tag is defined and snarkos_binary_tag | length > 0 }}"
+    commit_hash: "{{ snarkos_git_hash }}"
+  when: use_local_build
 
 - name: Get commit hash for binary installation
   block:
@@ -12,7 +13,7 @@
     - name: Decode the file commit from base64
       set_fact:
         commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
-  when: use_binary
+  when: use_github_build
 
 - name: Get commit hash for git installation
   block:
@@ -26,7 +27,7 @@
     - name: Set commit hash
       set_fact:
         commit_hash: "{{ current_commit_hash.stdout }}"
-  when: not use_binary
+  when: use_remote_build
 
 - name: Print current commit hash
   debug:

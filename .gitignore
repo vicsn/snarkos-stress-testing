@@ -17,6 +17,7 @@
 **/vars.yml
 **/logs/
 **/ledger_backups
+/test_suites/single-region-tests/playbooks/snarkos-shallow/
 
 # General
 .DS_Store

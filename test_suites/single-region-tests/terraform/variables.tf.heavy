@@ -110,7 +110,7 @@ variable "tx_cannon_services" {
     }
     FakeTransfer = {
       tx_command = "tx-cannon batch-transfer -r 90000001 --funding-account APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --amount 0.000001 -a aleo1dlndvxrkpc20wt2kwm42cl6r28w8nghe7y67g6qdeyx0fn7t8q9sjw3nf8 --fake --network"
-      task_count = 0 # NOTE: recommended set to 0 when shooting straight at validators
+      task_count = 10 # NOTE: recommended set to 0 when shooting straight at validators
     }
     # Add more services as needed
     # tx-cannon malice -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --redeploy --double-spend --duplicate-transitions --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt --underreport-constraints 10 --repetitions 90000000000001

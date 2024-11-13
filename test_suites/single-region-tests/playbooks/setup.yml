@@ -6,6 +6,47 @@
     - name: Wait for SSH to become ready
       wait_for_connection:
 
+- name: Check which installation method is used
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Check if local build should be used
+      set_fact:
+        use_local_build: >-
+          {{
+            (snarkos_repo is defined and snarkos_repo | length > 0) and
+            (snarkos_git_branch_local_build is defined and snarkos_git_branch_local_build | length > 0)
+          }}
+    
+    - name: Check if GitHub build should be used
+      set_fact:
+        use_github_build: >-
+          {{
+            (snarkos_binary_tag is defined and snarkos_binary_tag | length > 0)
+          }}
+
+    - name: Check if remote build should be used
+      set_fact:
+        use_remote_build: >-
+          {{
+            (snarkos_git_hash is defined and snarkos_git_hash | length > 0) and
+            (snarkos_repo is defined and snarkos_repo | length > 0)
+          }}
+
+    - name: Ensure exactly one installation method is used
+      fail:
+        msg: "Exactly one installation method should be used."
+      when: (use_local_build | int + use_github_build | int + use_remote_build | int) != 1
+
+- name: Build and upload snarkOS to S3 if required
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Build and upload snarkOS to S3
+      include_role:
+        name: snarkos_build_locally
+      when: hostvars['localhost'].use_local_build
+
 # ------------------------------------------------
 # snarkOS installation
 
@@ -13,20 +54,25 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  vars:
+    s3_bucket: "release-bucket-2122415"
+    snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
+    release_name: "{{ hostvars['localhost'].releasename }}"
   tasks:
-    - name: Check if snarkos_binary_tag is defined
-      set_fact:
-        use_binary: "{{ snarkos_binary_tag is defined and snarkos_binary_tag | length > 0 }}"
-
+    - name: Install snarkOS from S3
+      include_role:
+        name: snarkos_install_s3
+      when: hostvars['localhost'].use_local_build
+    
     - name: Install snarkOS from binary
       include_role:
         name: snarkos_install_binary
-      when: use_binary
+      when: hostvars['localhost'].use_github_build
 
     - name: Build snarkOS from git
       include_role:
         name: snarkos_build_from_git
-      when: not use_binary
+      when: hostvars['localhost'].use_remote_build
 
     - name: Download malice snarkOS binary with GitHub CLI
       shell: >
@@ -117,6 +163,12 @@
   remote_user: ubuntu
   pre_tasks:
     - include_tasks: logging_enrichment.yml
+      vars:
+        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
+        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
+        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
+        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
+
   roles:
     - logstash_setup
   tags: logstash
@@ -130,6 +182,11 @@
   remote_user: ubuntu
   pre_tasks:
     - include_tasks: logging_enrichment.yml
+      vars:
+        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
+        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
+        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
+        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
   roles:
     - metricbeat_setup
   tags: metricbeat
@@ -143,6 +200,11 @@
   remote_user: ubuntu
   pre_tasks:
     - include_tasks: logging_enrichment.yml
+      vars:
+        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
+        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
+        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
+        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
   roles:
     - filebeat_setup
   tags: filebeat

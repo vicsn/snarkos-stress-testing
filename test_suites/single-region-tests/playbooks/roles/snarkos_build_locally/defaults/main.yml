@@ -1,0 +1,8 @@
+s3_bucket: "release-bucket-2122415"
+clone_dir_base: "snarkos-shallow"
+s3_profile: "ephnet"
+openssl_version: "3.4.0"
+openssl_url: "https://github.com/openssl/openssl/releases/download/openssl-{{ openssl_version }}/openssl-{{ openssl_version }}.tar.gz"
+openssl_tarball: "openssl-{{ openssl_version }}.tar.gz"
+openssl_dir: "openssl-{{ openssl_version }}"
+openssl_install_prefix: "/opt/homebrew/Cellar/openssl@3/{{ openssl_version }}w/x86_64-linux-gnu"

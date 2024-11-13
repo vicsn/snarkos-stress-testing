@@ -1,0 +1,135 @@
+- name: Prepare release for S3 and local build
+  block:
+    - name: Fetch the git hash
+      shell: git ls-remote {{ snarkos_repo }} {{ snarkos_git_branch_local_build }} | awk 'NR==1 {print $1}'
+      register: git_output
+      changed_when: false
+
+    - name: Debug message to display fetched git hash
+      debug:
+        msg: "Fetched git hash: {{ git_output.stdout }}"
+
+    - name: Debug envs variable
+      debug:
+        var: envs
+
+    - name: Parse envs into a dictionary using dict filter
+      set_fact:
+        envs_dict: "{{ dict(envs | default('') | split(' ') | map('split', '=', 1)) }}"
+      when: envs != ""
+
+    - name: Debug envs_dict
+      debug:
+        var: envs_dict
+
+    - name: Set release name
+      set_fact:
+        releasename: >-
+          {{
+            git_output.stdout
+            + ( "_" + features if (features is defined and features | length > 0) else "" )
+            + ( "_" + (envs | regex_replace('=', '_') | regex_replace(' ', '_')) if (envs is defined and envs | length > 0) else "" )
+          }}
+
+    - name: Check if the binary for the git hash exists in S3 bucket
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        object: "{{ releasename }}"
+        mode: get
+        dest: "/dev/null"  # Dummy destination to check existence
+        profile: "{{ s3_profile }}"
+      register: s3_ls_output
+      ignore_errors: yes
+      failed_when: "'does not exist' in s3_ls_output.msg"
+
+    - name: Clone the repository if the binary is not found in S3
+      git:
+        repo: "{{ snarkos_repo }}"
+        dest: "{{ clone_dir_base }}/{{ git_output.stdout }}"
+        version: "{{ snarkos_git_branch_local_build }}"
+        depth: 1
+      when: s3_ls_output.failed
+
+    - name: Create tmp directory for building OpenSSL
+      file:
+        path: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp"
+        state: directory
+      when: s3_ls_output.failed
+
+    - name: Download OpenSSL tarball
+      get_url:
+        url: "{{ openssl_url }}"
+        dest: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_tarball }}"
+      when: s3_ls_output.failed
+
+    - name: Extract OpenSSL tarball using tar command
+      command: tar -xzf "{{ openssl_tarball }}"
+      args:
+        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp"
+      when: s3_ls_output.failed
+
+    - name: Configure OpenSSL
+      command: >
+        ./Configure linux-x86_64 no-shared no-module no-dso no-async
+        --prefix={{ openssl_install_prefix }}
+        --openssldir={{ openssl_install_prefix }}
+      args:
+        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_dir }}"
+      environment:
+        CROSS_COMPILE: "x86_64-unknown-linux-gnu-"
+        CFLAGS: "-fPIC -fPIE -pie"
+      when: s3_ls_output.failed
+
+    - name: Build OpenSSL with make -j12
+      command: make -j12
+      args:
+        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_dir }}"
+      when: s3_ls_output.failed
+
+    - name: Install OpenSSL
+      command: make install
+      args:
+        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_dir }}"
+      when: s3_ls_output.failed
+
+    - name: Set features flag
+      set_fact:
+        featureflags: >-
+          {{
+            "" if (features is not defined or features | length == 0)
+            else "--features {{ features }}"
+          }}
+
+    - name: Build the Rust project with OpenSSL
+      command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }}
+      args:
+        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}"
+      environment: >-
+        {{
+          {
+            'OPENSSL_INCLUDE_DIR': openssl_install_prefix + '/include',
+            'OPENSSL_LIB_DIR': openssl_install_prefix + '/lib64',
+            'OPENSSL_STATIC': '1',
+            'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER': 'x86_64-unknown-linux-gnu-gcc'
+          } | combine(envs_dict | default({}))
+        }}
+      when: s3_ls_output.failed
+
+    - name: Upload the built snarkos binary to S3
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        object: "{{ releasename }}"
+        src: "{{ clone_dir_base }}/{{ git_output.stdout }}/target/x86_64-unknown-linux-gnu/release/snarkos"
+        mode: put
+        profile: "{{ s3_profile }}"
+      when: s3_ls_output.failed
+      register: s3_upload_output
+
+    - name: Debug message after upload
+      debug:
+        msg: "Uploaded snarkos binary to S3."
+      when: s3_upload_output.changed
+
+    - name: Set snarkos_git_hash fact for later use
+      set_fact:
+        snarkos_git_hash: "{{ git_output.stdout }}"

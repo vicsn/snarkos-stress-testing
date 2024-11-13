@@ -61,6 +61,7 @@ resource "aws_instance" "snarkos_validator" {
   ami           = module.stress_base_ami.ami_id
   instance_type = var.validator_instance_type
   key_name      = aws_key_pair.generated_key.key_name
+  iam_instance_profile = aws_iam_instance_profile.snarkos_ec2_instance_profile.name
 
   security_groups = [module.sg.security_group_name]
 
@@ -87,6 +88,7 @@ resource "aws_instance" "snarkos_client" {
   ami           = module.stress_base_ami.ami_id
   instance_type = each.value.type
   key_name      = aws_key_pair.generated_key.key_name
+  iam_instance_profile = aws_iam_instance_profile.snarkos_ec2_instance_profile.name
 
   security_groups = [module.sg.security_group_name]
 
