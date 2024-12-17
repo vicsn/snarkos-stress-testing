@@ -15,7 +15,7 @@ To profile the validator consensus process:
 * Obtain logs from a snarkOS validator that runs a `malice` branch, thus outputting `profiling` logs.
 * Place the logs in a subfolder here (e.g., `/aws-logs/val-0.log`).
 * Run `analysis_01_prepare_logfile.py`, which stores a prepared log file. Example command: `python3 analysis_01_prepare_logfile.py --logpath aws-logs/validator-0.log`.
-* Run `analysis_02_analyze_logfile.py`, which creates a plot, and also prints if detecting an unexpected order of logs. Example command: `python3 analysis_02_val_consensus_profiling.py --logfile aws-logs/prepared_validator-0.log`.
+* Run `analysis_02_val_consensus_profiling.py`, which creates four different plots: the validator consensus steps per round, the block times, the number of transmissions per block, and the number of associated rounds per block. Example command: `python3 analysis_02_val_consensus_profiling.py --logfile aws-logs/prepared_validator-0.log`.
 
 # Sync profiling
 To visualize the validator or client syncing, and to compute the syncing speed, proceed as follows:
