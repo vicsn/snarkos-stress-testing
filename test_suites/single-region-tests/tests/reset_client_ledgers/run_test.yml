@@ -2,7 +2,7 @@
   hosts: snarkos_client
   remote_user: ubuntu
   become: true
-  serial: 1
+  serial: 3
   pre_tasks:
     - include_tasks: ../../playbooks/set_client_facts.yml
 

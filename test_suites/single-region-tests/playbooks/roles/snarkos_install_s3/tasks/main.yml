@@ -15,6 +15,10 @@
     name: python3-pip
     state: present
   when: ansible_os_family == "Debian"
+  register: apt_result
+  retries: 5
+  delay: 30
+  until: apt_result is success
 
 - name: Ensure Python boto3 is installed
   pip:

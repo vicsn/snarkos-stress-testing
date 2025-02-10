@@ -15,7 +15,7 @@
         use_local_build: >-
           {{
             (snarkos_repo is defined and snarkos_repo | length > 0) and
-            (snarkos_git_branch_local_build is defined and snarkos_git_branch_local_build | length > 0)
+            (snarkos_git_commit_local_build is defined and snarkos_git_commit_local_build | length > 0)
           }}
     
     - name: Check if GitHub build should be used
@@ -95,6 +95,24 @@
   tags: snarkos_install
 
 # ------------------------------------------------
+# zip
+- name: Install zip 
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Install zip
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      with_items:
+        - zip
+      retries: 20
+      delay: 30
+      until: apt_result is success
+
+# ------------------------------------------------
 # flamegraph
 
 - name: Install flamegraph dependencies
@@ -107,7 +125,7 @@
     - name: Capture kernel version
       command: uname -r
       register: kernel_version
-      when: create_flamegraph and node_id == flamegraph_node_id
+      when: create_flamegraph
 
     - name: Install flamegraph dependencies
       apt:
@@ -119,7 +137,10 @@
         - linux-tools-generic
         - linux-tools-{{ kernel_version.stdout }}
         - build-essential
-      when: create_flamegraph and node_id == flamegraph_node_id
+      retries: 20
+      delay: 30
+      until: apt_result is success
+      when: create_flamegraph
   
     - name: Install Rustup and flamegraph # As advised by https://github.com/flamegraph-rs/flamegraph
       shell: |
@@ -130,7 +151,7 @@
         cargo install flamegraph
       args:
         executable: /bin/bash
-      when: create_flamegraph and node_id == flamegraph_node_id
+      when: create_flamegraph
 
 # ------------------------------------------------
 # snarkOS Process Exporter

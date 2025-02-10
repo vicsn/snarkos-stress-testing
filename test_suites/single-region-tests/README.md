@@ -9,8 +9,8 @@
     - `brew install ansible`
 - [Install AWS CLI](https://aws.amazon.com/cli/)
     - `brew install awscli`
-- Use Github actions to build and release a snarkOS binary on github.com/ProvableHQ/snarkos-staging
-- Alternatively, you can use the local cross-compilation method and use AWS S3 for release distribution. To use the local build method, run these steps first on Mac:
+- Make sure you have access to github.com/ProvableHQ/snarkos-staging
+- You can build binaries with github actions or use the local cross-compilation method and use AWS S3 for release distribution. To use the local build method, run these steps first on Mac:
     - `brew tap SergioBenitez/osxct`
     - `brew install x86_64-unknown-linux-gnu`
     - `brew install openssl@3` (this should create a folder `/opt/homebrew/Cellar/openssl@3/3.4.0`. In case newer versions are released, update the version in the file `playbooks/roles/snarkos_build_locally/defaults/main.yml` and try it out.)

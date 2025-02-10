@@ -1,14 +1,5 @@
 - name: Prepare release for S3 and local build
   block:
-    - name: Fetch the git hash
-      shell: git ls-remote {{ snarkos_repo }} {{ snarkos_git_branch_local_build }} | awk 'NR==1 {print $1}'
-      register: git_output
-      changed_when: false
-
-    - name: Debug message to display fetched git hash
-      debug:
-        msg: "Fetched git hash: {{ git_output.stdout }}"
-
     - name: Debug envs variable
       debug:
         var: envs
@@ -26,7 +17,7 @@
       set_fact:
         releasename: >-
           {{
-            git_output.stdout
+            snarkos_git_commit_local_build
             + ( "_" + features if (features is defined and features | length > 0) else "" )
             + ( "_" + (envs | regex_replace('=', '_') | regex_replace(' ', '_')) if (envs is defined and envs | length > 0) else "" )
           }}
@@ -45,27 +36,31 @@
     - name: Clone the repository if the binary is not found in S3
       git:
         repo: "{{ snarkos_repo }}"
-        dest: "{{ clone_dir_base }}/{{ git_output.stdout }}"
-        version: "{{ snarkos_git_branch_local_build }}"
+        dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}"
+        version: "{{ snarkos_git_commit_local_build }}"
         depth: 1
+      when: s3_ls_output.failed
+
+    - name: Override Rust version
+      shell: cd {{ clone_dir_base }}/{{ snarkos_git_commit_local_build }} && rustup override set nightly-aarch64-apple-darwin
       when: s3_ls_output.failed
 
     - name: Create tmp directory for building OpenSSL
       file:
-        path: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp"
+        path: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp"
         state: directory
       when: s3_ls_output.failed
 
     - name: Download OpenSSL tarball
       get_url:
         url: "{{ openssl_url }}"
-        dest: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_tarball }}"
+        dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp/{{ openssl_tarball }}"
       when: s3_ls_output.failed
 
     - name: Extract OpenSSL tarball using tar command
       command: tar -xzf "{{ openssl_tarball }}"
       args:
-        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp"
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp"
       when: s3_ls_output.failed
 
     - name: Configure OpenSSL
@@ -74,7 +69,7 @@
         --prefix={{ openssl_install_prefix }}
         --openssldir={{ openssl_install_prefix }}
       args:
-        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_dir }}"
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp/{{ openssl_dir }}"
       environment:
         CROSS_COMPILE: "x86_64-unknown-linux-gnu-"
         CFLAGS: "-fPIC -fPIE -pie"
@@ -83,13 +78,13 @@
     - name: Build OpenSSL with make -j12
       command: make -j12
       args:
-        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_dir }}"
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp/{{ openssl_dir }}"
       when: s3_ls_output.failed
 
     - name: Install OpenSSL
       command: make install
       args:
-        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}/tmp/{{ openssl_dir }}"
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp/{{ openssl_dir }}"
       when: s3_ls_output.failed
 
     - name: Set features flag
@@ -103,7 +98,7 @@
     - name: Build the Rust project with OpenSSL
       command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }}
       args:
-        chdir: "{{ clone_dir_base }}/{{ git_output.stdout }}"
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}"
       environment: >-
         {{
           {
@@ -119,7 +114,7 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ releasename }}"
-        src: "{{ clone_dir_base }}/{{ git_output.stdout }}/target/x86_64-unknown-linux-gnu/release/snarkos"
+        src: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/target/x86_64-unknown-linux-gnu/release/snarkos"
         mode: put
         profile: "{{ s3_profile }}"
       when: s3_ls_output.failed
@@ -132,4 +127,4 @@
 
     - name: Set snarkos_git_hash fact for later use
       set_fact:
-        snarkos_git_hash: "{{ git_output.stdout }}"
+        snarkos_git_hash: "{{ snarkos_git_commit_local_build }}"

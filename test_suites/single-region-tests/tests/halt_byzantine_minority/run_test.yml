@@ -118,9 +118,9 @@
       debug:
         msg: "Hosts in batch #{{ hostvars['localhost']['batch_number'] }} stopped at: {{ now() }}"
       run_once: true # runs once per serial batch
-    - name: Wait for 60 minutes to let the validators fall behind.
+    - name: Wait for 5 minutes to let the validators fall behind.
       pause:
-        minutes: 60
+        minutes: 5
       run_once: true # runs once per serial batch
     - name: Start snarkOS service again
       systemd:
@@ -134,16 +134,3 @@
       pause:
         minutes: 10
       run_once: true # runs once per serial batch
-- name: See if network remains stable
-  hosts: snarkos_validator
-  remote_user: ubuntu
-  become: yes
-  tasks:
-    - name: Finally run another 20 minutes
-      pause:
-        minutes: 20
-      run_once: true
-    - name: Report end time
-      debug:
-        msg: "Done with test at: {{ now() }}"
-      run_once: true

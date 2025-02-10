@@ -18,13 +18,17 @@
   set_fact:
     own_address: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
 
-- name: Set client addresses, filtering out own_address
+- name: Collect client addresses, filtering out own_address
   set_fact:
-    client_addresses: "{{ groups['snarkos_client'] | map('extract', hostvars) | map(attribute='public_ip_address') | select('ne', own_address) | join(',') }}"
+    client_addresses: "{{ groups['snarkos_client'] | map('extract', hostvars) | map(attribute='public_ip_address') | select('ne', own_address) | shuffle }}"
+
+- name: slice 7 from client_addresses
+  set_fact:
+    client_addresses: "{{ client_addresses[:7] }}"
 
 - name: Append port :4130 to client addresses
   set_fact:
-    client_addresses: "{{ client_addresses | regex_replace('([^,]+)', '\\1:4130') }}"
+    client_addresses: "{{ client_addresses | join(',') | regex_replace('([^,]+)', '\\1:4130') }}"
 
 - name: Set node_id based on instance tag
   set_fact:

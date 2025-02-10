@@ -1,4 +1,4 @@
-- name: Fetch flamegraph from validators
+- name: Fetch flamegraph from validators, assuming they are running with `create_flamegraph`
   hosts: snarkos_validator
   become: true
   remote_user: ubuntu

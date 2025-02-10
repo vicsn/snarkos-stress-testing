@@ -5,8 +5,20 @@
   pre_tasks:
     - include_tasks: ../../playbooks/set_validator_facts.yml
   tasks:
+    - name: Zip logs
+      archive:
+        path: "/tmp/snarkos.log"
+        dest: "/tmp/snarkos.log.gz"
+
+    - name: Determine how big the zipped file is.
+      command: du -sh /tmp/snarkos.log.gz
+      register: du_output
+
+    - debug:
+        var: du_output
+
     - name: Fetch logs
       fetch:
-        src: "/tmp/snarkos.log"
-        dest: "../../log_files/val-{{ node_id }}.txt"
+        src: "/tmp/snarkos.log.gz"
+        dest: "../../log_files/val-{{ node_id }}.log.gz"
         flat: yes
