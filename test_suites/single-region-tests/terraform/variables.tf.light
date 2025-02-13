@@ -130,5 +130,10 @@ variable "tx_cannon_services" {
       tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_2_4_2.toml --network"
       task_count = 1
     }
+
+    ProgramProbe = {
+      tx_command = "tx-cannon program-probe --wait 500 --randomize --network"
+      task_count = 1
+    }
   }
 }

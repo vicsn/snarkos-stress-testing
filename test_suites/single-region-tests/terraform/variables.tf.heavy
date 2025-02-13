@@ -157,6 +157,11 @@ variable "tx_cannon_services" {
     #  task_count = 1
     #}
 
+    ProgramProbe = {
+      tx_command = "tx-cannon program-probe --wait 100 --randomize --network"
+      task_count = 1
+    }
+
     # Add more services as needed
     # tx-cannon malice -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --redeploy --double-spend --duplicate-transitions --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt --underreport-constraints 10 --repetitions 90000000000001
     
