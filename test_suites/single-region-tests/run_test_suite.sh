@@ -6,6 +6,11 @@ PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
 bold=$(tput bold)
 normal=$(tput sgr0)
 
+TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
+export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
+RELEASE_BUCKET="${RELEASE_BUCKET:release-bucket-2122415}"
+export TF_RELEASE_BUCKET=$RELEASE_BUCKET
+
 # Function to clean up resources using Terraform
 cleanup() {
     echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
@@ -22,7 +27,7 @@ cleanup() {
 # Function to init and apply Terraform
 init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
-    terraform init
+    terraform init -backend-config="bucket=${TFSTATE_BUCKET}"
 
     # Store the currently loaded tx-cannon services
     replace_args="" 
@@ -62,7 +67,7 @@ run_test() {
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
         cd "$PARENT_DIR/tests/$SELECTED/"
-        "./check.sh $NETWORK"
+        ./check.sh $NETWORK
     fi
 
     # Run any post-test script

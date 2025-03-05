@@ -23,6 +23,11 @@ variable "client_instance_count" {
   default     = 1
 }
 
+variable "RELEASE_BUCKET" {
+  description = "The bucket used to upload and download SnarkOS binaries"
+  default     = "release-bucket-2122415"
+}
+
 # ------------------------------------------------
 # Clients
 

@@ -1,0 +1,15 @@
+- name: Upload a local pre-built release of SnarkOS
+  ansible.builtin.copy:
+    src: "{{ snarkos_pre_build_location }}"
+    dest: "/usr/bin/snarkos"
+  register: local_upload
+
+- name: Ensure the upload was successful
+  fail:
+    msg: "Failed to upload a local snarkos binary."
+  when: local_upload.failed
+
+- name: Ensure the binary is executable
+  file:
+    path: "/usr/bin/snarkos"
+    mode: '0755'

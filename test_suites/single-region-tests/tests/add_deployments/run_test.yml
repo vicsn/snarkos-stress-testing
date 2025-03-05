@@ -25,7 +25,8 @@
   become: true
   remote_user: ubuntu
   roles:
-    - txcannon_setup
+    - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
+    - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }
     - logstash_txcannon_setup
   tags: tx-cannon
 

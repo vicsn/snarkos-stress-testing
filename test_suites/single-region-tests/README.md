@@ -37,6 +37,15 @@ Authentication happens via Google SSO:
 
 `./run_test_suite.sh` will allow you to choose infra to set up and tests to run.
 
+`./auto_run_test_suite.sh` is used mainly for atuomatically running the tests, but also can be ran manually. Examples:
+
+```
+./auto_run_test_suite.sh l y y test_name # Run test_name in light environment also setup terraform.
+./auto_run_test_suite.sh l y n # Just setup terraform for light environment.
+./auto_run_test_suite.sh l n y test_name # Run test_name in light environment, but don't setup terraform.
+./auto_run_test_suite.sh l y y test_name my_vars # Run test_name in light environment also setup terraform with alternative vars file.
+```
+
 ## Monitoring
 
 - [Grafana](https://aleostresstest.grafana.net/d/single-region-tests/single-region-tests?from=now-3h&to=now&refresh=) can be used with `devnet_name=single-region-tests`. If you change your `devnet_name`, you'll need to customize and import `grafana.json` to a new dashboard.

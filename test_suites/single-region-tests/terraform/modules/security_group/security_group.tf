@@ -48,6 +48,13 @@ resource "aws_security_group" "this" {
 
   ingress {
     from_port   = 4130
+    to_port     = 4130
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 4130
     to_port     = 4230
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]

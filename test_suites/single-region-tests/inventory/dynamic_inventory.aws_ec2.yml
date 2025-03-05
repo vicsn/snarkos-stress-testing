@@ -1,6 +1,6 @@
 plugin: amazon.aws.aws_ec2
 
-regions: us-west-2
+regions: us-west-2,eu-central-1
 
 profile: ephnet
 

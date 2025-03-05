@@ -31,7 +31,7 @@
   aws_s3:
     bucket: "{{ s3_bucket }}"
     object: "{{ release_name }}"
-    dest: "/usr/bin/snarkos"
+    dest: "/usr/bin/{{ dest_name }}"
     mode: get
   register: s3_download
 
@@ -42,5 +42,5 @@
 
 - name: Ensure the binary is executable
   file:
-    path: "/usr/bin/snarkos"
+    path: "/usr/bin/{{ dest_name }}"
     mode: '0755'

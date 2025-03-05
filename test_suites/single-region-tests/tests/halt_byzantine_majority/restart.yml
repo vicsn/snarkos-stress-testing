@@ -35,6 +35,10 @@
     state: restarted
   loop: "{{ validators_to_stop }}"
 
+- name: Pause for 120 more seconds
+  pause:
+    seconds: 120
+
 - name: Fetch the current block height
   ansible.builtin.uri:
     url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"

@@ -20,7 +20,7 @@
     name: metricbeat
     state: latest
   register: apt_result
-  retries: 5
+  retries: 10
   delay: 30
   until: apt_result is success
 

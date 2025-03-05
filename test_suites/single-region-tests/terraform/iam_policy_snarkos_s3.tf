@@ -12,8 +12,8 @@ resource "aws_iam_policy" "snarkos_s3_access" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:aws:s3:::release-bucket-2122415",
-          "arn:aws:s3:::release-bucket-2122415/*"
+          "arn:aws:s3:::${var.RELEASE_BUCKET}",
+          "arn:aws:s3:::${var.RELEASE_BUCKET}/*"
         ]
       }
     ]

@@ -1,3 +1,19 @@
+- name: Gather information about all ELBs
+  hosts: localhost
+  gather_facts: no
+  remote_user: ubuntu
+  tasks:
+    - name: Wait for the network to be healthly
+      uri:
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/height/latest"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 10
+
 - name: Set up and run unbond
   hosts: snarkos_client[0]
   become: yes

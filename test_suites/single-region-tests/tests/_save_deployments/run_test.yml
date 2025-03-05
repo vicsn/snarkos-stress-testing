@@ -7,9 +7,22 @@
   become: true
   remote_user: ubuntu
   roles:
-    - txcannon_setup
+    - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
+    - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }
     - logstash_txcannon_setup
-    - snarkos_install_binary
+    - role: snarkos_install_binary
+      when: {{use_prebuild_tx_cannon is undefined}}
+    - role: snarkos_install_s3
+      s3_bucket: "snarkos-releases-for-testing"
+      when: {{use_prebuild_tx_cannon is defined}}
+    - role: snarkos_service
+      num_instances: "{{ groups['snarkos_validator'] | length }}"
+      validator_index: 0
+      validator_address: "{{ hostvars[groups['snarkos_validator'][validator_index | int]]['public_ip_address'] }}"
+      own_address: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+      client_addresses: "{{ groups['snarkos_client'] | map('extract', hostvars) | map(attribute='public_ip_address') | select('ne', own_address) | join(',') }}"
+      node_id: "{{ (num_instances | int) + 100*(validator_index | int) + 10000*(tags['Dev'] | int) }}"
+      snarkos_command: "snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_address }}:4130,{{ client_addresses }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --rest-rps {{ rest_rps }} --network {{ snarkos_network_int }}"
   tags: tx-cannon
 
 - name: GENERATE THE DEPLOYMENTS!

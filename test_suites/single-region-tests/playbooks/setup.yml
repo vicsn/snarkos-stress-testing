@@ -10,18 +10,38 @@
   hosts: localhost
   gather_facts: no
   tasks:
+    - name: Check if a local pre-built version should be used
+      set_fact:
+        use_local_pre_build: >-
+          {{
+            (snarkos_pre_build_location is defined and snarkos_pre_build_location | length > 0)
+          }}
+
+    - name: Check if S3 pre-built version should be used
+      set_fact:
+        use_s3_pre_build: >-
+          {{
+            (snarkos_pre_build_location is undefined) and
+            (s3_bucket is defined and s3_bucket | length > 0) and
+            (use_snarkos_pre_build_s3 is defined and use_snarkos_pre_build_s3|bool)
+          }}
+
     - name: Check if local build should be used
       set_fact:
         use_local_build: >-
           {{
+            (snarkos_pre_build_location is undefined) and
+            (use_snarkos_pre_build_s3 is undefined or not use_snarkos_pre_build_s3|bool) and
             (snarkos_repo is defined and snarkos_repo | length > 0) and
             (snarkos_git_commit_local_build is defined and snarkos_git_commit_local_build | length > 0)
           }}
-    
+
     - name: Check if GitHub build should be used
       set_fact:
         use_github_build: >-
           {{
+            (snarkos_pre_build_location is undefined) and
+            (use_snarkos_pre_build_s3 is undefined or not use_snarkos_pre_build_s3|bool) and
             (snarkos_binary_tag is defined and snarkos_binary_tag | length > 0)
           }}
 
@@ -29,14 +49,23 @@
       set_fact:
         use_remote_build: >-
           {{
+            (snarkos_pre_build_location is undefined) and
+            (use_snarkos_pre_build_s3 is undefined or not use_snarkos_pre_build_s3|bool) and
             (snarkos_git_hash is defined and snarkos_git_hash | length > 0) and
             (snarkos_repo is defined and snarkos_repo | length > 0)
+          }}
+
+    - name: Check malice download method
+      set_fact:
+        use_malicious_snarkos_pre_build: >-
+          {{
+            (use_malicious_snarkos_pre_build is defined) and (use_malicious_snarkos_pre_build|bool)
           }}
 
     - name: Ensure exactly one installation method is used
       fail:
         msg: "Exactly one installation method should be used."
-      when: (use_local_build | int + use_github_build | int + use_remote_build | int) != 1
+      when: (use_local_build | int + use_github_build | int + use_remote_build | int | int + use_local_pre_build | int + use_s3_pre_build) != 1
 
 - name: Build and upload snarkOS to S3 if required
   hosts: localhost
@@ -55,15 +84,22 @@
   become: true
   remote_user: ubuntu
   vars:
-    s3_bucket: "release-bucket-2122415"
+    s3_bucket: "{{ s3_bucket }}"
+    snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
     snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-    release_name: "{{ hostvars['localhost'].releasename }}"
+    release_name: "{{ hostvars['localhost'].releasename | default('snarkos') }}"
+    dest_name: "snarkos"
   tasks:
+    - name: Use local pre-built version
+      include_role:
+        name: snarkos_upload_local
+      when: hostvars['localhost'].use_local_pre_build
+
     - name: Install snarkOS from S3
       include_role:
         name: snarkos_install_s3
-      when: hostvars['localhost'].use_local_build
-    
+      when: hostvars['localhost'].use_s3_pre_build or hostvars['localhost'].use_local_build
+
     - name: Install snarkOS from binary
       include_role:
         name: snarkos_install_binary
@@ -91,6 +127,15 @@
         mv /tmp/snarkos-malicious/snarkos /usr/bin/snarkos-malice
       args:
         executable: /bin/bash
+      when: not hostvars['localhost'].use_malicious_snarkos_pre_build
+
+    - name: Download malice snarkOS binary from S3
+      vars:
+        release_name: "{{snarkos_malice_tag}}/snarkos"
+        dest_name: "snarkos-malice"
+      include_role:
+        name: snarkos_install_s3
+      when: hostvars['localhost'].use_malicious_snarkos_pre_build
 
   tags: snarkos_install
 
@@ -185,6 +230,8 @@
   pre_tasks:
     - include_tasks: logging_enrichment.yml
       vars:
+        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
+        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
         use_local_build: "{{ hostvars['localhost'].use_local_build }}"
         use_github_build: "{{ hostvars['localhost'].use_github_build }}"
         use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
@@ -204,6 +251,8 @@
   pre_tasks:
     - include_tasks: logging_enrichment.yml
       vars:
+        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
+        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
         use_local_build: "{{ hostvars['localhost'].use_local_build }}"
         use_github_build: "{{ hostvars['localhost'].use_github_build }}"
         use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
@@ -222,6 +271,8 @@
   pre_tasks:
     - include_tasks: logging_enrichment.yml
       vars:
+        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
+        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
         use_local_build: "{{ hostvars['localhost'].use_local_build }}"
         use_github_build: "{{ hostvars['localhost'].use_github_build }}"
         use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"

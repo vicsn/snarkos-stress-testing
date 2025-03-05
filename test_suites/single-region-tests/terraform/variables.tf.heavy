@@ -23,6 +23,11 @@ variable "client_instance_count" {
   default     = 1 # More would surpass vCPU limit
 }
 
+variable "RELEASE_BUCKET" {
+  description = "The bucket used to upload and download SnarkOS binaries"
+  default     = "snarkos-releases-for-testing"
+}
+
 # ------------------------------------------------
 # Clients
 

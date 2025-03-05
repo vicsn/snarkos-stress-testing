@@ -1,0 +1,20 @@
+# /etc/systemd/system/talisker.service
+
+[Unit]
+Description=Talisker Service
+After=network.target
+
+[Service]
+Restart=always
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu
+SyslogIdentifier=talisker
+Environment="MIX_ENV=prod"
+Environment="ARDBEG_SECRET={{ ARDBEG_SECRET }}"
+ExecStart=/home/ubuntu/talisker/bin/talisker start
+ExecStop=/home/ubuntu/talisker/bin/talisker stop
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

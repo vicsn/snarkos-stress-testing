@@ -18,3 +18,7 @@
   command:
     cmd: docker-compose -f docker-compose-node-exporter.yml up -d --force-recreate
     chdir: /home/ubuntu/
+  retries: 5
+  delay: 20
+  register: docker_compose_up_result
+  until: docker_compose_up_result.rc == 0

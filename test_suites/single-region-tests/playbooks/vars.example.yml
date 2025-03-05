@@ -32,6 +32,14 @@ features: "test_targets,test_skip_tx_checks" # optional, e.g., "test_targets,tes
 snarkos_malice_tag: "malice-2349f3eda" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs. Only GitHub build installation method currently supported.
 tx_cannon_binary_tag: "mainnet-latest"
 
+# Vars to be used with pre-built releases:
+
+# use_snarkos_pre_build_s3: true # To use a snarkos binary put in the root of the configured `s3_bucket`.
+# use_prebuild_tx_cannon: true # To use a pre-built tx_cannon binary located on the tx-cannons bucket.
+# use_malicious_snarkos_pre_build: true # To use malicious SnarkOS pre-built binary located on the configured `s3_bucket` under folder named like the `snarkos_malice_tag`
+# snarkos_pre_build_location: "/home/ubuntu/bin/snarkos" # To use a local pre-built SnarkOS binary on the given path.
+# s3_bucket: "snarkos-releases-for-testing" # Specifies the bucket containing the pre-built binaries that can be downloaded when `use_snarkos_pre_build_s3` or `use_malicious_snarkos_pre_build` are set to true
+
 # Application vars
 snarkos_verbosity: "1"
 snarkos_network: mainnet

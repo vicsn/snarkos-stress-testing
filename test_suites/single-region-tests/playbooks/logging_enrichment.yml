@@ -29,6 +29,19 @@
         commit_hash: "{{ current_commit_hash.stdout }}"
   when: use_remote_build
 
+- name: Get commit hash from the SnarkOS build
+  block:
+    - name: Get build commit hash
+      shell: /usr/bin/snarkos -V | awk '{print $4}'
+      args:
+        executable: /bin/bash
+      register: current_commit_hash
+
+    - name: Set commit hash
+      set_fact:
+        commit_hash: "{{ current_commit_hash.stdout }}"
+  when: use_local_pre_build or use_s3_pre_build
+
 - name: Print current commit hash
   debug:
     msg: "The current commit hash is {{ commit_hash }}"

@@ -58,6 +58,10 @@
     flat: yes
   delegate_to: "{{ source_node }}"
   remote_user: ubuntu
+  retries: 10
+  delay: 10
+  register: fetch_result
+  until: fetch_result is not failed
 
 - name: Copy ledger backup to each validator in the current group
   ansible.builtin.copy:

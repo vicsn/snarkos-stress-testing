@@ -24,6 +24,11 @@
   vars:
     verbosity: "1"
   tasks:
+    - name: Install tx-cannon from S3
+      include_role:
+        name: txcannon_setup_s3
+      when: use_prebuild_tx_cannon is defined and use_prebuild_tx_cannon | bool
+
     - name: Install GitHub CLI
       shell: |
         type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
@@ -35,6 +40,7 @@
       args:
         executable: /bin/bash
       become: yes
+      when: use_prebuild_tx_cannon is undefined
 
     - name: Clone or update tx-cannon
       remote_user: ubuntu
@@ -42,9 +48,11 @@
         repo: "https://{{ github_token }}@github.com/ProvableHQ/tx-cannon.git"
         dest: "/home/ubuntu/tx-cannon"
         version: "mainnet"
+      when: use_prebuild_tx_cannon is undefined
 
     - name: Gather facts from all nodes
       setup:
+      when: use_prebuild_tx_cannon is undefined
 
     - name: Download tx-cannon binary with GitHub CLI
       shell: >
@@ -64,11 +72,13 @@
       args:
         executable: /bin/bash
       become: yes
+      when: use_prebuild_tx_cannon is undefined
 
     - name: Make tx-cannon executable
       file:
         path: "/usr/bin/tx-cannon"
         mode: '0755'
+      when: use_prebuild_tx_cannon is undefined
 
 - name: Run the double spend attack
   hosts: "tx_cannon_node[0]"

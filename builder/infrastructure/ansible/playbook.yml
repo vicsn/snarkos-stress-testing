@@ -1,0 +1,91 @@
+- hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Clone the stress-testing repository
+      git:
+        repo: "https://{{ github_token }}@github.com/ProvableHQ/stress-testing.git"
+        dest: "/home/ubuntu/stress_testing"
+
+    - name: Update APT package index and install boto3
+      become: true
+      become_user: root
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+        name:
+          - python3-pip
+
+    - name: Ensure Python boto3 is installed
+      pip:
+        name: boto3
+        state: present
+        executable: pip3
+
+    - name: Download talisker release from S3
+      aws_s3:
+        bucket: "snarkos-releases-for-testing"
+        object: "talisker.tar.gz"
+        dest: "/home/ubuntu/talisker.tar.gz"
+        mode: get
+      register: s3_download
+
+    - name: Ensure the download was successful
+      fail:
+        msg: "Failed to download talisker release from S3."
+      when: s3_download.failed
+
+    - name: Extract talisker release
+      ansible.builtin.unarchive:
+        src: /home/ubuntu/talisker.tar.gz
+        dest: /home/ubuntu
+        remote_src: yes
+
+    - name: Ensure the talisker binary is executable
+      file:
+        path: "/home/ubuntu/talisker/bin/talisker"
+        mode: '0755'
+
+    - name: Deploy the talisker systemd service file
+      become: true
+      become_user: root
+      template:
+        src: talisker.service
+        dest: /etc/systemd/system/talisker.service
+        mode: '0644'
+      become: true
+
+    - name: Reload systemd to read new talisker service file
+      become: true
+      become_user: root
+      systemd:
+        daemon_reload: true
+      become: true
+
+    - name: Restart talisker service
+      become: true
+      become_user: root
+      systemd:
+        name: talisker
+        state: restarted
+      become: true
+
+    - name: Run aws config
+      ansible.builtin.shell: |
+        aws configure set default.region us-central-1
+
+    - name: Setup aws config
+      template:
+        src: aws.config
+        dest: /home/ubuntu/.aws/config
+        mode: '0600'
+      become: true
+
+    - name: Set up testing ansible vars
+      template:
+        src: ansible_vars.yml
+        dest: /home/ubuntu/stress_testing/test_suites/single-region-tests/playbooks/vars.yml
+        mode: '0600'
+      become: true

@@ -1,8 +1,7 @@
+
 terraform {
   backend "s3" {
-    bucket         = "ephnet-terraform-state-bucket-eq"
     key            = "terraform/state/single-region-tests/terraform.tfstate"
-    region         = "us-west-2"
     profile        = "ephnet"
   }
 }

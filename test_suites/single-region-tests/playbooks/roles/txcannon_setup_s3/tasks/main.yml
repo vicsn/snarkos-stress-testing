@@ -1,0 +1,77 @@
+- name: Update APT package index
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Ensure Python3 is installed
+  apt:
+    name: python3
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Ensure pip3 is installed
+  apt:
+    name: python3-pip
+    state: present
+  when: ansible_os_family == "Debian"
+  retries: 5
+  delay: 30
+  register: pip_installed
+  until: pip_installed is success
+
+- name: Ensure Python boto3 is installed
+  pip:
+    name: boto3
+    state: present
+    executable: pip3
+  when: ansible_os_family == "Debian"
+
+- name: Download tx-cannon binary from S3
+  aws_s3:
+    bucket: "tx-cannons"
+    object: "tx-cannon"
+    dest: "/usr/bin/tx-cannon"
+    mode: get
+  register: s3_download
+
+- name: Ensure the download was successful
+  fail:
+    msg: "Failed to download tx-cannon binary from S3."
+  when: s3_download.failed
+
+- name: Make tx-cannon executable
+  file:
+    path: /usr/bin/tx-cannon
+    mode: "0755"
+
+- name: Create tx-cannon folder for logs and testing
+  remote_user: ubuntu
+  ansible.builtin.file:
+    path: /home/ubuntu/tx-cannon
+    state: directory
+
+- name: Download tx-cannon tests from S3
+  aws_s3:
+    bucket: "tx-cannons"
+    object: "tests.zip"
+    dest: "/home/ubuntu/tx-cannon/tests.zip"
+    mode: get
+  register: s3_download
+
+- name: Ensure the tests download was successful
+  fail:
+    msg: "Failed to download tx-cannon tests from S3."
+  when: s3_download.failed
+
+- name: Unzip and setup tests folder
+  shell: >
+    unzip -o /home/ubuntu/tx-cannon/tests.zip -d /home/ubuntu/tx-cannon
+  args:
+    executable: /bin/bash
+  become: true
+
+- name: Make tx-cannon tests readable
+  file:
+    path: /home/ubuntu/tx-cannon/tests
+    mode: "0777"

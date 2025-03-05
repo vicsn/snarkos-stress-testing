@@ -8,7 +8,6 @@ services:
     volumes:
       - /proc:/host/proc
       - .:/config
-    network_mode: host
     pid: host
     ports:
       - "9100:9100"

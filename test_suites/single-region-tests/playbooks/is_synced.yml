@@ -32,8 +32,8 @@
       method: GET
       return_content: true
     register: node_current_block_compare
-    retries: 5
-    delay: 2
+    retries: 10
+    delay: 5
     until: node_current_block_compare.status == 200
 
   - name: Calculate height difference
