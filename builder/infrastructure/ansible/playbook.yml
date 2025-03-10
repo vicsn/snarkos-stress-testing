@@ -89,3 +89,10 @@
         dest: /home/ubuntu/stress_testing/test_suites/single-region-tests/playbooks/vars.yml
         mode: '0600'
       become: true
+
+    - name: Set up the auto-run script
+      template:
+        src: auto_run_test_suite.sh
+        dest: /home/ubuntu/stress_testing/test_suites/single-region-tests/auto_run_test_suite.sh
+        mode: '0755'
+      become: true

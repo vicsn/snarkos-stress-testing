@@ -12,6 +12,7 @@ WorkingDirectory=/home/ubuntu
 SyslogIdentifier=talisker
 Environment="MIX_ENV=prod"
 Environment="ARDBEG_SECRET={{ ARDBEG_SECRET }}"
+Environment="STAGING_REPO_TOKEN={{ github_token }}"
 ExecStart=/home/ubuntu/talisker/bin/talisker start
 ExecStop=/home/ubuntu/talisker/bin/talisker stop
 Restart=on-failure

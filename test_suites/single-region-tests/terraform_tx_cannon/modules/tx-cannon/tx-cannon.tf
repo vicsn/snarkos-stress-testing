@@ -24,8 +24,8 @@ variable "devnet_name" {
   description = "The devnet"
 }
 
-resource "aws_iam_role" "tx_cannon_node_ec2_role" {
-  name = "TXCannon-EC2-Role"
+resource "aws_iam_role" "tx_cannon_service_node_ec2_role" {
+  name = "TXCannon-Service-EC2-Role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -66,21 +66,21 @@ resource "aws_iam_policy" "tx_cannon_node_s3_access" {
 }
 
 resource "aws_iam_role_policy_attachment" "tx_cannon_node_access_attach" {
-  role       = aws_iam_role.tx_cannon_node_ec2_role.name
+  role       = aws_iam_role.tx_cannon_service_node_ec2_role.name
   policy_arn = aws_iam_policy.tx_cannon_node_s3_access.arn
 }
 
-resource "aws_iam_instance_profile" "tx_cannon_node_ec2_instance_profile" {
-  name = "TXCannon-EC2-Instance-Profile"
-  role = aws_iam_role.tx_cannon_node_ec2_role.name
+resource "aws_iam_instance_profile" "tx_cannon_service_node_ec2_instance_profile" {
+  name = "TXCannon-Service-EC2-Instance-Profile"
+  role = aws_iam_role.tx_cannon_service_node_ec2_role.name
 }
 
-resource "aws_instance" "tx_cannon_node" {
+resource "aws_instance" "tx_cannon_service_node" {
   count         = var.tx_cannon_instance_count
   ami           = var.ami_id
   instance_type = var.tx_cannon_instance_type
   key_name      = var.key_name
-  iam_instance_profile = aws_iam_instance_profile.tx_cannon_node_ec2_instance_profile.name
+  iam_instance_profile = aws_iam_instance_profile.tx_cannon_service_node_ec2_instance_profile.name
 
   security_groups = [var.sec_group_name]
 
