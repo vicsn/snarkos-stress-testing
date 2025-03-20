@@ -18,6 +18,8 @@
 **/logs/
 **/ledger_backups
 /test_suites/single-region-tests/playbooks/snarkos-shallow/
+/test_suites/single-region-tests/prometheus_server_data/
+/test_suites/single-region-tests/auto_run_test_suite.sh
 
 # General
 .DS_Store

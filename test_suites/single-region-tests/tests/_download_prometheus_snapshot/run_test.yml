@@ -1,0 +1,52 @@
+- name: Fetch Prometheus snapshot
+  hosts: prometheus_server
+  become: true
+  remote_user: ubuntu
+  tasks:
+
+    - name: Install basic dependencies for the other tasks
+      become: true
+      become_user: root
+      apt:
+        update_cache: yes
+        name:
+          - tar
+        state: latest
+
+    - name: Generate Prometheus snapshot
+      shell: |
+        curl -XPOST localhost:9090/api/v1/admin/tsdb/snapshot
+      args:
+        executable: /bin/bash
+        chdir: /home/ubuntu
+
+    - name: Wait for the snapshot
+      pause:
+        minutes: 1
+
+    - name: Stop docker to tar the snapshot
+      command: docker-compose down
+      args:
+        chdir: /home/ubuntu/
+
+    - name: Wait for docker to stop
+      pause:
+        minutes: 1
+
+    - name: Archive the Prometheus snapshot
+      shell: |
+        tar -czvf snapshot.tar.gz data
+      args:
+        executable: /bin/bash
+        chdir: /home/ubuntu
+
+    - name: Start docker
+      command: docker-compose up -d --force-recreate
+      args:
+        chdir: /home/ubuntu/
+
+    - name: Fetch Prometheus snapshot
+      fetch:
+        src: "/home/ubuntu/snapshot.tar.gz"
+        dest: "../../prometheus_server_data/prometheus_snapshot.tar.gz"
+        flat: true

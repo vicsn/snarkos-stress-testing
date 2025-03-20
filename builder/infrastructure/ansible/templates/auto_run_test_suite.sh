@@ -300,5 +300,9 @@ if [ "$RUN_TESTS" == "y" ]; then
       # Download validator logs:
       export SELECTED=_download_logs_validators
       run_test
+
+      # Download prometheus snapshot:
+      export SELECTED=_download_prometheus_snapshot
+      run_test
   done
 fi

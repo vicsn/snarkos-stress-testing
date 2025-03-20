@@ -20,6 +20,11 @@
     dest: /home/ubuntu/prometheus.yml
     mode: '0664'
 
+- name: Create data folder for possible snapshots
+  ansible.builtin.file:
+    path: /home/ubuntu/data
+    state: directory
+
 - name: Run docker-compose up # noqa: no-changed-when
   command: docker-compose up -d --force-recreate
   args:

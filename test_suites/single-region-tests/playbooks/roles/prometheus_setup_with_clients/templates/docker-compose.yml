@@ -2,8 +2,14 @@ services:
   prometheus:
     image: ubuntu/prometheus:2.33-22.04_beta
     volumes:
+      - ./data:/etc/data
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - 9090:9090
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/etc/data/'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
