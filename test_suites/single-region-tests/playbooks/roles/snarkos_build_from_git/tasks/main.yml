@@ -55,7 +55,7 @@
 
 - name: Set features flag
   set_fact:
-    featureflags: >-
+    features_flag: >-
       {{
         "" if (features is not defined or features | length == 0)
         else "--features {{ features }}"
