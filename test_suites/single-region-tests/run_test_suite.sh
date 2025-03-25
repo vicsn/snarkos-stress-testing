@@ -36,7 +36,7 @@ init_and_apply_terraform() {
             replace_args+=" -replace=$instance"
         done
     # Always replace the tx-cannon ECS cluster, because they have a state root cached.
-    terraform apply -auto-approve $replace_args
+    terraform apply $replace_args
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
     LB_URL=$(cat $PARENT_DIR/lb_url.txt)
