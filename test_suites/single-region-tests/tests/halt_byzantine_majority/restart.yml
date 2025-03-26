@@ -47,10 +47,14 @@
   register: current_block
   run_once: true
 
+- name: Debug the URL
+  debug:
+    msg: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
+
 - name: Debug current block height
   debug:
     msg: "Current block height: {{  current_block.json['header']['metadata']['height'] }}"
-    
+
 - name: Wait for the network to progress by one block
   ansible.builtin.uri:
     url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"

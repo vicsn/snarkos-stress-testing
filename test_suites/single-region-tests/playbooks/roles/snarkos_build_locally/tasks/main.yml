@@ -30,7 +30,7 @@
         dest: "/dev/null"  # Dummy destination to check existence
         profile: "{{ s3_profile }}"
       register: s3_ls_output
-      ignore_errors: yes
+      ignore_errors: true
       failed_when: "'does not exist' in s3_ls_output.msg"
 
     - name: Clone the repository if the binary is not found in S3
@@ -49,12 +49,14 @@
       file:
         path: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp"
         state: directory
+        mode: '0755'
       when: s3_ls_output.failed
 
     - name: Download OpenSSL tarball
       get_url:
         url: "{{ openssl_url }}"
         dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_local_build }}/tmp/{{ openssl_tarball }}"
+        mode: '0755'
       when: s3_ls_output.failed
 
     - name: Extract OpenSSL tarball using tar command

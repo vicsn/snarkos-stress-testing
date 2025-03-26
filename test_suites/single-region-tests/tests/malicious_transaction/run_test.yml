@@ -25,6 +25,8 @@
     verbosity: "1"
   tasks:
     - name: Install tx-cannon from S3
+      vars:
+        txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('tx-cannons') }}"
       include_role:
         name: txcannon_setup_s3
       when: use_prebuild_tx_cannon is defined and use_prebuild_tx_cannon | bool

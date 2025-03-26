@@ -2,4 +2,4 @@
   systemd:
     name: snarkos
     state: restarted
-    enabled: yes
+    enabled: true

@@ -1,6 +1,6 @@
 - name: Update APT package index
   apt:
-    update_cache: yes
+    update_cache: true
     cache_valid_time: 3600
   when: ansible_os_family == "Debian"
 
@@ -28,8 +28,8 @@
   when: ansible_os_family == "Debian"
 
 - name: Download tx-cannon binary from S3
-  aws_s3:
-    bucket: "tx-cannons"
+  amazon.aws.aws_s3:
+    bucket: "{{ txcannon_setup_s3_bucket }}"
     object: "tx-cannon"
     dest: "/usr/bin/tx-cannon"
     mode: get
@@ -50,6 +50,7 @@
   ansible.builtin.file:
     path: /home/ubuntu/tx-cannon
     state: directory
+    mode: "0755"
 
 - name: Download tx-cannon tests from S3
   aws_s3:

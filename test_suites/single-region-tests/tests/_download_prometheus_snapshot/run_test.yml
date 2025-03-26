@@ -8,7 +8,7 @@
       become: true
       become_user: root
       apt:
-        update_cache: yes
+        update_cache: true
         name:
           - tar
         state: latest

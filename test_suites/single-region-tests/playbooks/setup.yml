@@ -4,21 +4,21 @@
   gather_facts: false
   tasks:
     - name: Wait for SSH to become ready
-      wait_for_connection:
+      ansible.builtin.wait_for_connection:
 
 - name: Check which installation method is used
   hosts: localhost
-  gather_facts: no
+  gather_facts: false
   tasks:
     - name: Check if a local pre-built version should be used
-      set_fact:
+      ansible.builtin.set_fact:
         use_local_pre_build: >-
           {{
             (snarkos_pre_build_location is defined and snarkos_pre_build_location | length > 0)
           }}
 
     - name: Check if S3 pre-built version should be used
-      set_fact:
+      ansible.builtin.set_fact:
         use_s3_pre_build: >-
           {{
             (snarkos_pre_build_location is undefined) and
@@ -27,7 +27,7 @@
           }}
 
     - name: Check if local build should be used
-      set_fact:
+      ansible.builtin.set_fact:
         use_local_build: >-
           {{
             (snarkos_pre_build_location is undefined) and
@@ -37,7 +37,7 @@
           }}
 
     - name: Check if GitHub build should be used
-      set_fact:
+      ansible.builtin.set_fact:
         use_github_build: >-
           {{
             (snarkos_pre_build_location is undefined) and
@@ -46,7 +46,7 @@
           }}
 
     - name: Check if remote build should be used
-      set_fact:
+      ansible.builtin.set_fact:
         use_remote_build: >-
           {{
             (snarkos_pre_build_location is undefined) and
@@ -56,23 +56,23 @@
           }}
 
     - name: Check malice download method
-      set_fact:
+      ansible.builtin.set_fact:
         use_malicious_snarkos_pre_build: >-
           {{
             (use_malicious_snarkos_pre_build is defined) and (use_malicious_snarkos_pre_build|bool)
           }}
 
     - name: Ensure exactly one installation method is used
-      fail:
+      ansible.builtin.fail:
         msg: "Exactly one installation method should be used."
       when: (use_local_build | int + use_github_build | int + use_remote_build | int | int + use_local_pre_build | int + use_s3_pre_build) != 1
 
 - name: Build and upload snarkOS to S3 if required
   hosts: localhost
-  gather_facts: no
+  gather_facts: false
   tasks:
     - name: Build and upload snarkOS to S3
-      include_role:
+      ansible.builtin.include_role:
         name: snarkos_build_locally
       when: hostvars['localhost'].use_local_build
 
@@ -91,27 +91,30 @@
     dest_name: "snarkos"
   tasks:
     - name: Use local pre-built version
-      include_role:
+      ansible.builtin.include_role:
         name: snarkos_upload_local
       when: hostvars['localhost'].use_local_pre_build
 
     - name: Install snarkOS from S3
-      include_role:
+      ansible.builtin.include_role:
         name: snarkos_install_s3
+      vars:
+        snarkos_install_s3_release_name: "{{ release_name }}"
+        snarkos_install_s3_dest_name: "{{ dest_name }}"
       when: hostvars['localhost'].use_s3_pre_build or hostvars['localhost'].use_local_build
 
     - name: Install snarkOS from binary
-      include_role:
+      ansible.builtin.include_role:
         name: snarkos_install_binary
       when: hostvars['localhost'].use_github_build
 
     - name: Build snarkOS from git
-      include_role:
+      ansible.builtin.include_role:
         name: snarkos_build_from_git
       when: hostvars['localhost'].use_remote_build
 
     - name: Download malice snarkOS binary with GitHub CLI
-      shell: >
+      ansible.builtin.shell: >
         TAG="{{ snarkos_malice_tag }}"
 
         apt-get install -y unzip
@@ -127,13 +130,15 @@
         mv /tmp/snarkos-malicious/snarkos /usr/bin/snarkos-malice
       args:
         executable: /bin/bash
+      register: download_malice_result
+      changed_when: download_malice_result is success
       when: not hostvars['localhost'].use_malicious_snarkos_pre_build
 
     - name: Download malice snarkOS binary from S3
       vars:
-        release_name: "{{snarkos_malice_tag}}/snarkos"
-        dest_name: "snarkos-malice"
-      include_role:
+        snarkos_install_s3_release_name: "{{ snarkos_malice_tag }}/snarkos"
+        snarkos_install_s3_dest_name: "snarkos-malice"
+      ansible.builtin.include_role:
         name: snarkos_install_s3
       when: hostvars['localhost'].use_malicious_snarkos_pre_build
 
@@ -141,16 +146,16 @@
 
 # ------------------------------------------------
 # zip
-- name: Install zip 
+- name: Install zip
   hosts: snarkos*
   become: true
   remote_user: ubuntu
   tasks:
     - name: Install zip
-      apt:
+      ansible.builtin.apt:
         name: "{{ item }}"
         state: present
-        update_cache: yes
+        update_cache: true
       with_items:
         - zip
       retries: 20
@@ -165,18 +170,20 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: set_validator_facts.yml
+    - name: Set Validator Facts
+      ansible.builtin.include_tasks: set_validator_facts.yml
   tasks:
     - name: Capture kernel version
-      command: uname -r
+      ansible.builtin.command: uname -r
       register: kernel_version
       when: create_flamegraph
+      changed_when: kernel_version is success
 
     - name: Install flamegraph dependencies
-      apt:
+      ansible.builtin.apt:
         name: "{{ item }}"
         state: present
-        update_cache: yes
+        update_cache: true
       with_items:
         - linux-tools-common
         - linux-tools-generic
@@ -186,9 +193,9 @@
       delay: 30
       until: apt_result is success
       when: create_flamegraph
-  
+
     - name: Install Rustup and flamegraph # As advised by https://github.com/flamegraph-rs/flamegraph
-      shell: |
+      ansible.builtin.command: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
         . "$HOME/.cargo/env"
@@ -228,7 +235,8 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: logging_enrichment.yml
+    - name: Add logging enrichment to Logstash
+      include_tasks: logging_enrichment.yml
       vars:
         use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
         use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
@@ -249,7 +257,8 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: logging_enrichment.yml
+    - name: Add logging enrichment to Metricbeat
+      include_tasks: logging_enrichment.yml
       vars:
         use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
         use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
@@ -269,7 +278,8 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: logging_enrichment.yml
+    - name: Add logging enrichment to Filebeat
+      include_tasks: logging_enrichment.yml
       vars:
         use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
         use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
@@ -301,7 +311,8 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: set_validator_facts.yml
+    - name: Set Validator facts
+      include_tasks: set_validator_facts.yml
   roles:
     - snarkos_service
   tags: snarkos
@@ -314,7 +325,8 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: set_client_facts.yml
+    - name: Set client facts
+      include_tasks: set_client_facts.yml
   roles:
     - snarkos_service
   tags: snarkos_client
@@ -327,7 +339,8 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: set_validator_facts.yml
+    - name: Set Validator facts
+      include_tasks: set_validator_facts.yml
   tasks:
     - name: Restart snarkOS validators
       systemd:

@@ -24,6 +24,7 @@
   ansible.builtin.file:
     path: /home/ubuntu/data
     state: directory
+    mode: '0664'
 
 - name: Run docker-compose up # noqa: no-changed-when
   command: docker-compose up -d --force-recreate

@@ -4,7 +4,7 @@
 # Get load balancer DNS name
 - name: Gather information about all ELBs
   hosts: localhost
-  gather_facts: no
+  gather_facts: false
   remote_user: ubuntu
   tasks:
     - name: Wait for the network to be healthly
@@ -24,6 +24,8 @@
   hosts: tx_cannon_node
   become: true
   remote_user: ubuntu
+  vars:
+    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('tx-cannons') }}"
   roles:
     - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
     - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }
@@ -38,7 +40,11 @@
   tasks:
     - name: Deploy base programs
       ansible.builtin.shell:
-        cmd: tx-cannon deploy -p /home/ubuntu/tx-cannon/tests/ridiculous_finalize_hash/{{ program }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
+        cmd: |
+          tx-cannon deploy -p /home/ubuntu/tx-cannon/tests/ridiculous_finalize_hash/{{ program }} \
+          --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+          -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH \
+          --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
       loop:
         - ridiculous_finalize_hash.aleo
       loop_control:
@@ -47,12 +53,25 @@
 
     - name: Batch-deploy base program with different accounts
       ansible.builtin.shell:
-        cmd: tx-cannon batch-deploy --manifest /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH,APrivateKey1zkp2RWGDcde3efb89rjhME1VYA8QMxcxep5DShNBR6n8Yjh,APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG,APrivateKey1zkpBjpEgLo4arVUkQmcLdKQMiAKGaHAQVVwmF8HQby8vdYs,APrivateKey1zkp3J6rRrDEDKAMMzSQmkBqd3vPbjp4XTyH7oMKFn7eVFwf --network {{ snarkos_network }} > /home/ubuntu/txcannon2.log 2>&1
+        cmd: |
+          tx-cannon batch-deploy \
+          --manifest /home/ubuntu/tx-cannon/tests/normal_network_traffic/normal_network_traffic.txt \
+          --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+          -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH,\
+          APrivateKey1zkp2RWGDcde3efb89rjhME1VYA8QMxcxep5DShNBR6n8Yjh,\
+          APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG,\
+          APrivateKey1zkpBjpEgLo4arVUkQmcLdKQMiAKGaHAQVVwmF8HQby8vdYs,\
+          APrivateKey1zkp3J6rRrDEDKAMMzSQmkBqd3vPbjp4XTyH7oMKFn7eVFwf \
+          --network {{ snarkos_network }} > /home/ubuntu/txcannon2.log 2>&1
       register: deploy_results
 
     - name: Deploy nested programs
       ansible.builtin.shell:
-        cmd: tx-cannon batch-deploy --manifest {{ manifest }} --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH  --check-retries 10 --concurrent-deployments 1 --network {{ snarkos_network }} > /home/ubuntu/txcannon3.log 2>&1
+        cmd: |
+          tx-cannon batch-deploy --manifest {{ manifest }} \
+            --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+            -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH  --check-retries 10 \
+            --concurrent-deployments 1 --network {{ snarkos_network }} > /home/ubuntu/txcannon3.log 2>&1
       loop:
         - /home/ubuntu/tx-cannon/tests/nested_imports/generated_programs/generated_programs_1_31_1.txt
         - /home/ubuntu/tx-cannon/tests/nested_imports/generated_programs/generated_programs_1_5_2.txt
@@ -65,7 +84,7 @@
 
     - name: Debugging nested
       debug:
-        msg: "{{deploy_results}}"
+        msg: "{{ deploy_results }}"
 
     - name: Wait for multiple endpoints to be ready
       vars:
@@ -84,6 +103,8 @@
           - "http://localhost:3030/{{ snarkos_network }}/program/root_1_5_2.aleo"
           - "http://localhost:3030/{{ snarkos_network }}/program/root_2_30_1.aleo"
           - "http://localhost:3030/{{ snarkos_network }}/program/root_2_4_2.aleo"
+      run_once: true
+      delegate_to: "{{ groups['snarkos_validator'][1] }}"
       block:
         - name: Check each endpoint
           uri:
@@ -96,8 +117,6 @@
           retries: 5
           delay: 2
           loop: "{{ endpoints }}"
-      run_once: true
-      delegate_to: "{{ groups['snarkos_validator'][1] }}"
   tags: tx-cannon-deploy
 
 - name: Download cannon logs
@@ -109,6 +128,7 @@
       archive:
         path: "/home/ubuntu/{{ log_file }}.log"
         dest: "/home/ubuntu/{{ log_file }}.log.gz"
+        mode: "0644"
       loop:
         - txcannon
         - txcannon2
@@ -120,7 +140,7 @@
       fetch:
         src: "/home/ubuntu/{{ log_file }}.log.gz"
         dest: "../../log_files/{{ log_file }}.log.gz"
-        flat: yes
+        flat: true
       loop:
         - txcannon
         - txcannon2

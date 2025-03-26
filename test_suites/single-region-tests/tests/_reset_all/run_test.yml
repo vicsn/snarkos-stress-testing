@@ -3,7 +3,8 @@
   remote_user: ubuntu
   become: true
   pre_tasks:
-    - include_tasks: ../../playbooks/set_validator_facts.yml
+    - name: Set validators facts
+      include_tasks: ../../playbooks/set_validator_facts.yml
 
     - name: Stop the honest validators
       systemd:
@@ -14,7 +15,7 @@
       systemd:
         name: snarkos-malice
         state: stopped
-      ignore_errors: yes # in case we never deployed malice
+      ignore_errors: true # in case we never deployed malice
 
     - name: Remove existing ledger and batch proposal directories on validators
       ansible.builtin.shell:
@@ -28,7 +29,8 @@
   remote_user: ubuntu
   become: true
   pre_tasks:
-    - include_tasks: ../../playbooks/set_client_facts.yml
+    - name: Set clients facts
+      include_tasks: ../../playbooks/set_client_facts.yml
 
     - name: Stop the clients
       systemd:

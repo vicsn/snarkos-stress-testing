@@ -9,14 +9,38 @@
 
 - name: set instance-specific facts
   set_fact:
-    formatted_validator_ips: "{{ groups['snarkos_validator'] | map('extract', hostvars, ['public_ip_address']) | map('regex_replace', '^(.*)$', '\\1:5000') | join(',') }}"
-    formatted_validator_routers: "{{ groups['snarkos_validator'] | map('extract', hostvars, ['public_ip_address']) | map('regex_replace', '^(.*)$', '\\1:4130') | join(',') }}"
+    formatted_validator_ips: >-
+      {{
+        groups['snarkos_validator']
+        | map('extract', hostvars, ['public_ip_address'])
+        | map('regex_replace', '^(.*)$', '\1:5000')
+        | join(',')
+      }}
+    formatted_validator_routers: >-
+      {{
+        groups['snarkos_validator']
+        | map('extract', hostvars, ['public_ip_address'])
+        | map('regex_replace', '^(.*)$', '\1:4130')
+        | join(',')
+      }}
     node_id: "{{ tags['Dev'] }}"
 
 - name: Collect client IPs for the current validator
   set_fact:
-    validator_client_ips: "{{ formatted_validator_routers }},{{ groups['snarkos_client'] | map('extract', hostvars) | selectattr('tags.Validator', 'equalto', node_id | string) | map(attribute='public_ip_address') | map('regex_replace', '^(.*)$', '\\1:4130') | join(',') }}"
+    validator_client_ips: >-
+      {{ formatted_validator_routers }},{{
+        groups['snarkos_client']
+        | map('extract', hostvars)
+        | selectattr('tags.Validator', 'equalto', node_id | string)
+        | map(attribute='public_ip_address')
+        | map('regex_replace', '^(.*)$', '\1:4130')
+        | join(',')
+      }}
 
 - name: Set snarkos command with peers and validators
   set_fact:
-    snarkos_command: "snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps {{ rest_rps }} --no-dev-txs --network {{ snarkos_network_int }}"
+    snarkos_command: >-
+      snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} \
+        --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} \
+        --dev-num-validators {{ num_instances }} --validator --rest-rps {{ rest_rps }} --no-dev-txs \
+        --network {{ snarkos_network_int }}

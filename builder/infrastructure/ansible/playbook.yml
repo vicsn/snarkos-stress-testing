@@ -26,7 +26,7 @@
 
     - name: Download talisker release from S3
       aws_s3:
-        bucket: "snarkos-releases-for-testing"
+        bucket: "{{ releases_bucket }}"
         object: "talisker.tar.gz"
         dest: "/home/ubuntu/talisker.tar.gz"
         mode: get

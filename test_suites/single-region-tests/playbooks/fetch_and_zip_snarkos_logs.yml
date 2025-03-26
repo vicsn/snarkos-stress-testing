@@ -30,7 +30,7 @@
       fetch:
         src: /tmp/{{ detailed_archive_filename }}
         dest: "./logs/"
-        flat: yes
+        flat: true
 
     - name: Clean up the temporary tar.gz file on the remote
       file:

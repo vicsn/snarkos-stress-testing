@@ -3,7 +3,8 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: ../../playbooks/set_validator_facts.yml
+    - name: Gather validator facts
+      include_tasks: ../../playbooks/set_validator_facts.yml
   tasks:
     - name: Stop snarkos
       systemd:
@@ -23,7 +24,7 @@
       fetch:
         src: "/home/ubuntu/flamegraph.svg"
         dest: "../../log_files/val-{{ flamegraph_node_id }}.svg"
-        flat: yes
+        flat: true
       when: create_flamegraph and node_id == flamegraph_node_id
 
     - name: Start snarkos

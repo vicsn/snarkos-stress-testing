@@ -3,9 +3,25 @@
 
 variable "AWS_ACCESS_KEY" {}
 variable "AWS_SECRET_KEY" {}
+variable "AWS_REGION" {
+  type    = string
+  default = "eu-central-1"
+}
 variable "ARDBEG_SECRET" {
   type    = string
   default = "deprecated"
+}
+
+variable "RELEASES_BUCKET" {
+  default = "snarkos-releases-for-testing"
+}
+
+variable "RESULTS_BUCKET" {
+  default = "test-results-and-logs"
+}
+
+variable "PUBLIC_KEY_PATH" {
+  default = "~/.ssh/id_rsa.pub"
 }
 
 variable github_token {
@@ -22,7 +38,7 @@ terraform {
 }
 
 provider "aws" {
-  region  = "eu-central-1"
+  region  = var.AWS_REGION
   access_key = var.AWS_ACCESS_KEY
   secret_key = var.AWS_SECRET_KEY
 }

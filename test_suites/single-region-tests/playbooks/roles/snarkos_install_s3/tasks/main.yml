@@ -1,6 +1,6 @@
 - name: Update APT package index
   apt:
-    update_cache: yes
+    update_cache: true
     cache_valid_time: 3600
   when: ansible_os_family == "Debian"
 
@@ -30,8 +30,8 @@
 - name: Download snarkos binary from S3
   aws_s3:
     bucket: "{{ s3_bucket }}"
-    object: "{{ release_name }}"
-    dest: "/usr/bin/{{ dest_name }}"
+    object: "{{ snarkos_install_s3_release_name }}"
+    dest: "/usr/bin/{{ snarkos_install_s3_dest_name }}"
     mode: get
   register: s3_download
 
@@ -42,5 +42,5 @@
 
 - name: Ensure the binary is executable
   file:
-    path: "/usr/bin/{{ dest_name }}"
+    path: "/usr/bin/{{ snarkos_install_s3_dest_name }}"
     mode: '0755'

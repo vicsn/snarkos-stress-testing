@@ -3,22 +3,25 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - include_tasks: ../../playbooks/set_client_facts.yml
+    - name: Set client facts
+      include_tasks: ../../playbooks/set_client_facts.yml
   tasks:
     - name: Zip logs
-      archive:
+      community.general.archive:
         path: "/tmp/snarkos.log"
         dest: "/tmp/snarkos.log.gz"
+        mode: "0644"
 
     - name: Determine how big the zipped file is.
       command: du -sh /tmp/snarkos.log.gz
       register: du_output
 
-    - debug:
+    - name: Print the size of the zip file
+      debug:
         var: du_output
 
     - name: Fetch logs
       fetch:
         src: "/tmp/snarkos.log.gz"
         dest: "../../log_files/client-{{ node_id }}.log.gz"
-        flat: yes
+        flat: true

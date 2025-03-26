@@ -1,7 +1,9 @@
 ---
 - name: Add Elastic GPG key
   ansible.builtin.shell:
-    cmd: "wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes --dearmor -o /usr/share/keyrings/elastic-keyring.gpg"
+    cmd: >-
+      set -o pipefail && wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes \
+      --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
   args:
     creates: /usr/share/keyrings/elastic-keyring.gpg
 
@@ -13,12 +15,12 @@
 
 - name: Update APT cache
   ansible.builtin.apt:
-    update_cache: yes
+    update_cache: true
 
 - name: Install Filebeat
   ansible.builtin.apt:
     name: filebeat
-    state: latest
+    state: latest # noqa package-latest
   register: apt_result
   retries: 10
   delay: 30

@@ -24,6 +24,8 @@
   hosts: tx_cannon_node[0]
   become: true
   remote_user: ubuntu
+  vars:
+    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('tx-cannons') }}"
   roles:
     - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
     - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }
@@ -35,6 +37,8 @@
   hosts: tx_cannon_node[1]
   become: true
   remote_user: ubuntu
+  vars:
+    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('tx-cannons') }}"
   roles:
     - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
     - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }

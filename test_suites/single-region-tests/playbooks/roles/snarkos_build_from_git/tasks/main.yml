@@ -10,7 +10,7 @@
 
 - name: Update apt cache
   ansible.builtin.apt:
-    update_cache: yes
+    update_cache: true
     cache_valid_time: 3600
 
 - name: Install Ubuntu dependencies
@@ -35,7 +35,7 @@
 
 - name: Install Rust programming language
   ansible.builtin.shell:
-    cmd: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+    cmd: "set -o pipefail && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
   args:
     creates: "$HOME/.cargo/bin/rustup"
 

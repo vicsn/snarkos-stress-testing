@@ -1,0 +1,16 @@
+---
+repos:
+- repo: https://github.com/ansible/ansible-lint.git
+  rev: v25.1.3
+  hooks:
+    - id: ansible-lint
+      entry: python3 -m ansiblelint -v --force-color
+      verbose: true
+      args: [
+        -c,test_suites/single-region-tests/.ansible-lint,
+        --exclude,"special_devnets/*",
+        --exclude,"builder/*",
+        --exclude,"test_suites/single-region-tests/tests/*",
+        --exclude,"test_suites/single-region-tests/.pre-commit-config.yaml",
+        --exclude,"test_suites/single-region-tests/playbooks/[var|set_|ip|log]*",
+      ]

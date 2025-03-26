@@ -21,6 +21,11 @@ variable "aws_secret_key" {
   default = "${env("AWS_SECRET_ACCESS_KEY")}"
 }
 
+variable "aws_region" {
+  type    = string
+  default = "${env("AWS_REGION")}"
+}
+
 data "amazon-ami" "builder-base" {
   access_key = "${var.aws_access_key}"
   filters = {
@@ -30,7 +35,7 @@ data "amazon-ami" "builder-base" {
   }
   most_recent = true
   owners      = ["099720109477"]
-  region      = "eu-central-1"
+  region      = "${var.aws_region}"
   secret_key  = "${var.aws_secret_key}"
 }
 
@@ -40,7 +45,7 @@ source "amazon-ebs" "builder-base" {
   access_key    = "${var.aws_access_key}"
   ami_name      = "builder-base-${local.timestamp}"
   instance_type = "m5.4xlarge"
-  region        = "eu-central-1"
+  region        = "${var.aws_region}"
   secret_key    = "${var.aws_secret_key}"
   source_ami    = "${data.amazon-ami.builder-base.id}"
   ssh_username  = "ubuntu"
@@ -52,7 +57,7 @@ source "amazon-ebs" "builder-base" {
     delete_on_termination = true
   }
 
-  ami_regions = ["eu-central-1"]
+  ami_regions = ["${var.aws_region}"]
 
   ami_groups = ["all"]
 }

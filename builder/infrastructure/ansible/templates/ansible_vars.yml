@@ -13,7 +13,7 @@ github_token: "your_github_token_here" # link to generate: https://github.com/se
 create_flamegraph: false
 flamegraph_node_id: "0" # Validator node ID to generate flamegraph for
 
-s3_bucket: "snarkos-releases-for-testing"
+s3_bucket: "{{ releases_bucket }}"
 
 # Other vars
 snarkos_malice_tag: "malice-2349f3eda-with-batch-transmission-request-and-txcache-skip-tx-checks" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs. Only GitHub build installation method currently supported.

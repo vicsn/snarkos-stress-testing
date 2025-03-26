@@ -13,6 +13,8 @@ SyslogIdentifier=talisker
 Environment="MIX_ENV=prod"
 Environment="ARDBEG_SECRET={{ ARDBEG_SECRET }}"
 Environment="STAGING_REPO_TOKEN={{ github_token }}"
+Environment="RELEASES_FOR_TESTING_BUCKET={{ releases_bucket }}"
+Environment="TEST_RESULTS_AND_LOGS_BUCKET={{ results_bucket }}"
 ExecStart=/home/ubuntu/talisker/bin/talisker start
 ExecStop=/home/ubuntu/talisker/bin/talisker stop
 Restart=on-failure
