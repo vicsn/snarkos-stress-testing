@@ -4,7 +4,8 @@
   become: true
   serial: 1
   pre_tasks:
-    - include_tasks: ../../playbooks/set_validator_facts.yml
+    - name: Set Validators facts
+      include_tasks: ../../playbooks/set_validator_facts.yml
 
     - name: Stop the honest validators
       systemd:

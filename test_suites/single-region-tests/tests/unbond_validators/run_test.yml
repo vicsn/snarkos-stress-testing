@@ -58,8 +58,11 @@
         msg: "{{ now() }}"
 
     - name: Try unbonding 30% nodes
-      ansible.builtin.shell:
-        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo unbond_public {{ item[1] }} {{ committee_data.members[item[1]][0] }}u64 --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
+      ansible.builtin.shell: >-
+        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo unbond_public {{ item[1] }} \
+                      {{ committee_data.members[item[1]][0] }}u64 --private-key {{ item[0] }} \
+                      --query 'http://{{ test_network_url }}:3030' \
+                      --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
       args:
         executable: /bin/bash
       loop: "{{ selected_nodes.stdout_lines | map('from_json') | list }}"
@@ -77,9 +80,11 @@
           - "aleo1l4z0j5cn5s6u6tpuqcj6anh30uaxkdfzatt9seap0atjcqk6nq9qnm9eqf"
           - "aleo1s3ws5tra87fjycnjrwsjcrnw2qxr8jfqqdugnf0xzqqw29q9m5pqem2u4t"
 
-    - name: claim unbond
-      ansible.builtin.shell:
-        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo claim_unbond_public {{ item[1] }} --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
+    - name: Claim unbond
+      ansible.builtin.shell: >-
+        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo claim_unbond_public {{ item[1] }} \
+                      --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' \
+                      --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
       args:
         executable: /bin/bash
       loop: "{{ selected_nodes.stdout_lines | map('from_json') | list }}"
@@ -93,8 +98,11 @@
         msg: "{{ now() }}"
 
     - name: Try rebonding 30% nodes
-      ansible.builtin.shell:
-        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo bond_validator {{ valid_withdrawal_addresses[idx] }} 50000000000000u64 5u8 --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
+      ansible.builtin.shell: >-
+        sudo bash -c "/usr/bin/snarkos developer execute credits.aleo bond_validator \
+                      {{ valid_withdrawal_addresses[idx] }} 50000000000000u64 5u8 --private-key {{ item[0] }} \
+                      --query 'http://{{ test_network_url }}:3030' \
+                      --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
       args:
         executable: /bin/bash
       register: shell_output

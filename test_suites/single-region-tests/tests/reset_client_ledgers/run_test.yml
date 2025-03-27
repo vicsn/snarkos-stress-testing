@@ -4,7 +4,8 @@
   become: true
   serial: 3
   pre_tasks:
-    - include_tasks: ../../playbooks/set_client_facts.yml
+    - name: Set Client facts
+      include_tasks: ../../playbooks/set_client_facts.yml
 
     - name: Stop the honest clients
       systemd:

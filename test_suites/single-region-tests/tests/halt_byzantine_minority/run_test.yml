@@ -114,7 +114,7 @@
       systemd:
         name: snarkos
         state: stopped
-    - name: snarkOS service stopped
+    - name: Change snarkOS service to stopped
       debug:
         msg: "Hosts in batch #{{ hostvars['localhost']['batch_number'] }} stopped at: {{ now() }}"
       run_once: true # runs once per serial batch
@@ -126,7 +126,7 @@
       systemd:
         name: snarkos
         state: started
-    - name: snarkOS service restarted
+    - name: Change snarkOS service to restarted
       debug:
         msg: "Hosts in batch #{{ hostvars['localhost']['batch_number'] }} restarted at: {{ now() }}"
       run_once: true # runs once per serial batch

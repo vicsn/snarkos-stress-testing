@@ -5,7 +5,7 @@
     - name: Run the python program
       command: python3 split_deployments_and_submit_parallel.py {{ snarkos_network }}
       register: out
-  
+
     - name: Print the output
       debug:
         var: out.stdout_lines

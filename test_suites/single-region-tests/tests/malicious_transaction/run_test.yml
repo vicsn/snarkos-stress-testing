@@ -3,9 +3,10 @@
   remote_user: ubuntu
   become: true
   pre_tasks:
-    - include_tasks: ../../playbooks/set_validator_facts.yml
+    - name: Set Validator facts
+      include_tasks: ../../playbooks/set_validator_facts.yml
 
-    - name: set malice specific facts
+    - name: Set malice specific facts
       set_fact:
         malicemode: Environment="SkipTransactionCheck=1"
         snarkos_binary_name: snarkos-malice
@@ -13,7 +14,11 @@
 
     - name: Set snarkos command with peers and validators
       set_fact:
-        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps {{ rest_rps }} --no-dev-txs --network {{ snarkos_network_int }}"
+        snarkos_command: >-
+          {{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 \
+            --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} \
+            --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} \
+            --validator --rest-rps {{ rest_rps }} --no-dev-txs --network {{ snarkos_network_int }}
   roles:
     - snarkos_service
 
@@ -33,10 +38,12 @@
 
     - name: Install GitHub CLI
       shell: |
+        set -e -o pipefail
         type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
         curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
         && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] \
+                 https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
         && sudo apt update \
         && sudo apt install gh -y
       args:
@@ -103,7 +110,8 @@
     - name: Run the double spend attack targeting the malicious node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ malicious_ip }}:3030 \
+        --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -118,7 +126,8 @@
     - name: Run the double spend attack targeting the honest node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon2.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --double-spend --endpoint http://{{ test_network_url }}:3030 \
+        --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon2.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -145,7 +154,11 @@
     - name: Run the constraint underreporting attack targeting the malicious node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt >> tx-cannon.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 \
+          --endpoint http://{{ malicious_ip }}:3030 \
+          --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG \
+          --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt \
+          >> tx-cannon.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -160,7 +173,11 @@
     - name: Run the constraint underreporting attack targeting the honest node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt >> tx-cannon2.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --underreport-constraints 10 \
+          --endpoint http://{{ test_network_url }}:3030 \
+          --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG \
+          --deployment-manifest ./tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/credits.txt \
+          >> tx-cannon2.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -187,7 +204,9 @@
     - name: Run the duplicate-transitions attack targeting the malicious node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 >> tx-cannon.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ malicious_ip }}:3030 \
+          --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 \
+          >> tx-cannon.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -202,7 +221,9 @@
     - name: Run the duplicate-transitions attack targeting the malicious node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 >> tx-cannon2.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --duplicate-transitions --endpoint http://{{ test_network_url }}:3030 \
+          --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 \
+          >> tx-cannon2.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -229,7 +250,10 @@
     - name: Run the redeploy attack targeting the malicious node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ malicious_ip }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt >> tx-cannon.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ malicious_ip }}:3030 \
+          --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 \
+          --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt \
+          >> tx-cannon.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -244,7 +268,10 @@
     - name: Run the redeploy attack targeting the honest node
       shell: |
         cd /home/ubuntu/tx-cannon
-        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ test_network_url }}:3030 --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt >> tx-cannon2.log 2>&1'
+        sudo bash -c '/usr/bin/tx-cannon malice --redeploy --endpoint http://{{ test_network_url }}:3030 \
+          --private-key APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG --repetitions 9000001 \
+          --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt \
+          >> tx-cannon2.log 2>&1'
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -294,14 +321,18 @@
       ansible.builtin.shell:
         cmd: "rm -rf /home/ubuntu/.ledger-*"
 
-    - name: set malice specific facts
+    - name: Set malice specific facts
       set_fact:
         malicemode: ""
         snarkos_binary_name: snarkos
 
     - name: Set snarkos command with peers and validators
       set_fact:
-        snarkos_command: "{{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} --validator --rest-rps {{ rest_rps }} --no-dev-txs --network {{ snarkos_network_int }}"
+        snarkos_command: >-
+          {{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 \
+            --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} \
+            --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} \
+            --validator --rest-rps {{ rest_rps }} --no-dev-txs --network {{ snarkos_network_int }}
   roles:
     - snarkos_service
 
@@ -310,7 +341,8 @@
   remote_user: ubuntu
   become: true
   pre_tasks:
-    - include_tasks: ../../playbooks/set_client_facts.yml
+    - name: Set Client facts
+      include_tasks: ../../playbooks/set_client_facts.yml
 
     - name: Stop the clients
       systemd:
