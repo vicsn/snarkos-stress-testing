@@ -30,7 +30,7 @@
 - name: Download snarkos binary from S3
   aws_s3:
     bucket: "{{ s3_bucket }}"
-    object: "{{ snarkos_install_s3_release_name }}"
+    object: "{{ snarkos_install_s3_release_name | trim }}"
     dest: "/usr/bin/{{ snarkos_install_s3_dest_name }}"
     mode: get
   register: s3_download

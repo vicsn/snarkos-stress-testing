@@ -32,6 +32,8 @@ features: "test_targets,test_skip_tx_checks" # optional, e.g., "test_targets,tes
 snarkos_malice_tag: "malice-2349f3eda" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs. Only GitHub build installation method currently supported.
 tx_cannon_binary_tag: "mainnet-latest"
 
+# Optional vars
+# snarkos_git_commit_local_build_update: "520c8c3f71d4544c222037b3b2b01e2d4b055c65" # necessary for the update_validators_and_clients_one_by_one test. Should be used together with the local build method.
 
 # Vars to be used with pre-built releases.
 # All these vars are use by the auto-builder that is triggered on new releases and shouldn't be used locally.
@@ -60,3 +62,7 @@ rest_rps: 1000000000
 
 # Ansible vars
 # ansible_python_interpreter: /usr/bin/python3.10
+
+
+# Do not change the code below
+generate_release_name: "COMMIT_HASH{{ '_' + features if (features is defined and features | length > 0) else '' }}{{ '_' + (envs | regex_replace('=', '_') | regex_replace(' ', '_')) if (envs is defined and envs | length > 0) else '' }}"

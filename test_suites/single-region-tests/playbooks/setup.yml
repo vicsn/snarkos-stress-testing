@@ -67,14 +67,57 @@
         msg: "Exactly one installation method should be used."
       when: (use_local_build | int + use_github_build | int + use_remote_build | int | int + use_local_pre_build | int + use_s3_pre_build) != 1
 
+    - name: Ensure that if snarkos_git_commit_local_build_update is set, then the local build installation method is used
+      fail:
+        msg: "If snarkos_git_commit_local_build_update is set, then use the local build installation method."
+      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0 and not use_local_build
+
 - name: Build and upload snarkOS to S3 if required
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Build and upload snarkOS to S3
-      ansible.builtin.include_role:
+    - name: Set git commit variable for standard build
+      set_fact:
+        snarkos_git_commit_to_build: "{{ snarkos_git_commit_local_build }}"
+      when: snarkos_git_commit_local_build is defined
+
+    - name: Set standard release name
+      set_fact:
+        standard_release_name: "{{ generate_release_name | replace('COMMIT_HASH', snarkos_git_commit_to_build) | trim }}"
+      when: snarkos_git_commit_local_build is defined
+
+    - name: Debug standard release name
+      debug:
+        msg: "Standard release name: '{{ standard_release_name }}'"
+      when: snarkos_git_commit_local_build is defined
+
+    - name: Build and upload standard snarkOS to S3
+      include_role:
         name: snarkos_build_locally
       when: hostvars['localhost'].use_local_build
+    
+    - name: Set git commit variable for update build
+      set_fact:
+        snarkos_git_commit_to_build: "{{ snarkos_git_commit_local_build_update }}"
+      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
+    
+    - name: Set update release name
+      set_fact:
+        update_release_name: "{{ generate_release_name | replace('commit_hash', snarkos_git_commit_to_build) | trim }}"
+      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
+    
+    - name: Debug update release name
+      debug:
+        msg: "Update release name: '{{ update_release_name }}'"
+      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
+    
+    - name: Build and upload update snarkOS to S3
+      include_role:
+        name: snarkos_build_locally
+      when: >
+        hostvars['localhost'].use_local_build and 
+        snarkos_git_commit_local_build_update is defined and 
+        snarkos_git_commit_local_build_update | length > 0
 
 # ------------------------------------------------
 # snarkOS installation
@@ -87,7 +130,7 @@
     s3_bucket: "{{ s3_bucket }}"
     snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
     snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-    release_name: "{{ hostvars['localhost'].releasename | default('snarkos') }}"
+    release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
     dest_name: "snarkos"
   tasks:
     - name: Use local pre-built version

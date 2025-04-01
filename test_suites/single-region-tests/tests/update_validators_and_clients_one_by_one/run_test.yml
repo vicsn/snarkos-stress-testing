@@ -1,0 +1,162 @@
+- name: Update snarkOS on validators
+  hosts: snarkos_validator
+  remote_user: ubuntu
+  become: true
+  serial: 1 # Update one validator at a time
+  pre_tasks:
+    - name: Include validator facts
+      include_tasks: ../../playbooks/set_validator_facts.yml
+
+    - name: Set release name
+      set_fact:
+        release_name: "{{ generate_release_name | replace('COMMIT_HASH', snarkos_git_commit_local_build_update) | trim }}"
+
+    - name: Debug release name
+      debug:
+        msg: "Using release name: '{{ release_name }}'"
+
+    - name: Check current snarkOS binary
+      stat:
+        path: /usr/bin/snarkos
+      register: old_binary
+
+    - name: Check snarkOS service definition
+      shell: systemctl cat snarkos
+      register: service_def
+      ignore_errors: true
+
+    - name: Stop the snarkOS service on validators
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove old snarkOS binary
+      file:
+        path: /usr/bin/snarkos
+        state: absent
+
+  tasks:
+    - name: Download and install updated snarkOS from S3
+      include_role:
+        name: snarkos_install_s3
+      vars:
+        snarkos_install_s3_release_name: "{{ release_name }}"
+        snarkos_install_s3_dest_name: "snarkos"
+        s3_bucket: "{{ s3_bucket_value | default('release-bucket-2122415') }}"
+
+    - name: Check new snarkOS binary
+      stat:
+        path: /usr/bin/snarkos
+      register: new_binary
+      failed_when: not new_binary.stat.exists
+
+    - name: Make snarkOS executable
+      file:
+        path: /usr/bin/snarkos
+        mode: "0755"
+
+    - name: Force systemd to reload configurations
+      systemd:
+        daemon_reload: true
+
+    - name: Restart snarkOS service
+      systemd:
+        name: snarkos
+        state: restarted
+
+    - name: Wait for service to start
+      pause:
+        seconds: 5
+
+  roles:
+    - role: snarkos_service
+      vars:
+        force_restart: true
+
+  post_tasks:
+    - name: Verify service is running with new binary
+      shell: systemctl status snarkos
+      register: service_status
+      ignore_errors: true
+
+    - name: Check if the node is synced
+      include_tasks: ../../playbooks/is_synced.yml
+      vars:
+        node_to_check: localhost
+        node_to_compare: "{{ test_network_url }}"
+
+  tags: snarkos_update
+
+- name: Update snarkOS on clients
+  hosts: snarkos_client
+  remote_user: ubuntu
+  become: true
+  serial: 1 # Update one client at a time
+  pre_tasks:
+    - name: Include client facts
+      include_tasks: ../../playbooks/set_client_facts.yml
+
+    - name: Set release name
+      set_fact:
+        release_name: "{{ generate_release_name | replace('COMMIT_HASH', snarkos_git_commit_local_build_update) | trim }}"
+
+    - name: Debug release name
+      debug:
+        msg: "Using release name: '{{ release_name }}'"
+
+    - name: Stop the snarkOS service on clients
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove old snarkOS binary
+      file:
+        path: /usr/bin/snarkos
+        state: absent
+
+  tasks:
+    - name: Download and install updated snarkOS from S3
+      include_role:
+        name: snarkos_install_s3
+      vars:
+        snarkos_install_s3_release_name: "{{ release_name }}"
+        snarkos_install_s3_dest_name: "snarkos"
+        s3_bucket: "{{ s3_bucket_value | default('release-bucket-2122415') }}"
+
+    - name: Check new snarkOS binary
+      stat:
+        path: /usr/bin/snarkos
+      register: new_binary
+      failed_when: not new_binary.stat.exists
+
+    - name: Make snarkOS executable
+      file:
+        path: /usr/bin/snarkos
+        mode: "0755"
+
+    - name: Force systemd to reload configurations
+      systemd:
+        daemon_reload: true
+
+    - name: Restart snarkOS service
+      systemd:
+        name: snarkos
+        state: restarted
+
+    - name: Wait for service to start
+      pause:
+        seconds: 5
+
+  roles:
+    - role: snarkos_service
+      vars:
+        force_restart: true
+
+  post_tasks:
+    - name: Check if the node is synced
+      include_tasks: ../../playbooks/is_synced.yml
+      vars:
+        node_to_check: localhost
+        node_to_compare: "{{ test_network_url }}"
+
+  tags: snarkos_update
