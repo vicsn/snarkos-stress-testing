@@ -43,7 +43,7 @@ tx_cannon_binary_tag: "mainnet-latest"
 # use_snarkos_pre_build_s3: true 
 # s3_bucket: '<existing-bucket-containing-the-snarkos-binary>'
 
-# To use a pre-built tx_cannon binary located on the tx-cannons bucket. The bucket name is `tx-cannons`.
+# To use a pre-built tx_cannon binary located on the provable-binaries-releases bucket. The bucket name is `tx-cannons`.
 # use_prebuild_tx_cannon: true
 
 # To use malicious SnarkOS pre-built binary located on the configured `s3_bucket` under folder named like the `snarkos_malice_tag`:

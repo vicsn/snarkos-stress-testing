@@ -55,10 +55,8 @@ resource "aws_iam_policy" "tx_cannon_node_s3_access" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:aws:s3:::tx-cannons",
-          "arn:aws:s3:::tx-cannons/*",
-          "arn:aws:s3:::snarkos-releases-for-testing",
-          "arn:aws:s3:::snarkos-releases-for-testing/*"
+          "arn:aws:s3:::provable-binaries-releases",
+          "arn:aws:s3:::provable-binaries-releases/*"
         ]
       }
     ]

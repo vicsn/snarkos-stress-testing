@@ -1,11 +1,9 @@
 # Have `export TF_VAR_AWS_ACCESS_KEY=<val>` and `export TF_VAR_AWS_SECRET_KEY=<val>` to specify these
 # if you don't want to input them
 
-variable "AWS_ACCESS_KEY" {}
-variable "AWS_SECRET_KEY" {}
 variable "AWS_REGION" {
   type    = string
-  default = "eu-central-1"
+  default = "us-west-2"
 }
 variable "ARDBEG_SECRET" {
   type    = string
@@ -13,15 +11,16 @@ variable "ARDBEG_SECRET" {
 }
 
 variable "RELEASES_BUCKET" {
-  default = "snarkos-releases-for-testing"
+  default = "provable-binaries-releases"
 }
 
 variable "RESULTS_BUCKET" {
-  default = "test-results-and-logs"
+  default = "provable-logs-results"
 }
 
+# Can be overwritten with setting `TF_VAR_PUBLIC_KEY_PATH=...` before `terraform apply`
 variable "PUBLIC_KEY_PATH" {
-  default = "~/.ssh/id_rsa.pub"
+  default = "~/.ssh/id_ed25519.pub"
 }
 
 variable github_token {
@@ -39,7 +38,6 @@ terraform {
 
 provider "aws" {
   region  = var.AWS_REGION
-  access_key = var.AWS_ACCESS_KEY
-  secret_key = var.AWS_SECRET_KEY
+  profile = "ephnet"
 }
 

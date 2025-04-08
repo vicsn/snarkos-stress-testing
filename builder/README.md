@@ -16,6 +16,8 @@ another region and account. Just modify the region in `packer/image.json.pkr.hcl
 `AWS_SECRET_ACCESS_KEY` in the current terminnal and navigate to the `packer` folder. Run:
 
 ```
+export AWS_REGION=us-west-2
+packer init image.json.pkr.hcl
 packer build image.json.pkr.hcl
 ```
 
@@ -38,6 +40,8 @@ What does that include?
 
 Keep in mind that in order to create the Builder, first you need to export `TF_VAR_AWS_ACCESS_KEY` and `TF_VAR_AWS_SECRET_KEY`.
 Additionally you need a github token with read access to this repository (so the builder can download the tests). Export it with `TF_VAR_github_token`.
+
+By default, the setup uses the ssh key `id_ed25519.pub` in `~/.ssh/`. You can overwrite this with `TF_VAR_PUBLIC_KEY_PATH=...`.
 
 ### Provisioning with Ansible
 

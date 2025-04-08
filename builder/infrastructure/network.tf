@@ -10,7 +10,7 @@ resource "aws_vpc" "aleo_builder" {
 resource "aws_subnet" "public" {
   vpc_id            = aws_vpc.aleo_builder.id
   cidr_block        = "10.0.1.0/24"
-  availability_zone = "eu-central-1a"
+  availability_zone = "us-west-2a"
 }
 
 resource "aws_internet_gateway" "aleo_builder_igw" {

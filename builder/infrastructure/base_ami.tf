@@ -1,7 +1,7 @@
 variable "owners" {
   description = "List of AMI owners"
   type        = list(string)
-  default     = ["148761683502"]
+  default     = ["637423331354"]
 }
 
 data "aws_ami" "latest_builder_base_ubuntu" {

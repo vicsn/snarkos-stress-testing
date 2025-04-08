@@ -27,7 +27,6 @@ variable "aws_region" {
 }
 
 data "amazon-ami" "builder-base" {
-  access_key = "${var.aws_access_key}"
   filters = {
     name                = "ubuntu/images/hvm-ssd/ubuntu-*-22.04-amd64-server-*"
     root-device-type    = "ebs"
@@ -36,17 +35,16 @@ data "amazon-ami" "builder-base" {
   most_recent = true
   owners      = ["099720109477"]
   region      = "${var.aws_region}"
-  secret_key  = "${var.aws_secret_key}"
 }
 
 locals { timestamp = regex_replace(timestamp(), "[- TZ:]", "") }
 
 source "amazon-ebs" "builder-base" {
-  access_key    = "${var.aws_access_key}"
+  #access_key    = "${var.aws_access_key}"
+  #secret_key    = "${var.aws_secret_key}"
   ami_name      = "builder-base-${local.timestamp}"
   instance_type = "m5.4xlarge"
   region        = "${var.aws_region}"
-  secret_key    = "${var.aws_secret_key}"
   source_ami    = "${data.amazon-ami.builder-base.id}"
   ssh_username  = "ubuntu"
 

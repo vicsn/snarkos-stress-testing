@@ -7,7 +7,7 @@
   become: true
   remote_user: ubuntu
   vars:
-    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('tx-cannons') }}"
+    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('provable-binaries-releases') }}"
   roles:
     - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
     - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }

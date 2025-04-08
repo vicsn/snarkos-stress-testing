@@ -8,6 +8,7 @@
       git:
         repo: "https://{{ github_token }}@github.com/ProvableHQ/stress-testing.git"
         dest: "/home/ubuntu/stress_testing"
+        force: true
 
     - name: Update APT package index and install boto3
       become: true
@@ -16,6 +17,7 @@
         update_cache: yes
         cache_valid_time: 3600
         name:
+          - jq
           - python3-pip
 
     - name: Ensure Python boto3 is installed

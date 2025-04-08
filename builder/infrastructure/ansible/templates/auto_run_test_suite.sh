@@ -6,12 +6,10 @@ PARENT_DIR=$(cd "$(dirname $0)" && pwd)
 bold=$(tput bold)
 normal=$(tput sgr0)
 
-TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-builder}"
-export AWS_REGION="${TF_STATE_REGION:-eu-central-1}"
-RELEASE_BUCKET="${RELEASE_BUCKET:-snarkos-releases-for-testing}"
+TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
+export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
+RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
-
-TF_VAR_ecr_repository_url=148761683502.dkr.ecr.eu-central-1.amazonaws.com/tx-cannon
 
 # Functions to clean up resources using Terraform
 cleanup_on_error() {

@@ -54,7 +54,7 @@
 
 - name: Download tx-cannon tests from S3
   aws_s3:
-    bucket: "tx-cannons"
+    bucket: "provable-binaries-releases"
     object: "tests.zip"
     dest: "/home/ubuntu/tx-cannon/tests.zip"
     mode: get

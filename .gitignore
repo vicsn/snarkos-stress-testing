@@ -61,3 +61,6 @@ log_files
 .ansible/
 test_suites/single-region-tests/.ansible
 test_suites/single-region-tests/playbooks/.ansible
+
+# Ansible related, for the builder
+builder/infrastructure/ansible/builder_inventory.yml
