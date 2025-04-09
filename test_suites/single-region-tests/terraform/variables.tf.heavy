@@ -118,46 +118,30 @@ variable "tx_cannon_services" {
       task_count = 0 # NOTE: recommended set to 0 when shooting straight at validators
     }
 
-    BatchNestedDeploy_1_31_1 = {
-      tx_command = "tx-cannon batch-deploy --manifest tests/nested_imports/generated_programs/generated_programs_1_31_1.txt -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --check-retries 10 --concurrent-deployments 1 --network"
-      task_count = 1
-    }
-    #BatchNestedExecute_1_31_1 = {# Note: only works for mainnet
+    #BatchNestedExecute_1_31_1 = {# Note: only works for mainnet, requires running the add_deployments test
     #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_1_31_1.toml --network"
     #  task_count = 1
     #}
 
-    BatchNestedDeploy_1_5_2 = {
-      tx_command = "tx-cannon batch-deploy --manifest tests/nested_imports/generated_programs/generated_programs_1_5_2.txt -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --check-retries 10 --concurrent-deployments 1 --network"
-      task_count = 1
-    }
-    #BatchNestedExecute_1_5_2 = { # Note: only works for mainnet
+    #BatchNestedExecute_1_5_2 = { # Note: only works for mainnet, requires running the add_deployments test
     #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_1_5_2.toml --network"
     #  task_count = 1
     #}
     
-    BatchNestedDeploy_2_30_1 = {
-      tx_command = "tx-cannon batch-deploy --manifest tests/nested_imports/generated_programs/generated_programs_2_30_1.txt -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --check-retries 10 --concurrent-deployments 1 --network"
-      task_count = 1
-    }
     BatchRecordFund_2_30_1 = {
       tx_command = "tx-cannon batch-execute --test tests/nested_imports/funding_execution_2_30_1.toml --network"
       task_count = 1
     }
-    #BatchNestedExecute_2_30_1 = { # Note: only works for mainnet
+    #BatchNestedExecute_2_30_1 = { # Note: only works for mainnet, requires running the add_deployments test
     #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_2_30_1.toml --network"
     #  task_count = 1
     #}
 
-    BatchNestedDeploy_2_4_2 = {
-      tx_command = "tx-cannon batch-deploy --manifest tests/nested_imports/generated_programs/generated_programs_2_4_2.txt -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --check-retries 10 --concurrent-deployments 1 --network"
-      task_count = 1
-    }
     BatchRecordFund_2_4_2 = {
       tx_command = "tx-cannon batch-execute --test tests/nested_imports/funding_execution_2_4_2.toml --network"
       task_count = 1
     }
-    #BatchNestedExecute_2_4_2 = { # Note: only works for mainnet
+    #BatchNestedExecute_2_4_2 = { # Note: only works for mainnet, requires running the add_deployments test
     #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_2_4_2.toml --network"
     #  task_count = 1
     #}
