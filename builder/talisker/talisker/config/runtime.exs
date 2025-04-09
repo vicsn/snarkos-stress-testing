@@ -28,15 +28,6 @@ if config_env() == :prod do
         ]
       },
       %{
-        github_path: "meddle0x53/snarkOS",
-        tracking: [
-          %{
-            type: :new_branch,
-            matcher: [~r/^test[0-9]+$/]
-          }
-        ]
-      },
-      %{
         github_path: "kpandl/snarkOS",
         tracking: [
           %{

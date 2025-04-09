@@ -44,6 +44,7 @@ defmodule GithubTrackerEx.BranchPoller do
     repo =
       case Git.clone([repo_url, local_path]) do
         {:ok, repo} ->
+	  Git.fetch(repo)
           repo
 
         {:error, %Git.Error{code: 128}} ->

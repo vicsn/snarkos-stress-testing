@@ -32,12 +32,6 @@ defmodule Talisker.Application do
       tests_to_run: ~w(halt_byzantine_minority)
     }
 
-    developer_test_repo_config = %{
-      name: :test_snarkos_builder,
-      github_path: "meddle0x53/snarkOS",
-      tests_to_run: ~w(reset_client_ledgers)
-    }
-
     konstantin_snark_os_repo_config = %{
       name: :konstantin_snark_os_builder,
       github_path: "kpandl/snarkOS",
@@ -55,6 +49,7 @@ defmodule Talisker.Application do
         add_deployments reset_client_ledgers reset_validator_ledgers swap_ledgers halt_byzantine_majority halt_byzantine_minority
       )
     }
+
     IO.inspect(staging_snark_os_repo_config)
 
     observability_runner_config = @main_observability_runner_configuration
@@ -63,7 +58,6 @@ defmodule Talisker.Application do
       {Phoenix.PubSub, name: Talisker.PubSub},
       builder_child_spec(release_snark_os_repo_config),
       builder_child_spec(pre_release_snark_os_repo_config),
-      builder_child_spec(developer_test_repo_config),
       builder_child_spec(konstantin_snark_os_repo_config),
       builder_child_spec(staging_snark_os_repo_config),
       {Talisker.Tester.ObservabilityRunner, observability_runner_config},

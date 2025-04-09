@@ -151,27 +151,12 @@ defmodule Talisker.Tester.ObservabilityRunner do
         log_error("Error testing #{label} : #{inspect(reason)}")
 
       {:error, reason, output_path} ->
-        retries = Keyword.get(opts, :retries, @failed_tests_max_retries)
+        results_path = "#{results_path}_FAILED"
+        upload_to_s3(output_path, results_path)
+        upload_log_files(results_path, configuration)
+        upload_prometheus_snapshot(results_path, configuration)
 
-        if retries <= 1 do
-          results_path = "#{results_path}_FAILED"
-          upload_to_s3(output_path, results_path)
-          upload_log_files(results_path, configuration)
-          upload_prometheus_snapshot(results_path, configuration)
-
-          log_error("Error testing #{label} : #{inspect(reason)}")
-        else
-          log_error("Error testing #{label} : #{inspect(reason)}")
-
-          next_retries = retries - 1
-          log_info("Retrying, retries left : #{next_retries}")
-
-          # Removing the central log as it is also used as a lock:
-          File.cp(output_path, "#{output_path}_#{timed_label}_#{retries}.bak")
-          File.rm_rf(output_path)
-
-          prepare_and_run_test(test_name, label, configuration, time, retries: next_retries)
-        end
+        log_error("Error testing #{label} : #{inspect(reason)}")
     end
 
     log_path = Path.join(File.cwd!(), "observability_runner.log")
@@ -199,9 +184,15 @@ defmodule Talisker.Tester.ObservabilityRunner do
       case MuonTrap.cmd(command, args,
              cd: tests_path,
              stderr_to_stdout: true,
-             into: output_stream
+             into: output_stream,
+             timeout: 9_000_000
            ) do
         {out, 0} ->
+          Logger.info(inspect(out))
+          {:ok, output}
+
+        {out, :timeout} ->
+          Logger.warning("Tests timed out")
           Logger.info(inspect(out))
           {:ok, output}
 
