@@ -17,6 +17,21 @@ cleanup_on_error() {
     cleanup
 }
 
+react_on_error() {
+  rc=$?
+  echo "EXIT (rc: $rc)"
+
+  # Download client logs:
+  export SELECTED=_download_logs_clients
+  run_test
+
+  # Download validator logs:
+  export SELECTED=_download_logs_validators
+  run_test
+
+  exit $rc
+}
+
 cleanup() {
     cd "$PARENT_DIR/terraform"
     terraform destroy -auto-approve -parallelism=50
@@ -194,8 +209,7 @@ parse_tests_to_run() {
 trap cleanup_on_error ERR
 trap 'rc=$?; echo "ERR at line ${LINENO} (rc: $rc)"; exit $rc' ERR
 
-trap cleanup_on_error EXIT
-trap 'rc=$?; echo "EXIT (rc: $rc)"; exit $rc' EXIT
+trap react_on_error EXIT
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
