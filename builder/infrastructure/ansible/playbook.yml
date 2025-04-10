@@ -1,4 +1,5 @@
-- hosts: all
+- name: Setup the builder machine
+  hosts: all
   become: true
   gather_facts: true
   remote_user: ubuntu
@@ -8,6 +9,7 @@
       git:
         repo: "https://{{ github_token }}@github.com/ProvableHQ/stress-testing.git"
         dest: "/home/ubuntu/stress_testing"
+        version: main
         force: true
 
     - name: Update APT package index and install boto3
@@ -57,14 +59,12 @@
         src: talisker.service
         dest: /etc/systemd/system/talisker.service
         mode: '0644'
-      become: true
 
     - name: Reload systemd to read new talisker service file
       become: true
       become_user: root
       systemd:
         daemon_reload: true
-      become: true
 
     - name: Restart talisker service
       become: true
@@ -72,7 +72,6 @@
       systemd:
         name: talisker
         state: restarted
-      become: true
 
     - name: Run aws config
       ansible.builtin.shell: |

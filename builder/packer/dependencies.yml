@@ -7,6 +7,11 @@
   become_user: ubuntu
   tasks:
   - name: Set up basics and asdf
+    vars:
+      shrc: "{{ ansible_user_dir | quote }}/.{{ ansible_user_shell | basename | quote }}rc"
+      sh: "{{ ansible_user_shell | basename | quote }}"
+      asdf: "v0.14.1"
+    when: ansible_system == 'Linux' and (ansible_distribution == 'Ubuntu' or ansible_distribution == 'Debian')
     block:
     - name: Install basic dependencies
       become: true
@@ -14,11 +19,11 @@
       apt:
         update_cache: yes
         name:
-          - awscli
-          - curl
-          - git
-          - wget
-          - vim
+        - awscli
+        - curl
+        - git
+        - wget
+        - vim
         state: latest
 
     - name: Install asdf
@@ -31,14 +36,14 @@
         version: "{{ asdf | quote }}"
       register: result
 
-    - name: asdf update
+    - name: Run asdf update
       become: true
       become_user: ubuntu
       shell: "bash -lc 'cd {{ ansible_user_dir }}/.asdf && git pull'"
       ignore_errors: yes
       when: result is failed
 
-    - name: set env vars
+    - name: Set env vars
       become: true
       become_user: ubuntu
       lineinfile:
@@ -50,13 +55,8 @@
         regexp: '^ \. \$HOME/\.asdf/completions/asdf\.{{ sh }}'
       - line: '. $HOME/.asdf/asdf.sh'
         regexp: '^ \. \$HOME/\.asdf/asdf\.sh'
-    when: ansible_system == 'Linux' and (ansible_distribution == 'Ubuntu' or ansible_distribution == 'Debian')
-    vars:
-      shrc: "{{ ansible_user_dir | quote }}/.{{ ansible_user_shell | basename | quote }}rc"
-      sh: "{{ ansible_user_shell | basename | quote }}"
-      asdf: "v0.14.1"
 
-  - name: install prerequisite libraries for erlang 
+  - name: Install prerequisite libraries for erlang
     become: true
     become_user: root
     apt:
@@ -83,134 +83,201 @@
   - name: Add Erlang asdf plugin
     become: true
     become_user: ubuntu
-    block:
-    - name: sh env
-      ansible.builtin.shell:
-      args:
-        cmd: "{{ shenv_cmd }}"
-        chdir: '{{ ansible_user_dir }}/'
-      register: shenv
-    - name: asdf plugin add erlang
-      ansible.builtin.shell: |
-        {{ source }} 
-        asdf plugin add erlang
-      args:
-        executable: '{{ ansible_user_shell }}'
-      register: result
-      failed_when: result.rc != 0 and result.stderr | regex_search('(Plugin named .* already added)') == '' 
-      vars:
-        source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
     vars:
       asdfsh: "{{ ansible_user_dir | quote }}/.asdf/asdf.sh"
       profile: "{{ ansible_user_dir | quote }}/.profile"
       shprofile: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename | regex_replace('$', '_') | regex_replace('zsh_', 'z') }}profile"
-      shrc: "{{ ansible_user_dir | quote }}/.{{ ansible_user_shell | basename  | quote }}rc"
-      shenv_cmd: "if [ -e {{ asdfsh }} ]; then echo '{{ asdfsh }}'; fi; if [ -e {{ shprofile }} ]; then echo '{{ shprofile }}'; fi; if [ -e {{ profile }} ]; then echo '{{ profile }}'; fi; if [ -e {{ shrc }} ]; then echo '{{ shrc }}'; fi"
-
-  - name: Add Elixir asdf plugin
-    become: true
-    become_user: ubuntu
+      shrc: "{{ ansible_user_dir | quote }}/.{{ ansible_user_shell | basename | quote }}rc"
+      shenv_cmd: |
+        if [ -e {{ asdfsh }} ]; then
+          echo '{{ asdfsh }}'
+        fi
+        if [ -e {{ shprofile }} ]; then
+          echo '{{ shprofile }}'
+        fi
+        if [ -e {{ profile }} ]; then
+          echo '{{ profile }}'
+        fi
+        if [ -e {{ shrc }} ]; then
+          echo '{{ shrc }}'
+        fi
     block:
-    - name: sh env
+    - name: Run sh env
       ansible.builtin.shell:
       args:
         cmd: "{{ shenv_cmd }}"
         chdir: '{{ ansible_user_dir }}/'
       register: shenv
-    - name: asdf plugin add elixir
+    - name: Run asdf plugin add erlang
       ansible.builtin.shell: |
-        {{ source }} 
-        asdf plugin add elixir
+        {{ source }}
+        asdf plugin add erlang
       args:
         executable: '{{ ansible_user_shell }}'
       register: result
-      failed_when: result.rc != 0 and result.stderr | regex_search('(Plugin named .* already added)') == '' 
-      vars: 
+      failed_when: result.rc != 0 and result.stderr | regex_search('(Plugin named .* already added)') == ''
+      vars:
         source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
+
+  - name: Add Elixir asdf plugin
+    become: true
+    become_user: ubuntu
     vars:
       asdfsh: "{{ ansible_user_dir | quote }}/.asdf/asdf.sh"
       profile: "{{ ansible_user_dir }}/.profile"
       shprofile: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename | regex_replace('$', '_') | regex_replace('zsh_', 'z') }}profile"
       shrc: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename }}rc"
-      shenv_cmd: "if [ -e {{ asdfsh }} ]; then echo '{{ asdfsh }}'; fi; if [ -e {{ shprofile }} ]; then echo '{{ shprofile }}'; fi; if [ -e {{ profile }} ]; then echo '{{ profile }}'; fi; if [ -e {{ shrc }} ]; then echo '{{ shrc }}'; fi"
-
-  - name: Add Rust asdf plugin
-    become: true
-    become_user: ubuntu
+      shenv_cmd: |
+        if [ -e {{ asdfsh }} ]; then
+          echo '{{ asdfsh }}'
+        fi
+        if [ -e {{ shprofile }} ]; then
+          echo '{{ shprofile }}'
+        fi
+        if [ -e {{ profile }} ]; then
+          echo '{{ profile }}'
+        fi
+        if [ -e {{ shrc }} ]; then
+          echo '{{ shrc }}'
+        fi
     block:
-    - name: sh env
+    - name: Run sh env
       ansible.builtin.shell:
       args:
         cmd: "{{ shenv_cmd }}"
         chdir: '{{ ansible_user_dir }}/'
       register: shenv
-    - name: asdf plugin add rust
+    - name: Run asdf plugin add elixir
+      ansible.builtin.shell: |
+        {{ source }}
+        asdf plugin add elixir
+      args:
+        executable: '{{ ansible_user_shell }}'
+      register: result
+      failed_when: result.rc != 0 and result.stderr | regex_search('(Plugin named .* already added)') == ''
+      vars:
+        source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
+
+  - name: Add Rust asdf plugin
+    become: true
+    become_user: ubuntu
+    vars:
+      asdfsh: "{{ ansible_user_dir | quote }}/.asdf/asdf.sh"
+      profile: "{{ ansible_user_dir }}/.profile"
+      shprofile: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename | regex_replace('$', '_') | regex_replace('zsh_', 'z') }}profile"
+      shrc: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename }}rc"
+      shenv_cmd: |
+        if [ -e {{ asdfsh }} ]; then
+          echo '{{ asdfsh }}'
+        fi
+        if [ -e {{ shprofile }} ]; then
+          echo '{{ shprofile }}'
+        fi
+        if [ -e {{ profile }} ]; then
+          echo '{{ profile }}'
+        fi
+        if [ -e {{ shrc }} ]; then
+          echo '{{ shrc }}'
+        fi
+    block:
+    - name: Run sh env
+      ansible.builtin.shell:
+      args:
+        cmd: "{{ shenv_cmd }}"
+        chdir: '{{ ansible_user_dir }}/'
+      register: shenv
+    - name: Run asdf plugin add rust
       ansible.builtin.shell: |
         {{ source }}
         asdf plugin add rust
       args:
         executable: '{{ ansible_user_shell }}'
       register: result
-      failed_when: result.rc != 0 and result.stderr | regex_search('(Plugin named .* already added)') == '' 
-      vars: 
+      failed_when: result.rc != 0 and result.stderr | regex_search('(Plugin named .* already added)') == ''
+      vars:
         source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
+
+  - name: Install Erlang
+    become: true
+    become_user: ubuntu
     vars:
       asdfsh: "{{ ansible_user_dir | quote }}/.asdf/asdf.sh"
       profile: "{{ ansible_user_dir }}/.profile"
       shprofile: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename | regex_replace('$', '_') | regex_replace('zsh_', 'z') }}profile"
       shrc: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename }}rc"
-      shenv_cmd: "if [ -e {{ asdfsh }} ]; then echo '{{ asdfsh }}'; fi; if [ -e {{ shprofile }} ]; then echo '{{ shprofile }}'; fi; if [ -e {{ profile }} ]; then echo '{{ profile }}'; fi; if [ -e {{ shrc }} ]; then echo '{{ shrc }}'; fi"
-
-  - name: Install Erlang
-    become: true
-    become_user: ubuntu
+      shenv_cmd: |
+        if [ -e {{ asdfsh }} ]; then
+          echo '{{ asdfsh }}'
+        fi
+        if [ -e {{ shprofile }} ]; then
+          echo '{{ shprofile }}'
+        fi
+        if [ -e {{ profile }} ]; then
+          echo '{{ profile }}'
+        fi
+        if [ -e {{ shrc }} ]; then
+          echo '{{ shrc }}'
+        fi
+      erlang: "latest"
     block:
-    - name: sh env
+    - name: Run sh env
       ansible.builtin.shell:
       args:
         cmd: "{{ shenv_cmd }}"
         chdir: '{{ ansible_user_dir }}/'
       register: shenv
-    - name: asdf install erlang
+    - name: Set asdf install erlang
       ansible.builtin.shell: |
-        {{ source }} 
+        {{ source }}
         asdf install erlang {{ erlang | quote }}
       args:
         executable: '{{ ansible_user_shell }}'
       register: result
       when: ansible_system == 'Linux'
-      vars: 
+      vars:
         source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
-    - name: show result
+    - name: Show result
       debug:
         var: result
-    - name: asdf global erlang
+    - name: Set asdf global erlang
       ansible.builtin.shell: |
-        {{ source }} 
+        {{ source }}
         asdf global erlang {{ erlang | quote }}
       args:
         executable: '{{ ansible_user_shell }}'
-      vars: 
+      vars:
         source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
+
+  - name: Install Rust
+    become: true
+    become_user: ubuntu
     vars:
       asdfsh: "{{ ansible_user_dir | quote }}/.asdf/asdf.sh"
       profile: "{{ ansible_user_dir }}/.profile"
       shprofile: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename | regex_replace('$', '_') | regex_replace('zsh_', 'z') }}profile"
       shrc: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename }}rc"
-      shenv_cmd: "if [ -e {{ asdfsh }} ]; then echo '{{ asdfsh }}'; fi; if [ -e {{ shprofile }} ]; then echo '{{ shprofile }}'; fi; if [ -e {{ profile }} ]; then echo '{{ profile }}'; fi; if [ -e {{ shrc }} ]; then echo '{{ shrc }}'; fi"
-      erlang: "latest"
-
-  - name: Install Rust
-    become: true
-    become_user: ubuntu
+      shenv_cmd: |
+        if [ -e {{ asdfsh }} ]; then
+          echo '{{ asdfsh }}'
+        fi
+        if [ -e {{ shprofile }} ]; then
+          echo '{{ shprofile }}'
+        fi
+        if [ -e {{ profile }} ]; then
+          echo '{{ profile }}'
+        fi
+        if [ -e {{ shrc }} ]; then
+          echo '{{ shrc }}'
+        fi
+      rust: "latest"
     block:
-    - name: sh env
+    - name: Run sh env
       ansible.builtin.shell:
       args:
         cmd: "{{ shenv_cmd }}"
         chdir: '{{ ansible_user_dir }}/'
       register: shenv
-    - name: asdf install rust
+    - name: Set asdf install rust
       ansible.builtin.shell: |
         {{ source }}
         asdf install rust {{ rust | quote }}
@@ -219,10 +286,10 @@
       register: result
       vars:
         source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
-    - name: show result
+    - name: Show result
       debug:
         var: result
-    - name: asdf global rust
+    - name: Set asdf global rust
       ansible.builtin.shell: |
         {{ source }}
         asdf global rust {{ rust | quote }}
@@ -230,13 +297,6 @@
         executable: '{{ ansible_user_shell }}'
       vars:
         source: "{{ shenv.stdout_lines | map('regex_replace', '(^)', '. ') | join('\n') }}"
-    vars:
-      asdfsh: "{{ ansible_user_dir | quote }}/.asdf/asdf.sh"
-      profile: "{{ ansible_user_dir }}/.profile"
-      shprofile: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename | regex_replace('$', '_') | regex_replace('zsh_', 'z') }}profile"
-      shrc: "{{ ansible_user_dir }}/.{{ ansible_user_shell | basename }}rc"
-      shenv_cmd: "if [ -e {{ asdfsh }} ]; then echo '{{ asdfsh }}'; fi; if [ -e {{ shprofile }} ]; then echo '{{ shprofile }}'; fi; if [ -e {{ profile }} ]; then echo '{{ profile }}'; fi; if [ -e {{ shrc }} ]; then echo '{{ shrc }}'; fi"
-      rust: "latest"
 
   - name: Install ansible
     become: true
@@ -246,7 +306,7 @@
       apt:
         update_cache: yes
         name:
-          - software-properties-common
+        - software-properties-common
         state: latest
 
     - name: Add Ansible repository into sources list
@@ -258,7 +318,7 @@
       apt:
         update_cache: yes
         name:
-          - ansible
+        - ansible
         state: latest
 
   - name: Install terraform
