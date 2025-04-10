@@ -1,6 +1,6 @@
 resource "aws_instance" "builder" {
   ami                         = data.aws_ami.latest_builder_base_ubuntu.id
-  instance_type               = "t2.medium"
+  instance_type               = "t2.large"
   subnet_id                   = aws_subnet.public.id
   associate_public_ip_address = true
   key_name                    = aws_key_pair.builder_main_key.key_name
