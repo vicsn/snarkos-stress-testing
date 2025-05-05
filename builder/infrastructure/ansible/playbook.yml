@@ -12,7 +12,7 @@
         version: main
         force: true
 
-    - name: Update APT package index and install boto3
+    - name: Update APT package index and install dependencies
       become: true
       become_user: root
       apt:
@@ -21,6 +21,11 @@
         name:
           - jq
           - python3-pip
+          - build-essential
+          - curl
+          - pkg-config
+          - libssl-dev
+          - libssh2-1-dev
 
     - name: Ensure Python boto3 is installed
       pip:
@@ -28,24 +33,44 @@
         state: present
         executable: pip3
 
-    - name: Download talisker release from S3
-      aws_s3:
-        bucket: "{{ releases_bucket }}"
-        object: "talisker.tar.gz"
-        dest: "/home/ubuntu/talisker.tar.gz"
-        mode: get
-      register: s3_download
+    - name: Install Rust and Cargo
+      shell: |
+        set -o pipefail
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+        source $HOME/.cargo/env
+      args:
+        executable: /bin/bash
+        creates: /home/ubuntu/.cargo/bin/cargo
 
-    - name: Ensure the download was successful
-      fail:
-        msg: "Failed to download talisker release from S3."
-      when: s3_download.failed
+    - name: Add Cargo to PATH for this session
+      shell: |
+        source $HOME/.cargo/env
+        echo $PATH
+      args:
+        executable: /bin/bash
+      register: cargo_path
 
-    - name: Extract talisker release
-      ansible.builtin.unarchive:
-        src: /home/ubuntu/talisker.tar.gz
-        dest: /home/ubuntu
-        remote_src: yes
+    - name: Show cargo path
+      debug:
+        var: cargo_path.stdout
+
+    - name: Clone the Talisker repository
+      git:
+        repo: "https://{{ github_token }}@github.com/ProvableHQ/talisker.git"
+        dest: "/home/ubuntu/talisker-src"
+        version: master
+        force: true
+
+    - name: Compile Talisker
+      shell: |
+        source $HOME/.cargo/env
+        cd /home/ubuntu/talisker-src && \
+        cargo build --release && \
+        mkdir -p /home/ubuntu/talisker/bin && \
+        cp target/release/talisker /home/ubuntu/talisker/bin
+      args:
+        executable: /bin/bash
 
     - name: Ensure the talisker binary is executable
       file:

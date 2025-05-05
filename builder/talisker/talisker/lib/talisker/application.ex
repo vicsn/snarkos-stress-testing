@@ -49,6 +49,7 @@ defmodule Talisker.Application do
         add_deployments reset_client_ledgers reset_validator_ledgers swap_ledgers halt_byzantine_majority halt_byzantine_minority
       )
     }
+    IO.inspect(staging_snark_os_repo_config)
 
     IO.inspect(staging_snark_os_repo_config)
 
