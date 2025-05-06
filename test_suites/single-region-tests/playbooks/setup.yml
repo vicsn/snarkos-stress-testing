@@ -194,16 +194,30 @@
   become: true
   remote_user: ubuntu
   tasks:
+    - name: Stop unattended-upgrades service temporarily
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        state: stopped
+      ignore_errors: yes
+      
     - name: Install zip
       ansible.builtin.apt:
         name: "{{ item }}"
         state: present
         update_cache: true
+        force_apt_get: yes
       with_items:
         - zip
+      register: apt_result
       retries: 20
       delay: 30
       until: apt_result is success
+      
+    - name: Restart unattended-upgrades service
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        state: started
+      ignore_errors: yes
 
 # ------------------------------------------------
 # flamegraph
