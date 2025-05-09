@@ -62,16 +62,6 @@
             (use_malicious_snarkos_pre_build is defined) and (use_malicious_snarkos_pre_build|bool)
           }}
 
-    - name: Ensure exactly one installation method is used
-      ansible.builtin.fail:
-        msg: "Exactly one installation method should be used."
-      when: (use_local_build | int + use_github_build | int + use_remote_build | int | int + use_local_pre_build | int + use_s3_pre_build) != 1
-
-    - name: Ensure that if snarkos_git_commit_local_build_update is set, then the local build installation method is used
-      fail:
-        msg: "If snarkos_git_commit_local_build_update is set, then use the local build installation method."
-      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0 and not use_local_build
-
 - name: Build and upload snarkOS to S3 if required
   hosts: localhost
   gather_facts: false
@@ -95,29 +85,6 @@
       include_role:
         name: snarkos_build_locally
       when: hostvars['localhost'].use_local_build
-
-    - name: Set git commit variable for update build
-      set_fact:
-        snarkos_git_commit_to_build: "{{ snarkos_git_commit_local_build_update }}"
-      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
-
-    - name: Set update release name
-      set_fact:
-        update_release_name: "{{ generate_release_name | replace('commit_hash', snarkos_git_commit_to_build) | trim }}"
-      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
-
-    - name: Debug update release name
-      debug:
-        msg: "Update release name: '{{ update_release_name }}'"
-      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
-
-    - name: Build and upload update snarkOS to S3
-      include_role:
-        name: snarkos_build_locally
-      when: >
-        hostvars['localhost'].use_local_build and 
-        snarkos_git_commit_local_build_update is defined and 
-        snarkos_git_commit_local_build_update | length > 0
 
 # ------------------------------------------------
 # snarkOS installation
@@ -156,35 +123,6 @@
         name: snarkos_build_from_git
       when: hostvars['localhost'].use_remote_build
 
-    - name: Download malice snarkOS binary with GitHub CLI
-      ansible.builtin.shell: >
-        TAG="{{ snarkos_malice_tag }}"
-
-        apt-get install -y unzip
-
-        GITHUB_TOKEN="{{ github_token }}" gh release download ${TAG}
-        --repo ProvableHQ/snarkOS-staging
-        --pattern "snarkos*unknown-linux-gnu.zip"
-        --output "/tmp/snarkos-malicious.zip"
-        --clobber
-
-        unzip -o /tmp/snarkos-malicious.zip -d /tmp/snarkos-malicious
-
-        mv /tmp/snarkos-malicious/snarkos /usr/bin/snarkos-malice
-      args:
-        executable: /bin/bash
-      register: download_malice_result
-      changed_when: download_malice_result is success
-      when: not hostvars['localhost'].use_malicious_snarkos_pre_build
-
-    - name: Download malice snarkOS binary from S3
-      vars:
-        snarkos_install_s3_release_name: "{{ snarkos_malice_tag }}/snarkos"
-        snarkos_install_s3_dest_name: "snarkos-malice"
-      ansible.builtin.include_role:
-        name: snarkos_install_s3
-      when: hostvars['localhost'].use_malicious_snarkos_pre_build
-
   tags: snarkos_install
 
 # ------------------------------------------------
@@ -194,73 +132,16 @@
   become: true
   remote_user: ubuntu
   tasks:
-    - name: Stop unattended-upgrades service temporarily
-      ansible.builtin.systemd:
-        name: unattended-upgrades
-        state: stopped
-      ignore_errors: yes
-      
     - name: Install zip
       ansible.builtin.apt:
         name: "{{ item }}"
         state: present
         update_cache: true
-        force_apt_get: yes
       with_items:
         - zip
-      register: apt_result
       retries: 20
       delay: 30
       until: apt_result is success
-      
-    - name: Restart unattended-upgrades service
-      ansible.builtin.systemd:
-        name: unattended-upgrades
-        state: started
-      ignore_errors: yes
-
-# ------------------------------------------------
-# flamegraph
-
-- name: Install flamegraph dependencies
-  hosts: snarkos_validator
-  become: true
-  remote_user: ubuntu
-  pre_tasks:
-    - name: Set Validator Facts
-      ansible.builtin.include_tasks: set_validator_facts.yml
-  tasks:
-    - name: Capture kernel version
-      ansible.builtin.command: uname -r
-      register: kernel_version
-      when: create_flamegraph
-      changed_when: kernel_version is success
-
-    - name: Install flamegraph dependencies
-      ansible.builtin.apt:
-        name: "{{ item }}"
-        state: present
-        update_cache: true
-      with_items:
-        - linux-tools-common
-        - linux-tools-generic
-        - linux-tools-{{ kernel_version.stdout }}
-        - build-essential
-      retries: 20
-      delay: 30
-      until: apt_result is success
-      when: create_flamegraph
-
-    - name: Install Rustup and flamegraph # As advised by https://github.com/flamegraph-rs/flamegraph
-      ansible.builtin.command: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-
-        . "$HOME/.cargo/env"
-
-        cargo install flamegraph
-      args:
-        executable: /bin/bash
-      when: create_flamegraph
 
 # ------------------------------------------------
 # snarkOS Process Exporter
@@ -361,18 +242,23 @@
   tags: prometheus
 
 # ------------------------------------------------
-# snarkOS validators
+# snarkOS clients
 
-- name: Set up and start snarkOS network for validators
-  hosts: snarkos_validator
-  become: true
-  remote_user: ubuntu
-  pre_tasks:
-    - name: Set Validator facts
-      include_tasks: set_validator_facts.yml
-  roles:
-    - snarkos_service
-  tags: snarkos
+- name: Prepare snapshot URLs for clients
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read snapshot URLs file
+      slurp:
+        src: "{{ playbook_dir }}/snapshot_urls.txt"  # Update with your actual path
+      register: snapshot_urls_content
+      run_once: true
+
+    - name: Display snapshot URLs content
+      debug:
+        msg: "{{ snapshot_urls_content.content | b64decode }}"
+      run_once: true
 
 # ------------------------------------------------
 # snarkOS clients
@@ -382,26 +268,31 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
+    - name: Set snapshot URL based on client index
+      set_fact:
+        snapshot_url: "{{ (hostvars['localhost'].snapshot_urls_content.content | b64decode).split('\n')[groups['snarkos_client'].index(inventory_hostname)] if groups['snarkos_client'].index(inventory_hostname) > 0 else '' }}"
+
+    - name: Display assigned snapshot URL
+      debug:
+        msg: "Host {{ inventory_hostname }} assigned snapshot URL: {{ snapshot_url }}"
+
+    - name: Deploy download and restart script
+      template:
+        src: download_snapshot.sh.j2
+        dest: /tmp/download_snapshot.sh
+        mode: '0755'
+
     - name: Set client facts
       include_tasks: set_client_facts.yml
+
   roles:
     - snarkos_service
+
+  post_tasks:
+    - name: Execute download and restart script
+      shell: /tmp/download_snapshot.sh > /var/log/download_snapshot_$(date +%Y%m%d-%H%M%S).log 2>&1
+      async: 18000  # 5 hours timeout
+      poll: 0
+      register: download_job
+
   tags: snarkos_client
-
-# ------------------------------------------------
-# Optionall restart validators if creating a flamegraph to avoid measuring genesis block creation
-
-- name: Optionally restart snarkOS validators
-  hosts: snarkos_validator
-  become: true
-  remote_user: ubuntu
-  pre_tasks:
-    - name: Set Validator facts
-      include_tasks: set_validator_facts.yml
-  tasks:
-    - name: Restart snarkOS validators
-      systemd:
-        name: snarkos
-        state: restarted
-      when: create_flamegraph
-  tags: snarkos

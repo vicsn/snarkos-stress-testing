@@ -1,0 +1,23 @@
+plugin: amazon.aws.aws_ec2
+
+regions: us-east-2,eu-central-1
+
+profile: ephnet
+
+keyed_groups:
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+  - key: tags.Name
+    prefix: ""
+    separator: ""
+
+filters:
+  instance-state-name: running
+  "tag:Devnet": "network-sync-tests"
+  "tag:Role":
+    - "prometheus-server"
+    - "snarkos-client"
+
+compose:
+  ansible_host: public_ip_address

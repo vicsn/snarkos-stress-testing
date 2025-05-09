@@ -1,0 +1,51 @@
+- name: Set commit hash fact from snarkos_git_hash if local build is used
+  set_fact:
+    commit_hash: "{{ snarkos_git_hash }}"
+  when: use_local_build
+
+- name: Get commit hash for binary installation
+  block:
+    - name: Slurp the commit hash
+      ansible.builtin.slurp:
+        src: '/usr/bin/SNARKOS_COMMIT_HASH'
+      register: file_content_encoded
+
+    - name: Decode the file commit from base64
+      set_fact:
+        commit_hash: "{{ file_content_encoded['content'] | b64decode | trim }}"
+  when: use_github_build
+
+- name: Get commit hash for git installation
+  block:
+    - name: Get current commit hash
+      shell: git rev-parse HEAD
+      args:
+        chdir: "/home/ubuntu/snarkOS"
+        executable: /bin/bash
+      register: current_commit_hash
+
+    - name: Set commit hash
+      set_fact:
+        commit_hash: "{{ current_commit_hash.stdout }}"
+  when: use_remote_build
+
+- name: Get commit hash from the SnarkOS build
+  block:
+    - name: Get build commit hash
+      shell: /usr/bin/snarkos -V | awk '{print $4}'
+      args:
+        executable: /bin/bash
+      register: current_commit_hash
+
+    - name: Set commit hash
+      set_fact:
+        commit_hash: "{{ current_commit_hash.stdout }}"
+  when: use_local_pre_build or use_s3_pre_build
+
+- name: Print current commit hash
+  debug:
+    msg: "The current commit hash is {{ commit_hash }}"
+
+- name: Set host_public_ip
+  set_fact:
+    host_public_ip: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"

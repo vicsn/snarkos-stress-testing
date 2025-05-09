@@ -19,7 +19,7 @@ scrape_configs:
     follow_redirects: true
     static_configs:
 
-      {% for host in groups['snarkos_validator'] | union(groups['snarkos_client']) %}
+      {% for host in groups.get('snarkos_validator', []) | union(groups['snarkos_client']) %}
 
       - targets: ["{{ host }}:9000"]
         labels:
@@ -36,7 +36,7 @@ scrape_configs:
     follow_redirects: true
     static_configs:
 
-      {% for host in groups['snarkos_validator'] | union(groups['snarkos_client']) %}
+      {% for host in groups.get('snarkos_validator', []) | union(groups['snarkos_client']) %}
 
       - targets: ["{{ host }}:9256"]
         labels:
@@ -53,7 +53,7 @@ scrape_configs:
     follow_redirects: true
     static_configs:
 
-      {% for host in groups['snarkos_validator'] %}
+      {% for host in groups.get('snarkos_validator', []) %}
 
       - targets: ["{{ host }}:9100"]
         labels:
@@ -70,7 +70,7 @@ scrape_configs:
     follow_redirects: true
     static_configs:
 
-      {% for host in groups['snarkos_validator'] %}
+      {% for host in groups.get('snarkos_validator', []) %}
 
       - targets: ["{{ host }}:9000"]
         labels:

@@ -1,0 +1,10 @@
+[Unit]
+Description=snarkOS Node Service
+
+[Service]
+User=root
+{{ malicemode | default('') }}
+WorkingDirectory=/home/ubuntu
+ExecStart={{ snarkos_bin_path }}/{{ snarkos_command }}
+Restart=no
+LimitNOFILE=65535

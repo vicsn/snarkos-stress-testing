@@ -1,0 +1,59 @@
+# Devnet name uniquely identifies logs and metrics:
+devnet_name: "single-region-tests"
+
+# Observability keys received from Infra team.
+cloud_id: "your_elastic_cloud_id_here"
+elastic_api_key: "your_elastic_api_key_here"
+grafana_cloud_api_key: "your_grafana_cloud_api_key_here"
+
+# Your own github access token.
+github_token: "your_github_token_here" # link to generate: https://github.com/settings/tokens/new?scopes=repo&description=burn-in-testing-snarkos
+
+# Observability infra vars
+create_flamegraph: false
+flamegraph_node_id: "0" # Validator node ID to generate flamegraph for
+
+# For local build: (leave commented out if using another installation method)
+snarkos_git_commit_local_build: "b94eb477eba2fe0a89b0ddeccbecb5d36df40243"
+snarkos_repo: "git@github.com:ProvableHQ/snarkOS-staging.git" # note the changed URL format
+envs: "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
+features: "test_targets,test_skip_tx_checks" # optional, e.g., "test_targets,test_skip_tx_checks"
+
+# For GitHub build: (note that it uses the ProvableHQ/snarkOS-staging repository. Comment out if using another installation method)
+# snarkos_binary_tag: "mainnet-latest"
+
+# For remote build: (leave commented out if using another installation method)
+# snarkos_git_hash: "mainnet-staging" # NOTE: can be a branch name or a commit hash
+# snarkos_repo: "https://github.com/ProvableHQ/snarkOS-staging"
+# envs: "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
+# features: "test_skip_tx_checks" # optional, e.g., "test_targets,test_skip_tx_checks"
+
+# Vars to be used with pre-built releases.
+# All these vars are use by the auto-builder that is triggered on new releases and shouldn't be used locally.
+# Adding them here for documentation purposes:
+
+# To use a snarkos binary put in the root of the configured `s3_bucket`:
+# use_snarkos_pre_build_s3: true 
+# s3_bucket: release-bucket-2122415'
+
+# To use a pre-built tx_cannon binary located on the provable-binaries-releases bucket. The bucket name is `tx-cannons`.
+# use_prebuild_tx_cannon: true
+
+# To use malicious SnarkOS pre-built binary located on the configured `s3_bucket` under folder named like the `snarkos_malice_tag`:
+# use_malicious_snarkos_pre_build: true 
+# s3_bucket: '<existing-bucket-containing-the-malicious-snarkos-binary>'
+
+# To use a local pre-built SnarkOS binary on the given path.
+# snarkos_pre_build_location: "/home/ubuntu/bin/snarkos" 
+
+
+# Application vars
+snarkos_verbosity: "1"
+rest_rps: 1000000000
+
+# Ansible vars
+# ansible_python_interpreter: /usr/bin/python3.10
+
+
+# Do not change the code below
+generate_release_name: "COMMIT_HASH{{ '_' + features if (features is defined and features | length > 0) else '' }}{{ '_' + (envs | regex_replace('=', '_') | regex_replace(' ', '_')) if (envs is defined and envs | length > 0) else '' }}"

@@ -5,6 +5,7 @@
 **/terraform.tfstate.lock.info
 **/.terraform.tfstate.lock.info
 **/terraform.tfstate.backup
+*.tfstate
 /group_vars/snarkos_node.yml
 /terraform.tfvars
 **/grafana-dashboard.json
@@ -17,6 +18,8 @@
 **/vars.yml
 **/logs/
 **/ledger_backups
+/test_suites/network-sync-tests/playbooks/snarkos-shallow/
+/test_suites/network-sync-tests/prometheus_server_data/
 /test_suites/single-region-tests/playbooks/snarkos-shallow/
 /test_suites/single-region-tests/prometheus_server_data/
 /test_suites/single-region-tests/auto_run_test_suite.sh
@@ -58,9 +61,13 @@ variables.tf
 log_files
 
 # Ansible related
-.ansible/
-test_suites/single-region-tests/.ansible
-test_suites/single-region-tests/playbooks/.ansible
+**/.ansible
+
+# Ansible lint cache files
+**/.ansible-lint
 
 # Ansible related, for the builder
 builder/infrastructure/ansible/builder_inventory.yml
+
+# Related to the client sync test
+test_suites/network-sync-tests/playbooks/snapshot_urls.txt

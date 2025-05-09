@@ -1,0 +1,16 @@
+
+https://ledger.aleo.network/testnet/snapshot/testnet-4796987.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-4922817.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5066097.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5172972.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5316180.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5428387.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5555009.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5685394.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5816927.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-5958895.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-6081723.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-6224157.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-6370341.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-6451147.tar
+https://ledger.aleo.network/testnet/snapshot/testnet-6756979.tar

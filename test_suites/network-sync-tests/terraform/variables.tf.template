@@ -1,0 +1,20 @@
+variable "devnet_name" {
+  description = "Unique name for this devnet deployment"
+  default     = "network-sync-tests"
+}
+
+variable "client_instance_type" {
+  description = "Instance type for snarkOS validators"
+  default     = "m7i.4xlarge"
+}
+
+variable "client_count" {
+  description = "Number of snarkOS client instances to create"
+  default     = NUMCLIENTS
+  type        = number
+}
+
+variable "RELEASE_BUCKET" {
+  description = "The bucket used to upload and download SnarkOS binaries"
+  default     = "release-bucket-2122415"
+}
