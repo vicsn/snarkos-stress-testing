@@ -11,6 +11,71 @@ export AWS_REGION="${TF_STATE_REGION:-us-east-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:release-bucket-2122415}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
 
+# Function to get highest height from snapshot URLs
+get_highest_snapshot_height() {
+    local snapshot_file="$1"
+    local highest_height=0
+    
+    # Read the file line by line, ensuring the last line is processed
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ $line =~ mainnet-([0-9]+)\.tar ]] || [[ $line =~ testnet-([0-9]+)\.tar ]]; then
+            local height="${BASH_REMATCH[1]}"
+            if [ "$height" -gt "$highest_height" ]; then
+                highest_height=$height
+            fi
+        fi
+    done < "$snapshot_file"
+    
+    echo "$highest_height"
+}
+
+# Function to get current network height
+get_current_network_height() {
+    local network="$1"
+    local height_url="https://api.explorer.provable.com/v1/${network}/latest/height"
+    curl -s "$height_url"
+}
+
+# Function to check if snapshots are outdated
+check_snapshot_freshness() {
+    local network="$1"
+    local snapshot_height="$2"
+    local current_height="$3"
+
+    # Note: we use snapshots from block heights every 5 days, with the goal that the test takes
+    # about 1 day to complete. Thus, the snapshot links in `snapshot_urls_mainnet.txt` and
+    # `snapshot_urls_testnet.txt` will be incomplete after ~5 days. This function triggers a
+    # warning mesage in such cases. The spacing between the snapshot block heights differs
+    # (since they were retrieved time based instead of block height based), but was recently up
+    # to ~200k for mainnet and up to ~300k for testnet. Here, we use 1.5x these thresholds for
+    # triggering the warnings, a somewhat arbitrary value.
+    local threshold=300000  # Default for mainnet
+    
+    if [ "$network" == "testnet" ]; then
+        threshold=450000
+    fi
+    
+    local height_diff=$((current_height - snapshot_height))
+    
+    if [ "$height_diff" -gt "$threshold" ]; then
+        echo "WARNING: The snapshots are significantly outdated!"
+        echo "Current ${network} height: ${current_height}"
+        echo "Latest snapshot height: ${snapshot_height}"
+        echo "Difference: ${height_diff} blocks"
+        echo "Threshold: ${threshold} blocks"
+        
+        while true; do
+            read -p "Do you want to continue anyway? (y/n) " response
+            case "$response" in
+                [Yy]* ) return 0;;
+                [Nn]* ) return 1;;
+                * ) echo "Please answer y or n.";;
+            esac
+        done
+    fi
+    return 0
+}
+
 # Function to destroy infrastructure
 destroy_infrastructure() {
     echo "Destroying infrastructure..."
@@ -97,10 +162,23 @@ if [ "$NETWORK_TYPE" == "t" ]; then
     SNARKOS_NETWORK_INT=1
     cp "$PARENT_DIR/playbooks/snapshot_urls_testnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
     echo "Using testnet snapshot URLs."
+    NETWORK="testnet"
 else
     SNARKOS_NETWORK_INT=0
     cp "$PARENT_DIR/playbooks/snapshot_urls_mainnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
     echo "Using mainnet snapshot URLs."
+    NETWORK="mainnet"
+fi
+
+# Get highest snapshot height
+SNAPSHOT_HEIGHT=$(get_highest_snapshot_height "$PARENT_DIR/playbooks/snapshot_urls.txt")
+# Get current network height
+CURRENT_HEIGHT=$(get_current_network_height "$NETWORK")
+
+# Check if snapshots are outdated
+if ! check_snapshot_freshness "$NETWORK" "$SNAPSHOT_HEIGHT" "$CURRENT_HEIGHT"; then
+    echo "Exiting due to outdated snapshots."
+    exit 1
 fi
 
 # Count ALL lines in the snapshot_urls.txt file (including empty ones)
