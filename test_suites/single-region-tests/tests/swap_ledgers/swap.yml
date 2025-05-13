@@ -50,6 +50,19 @@
     cmd: "tar -czf /tmp/ledger_backup.tar.gz /home/ubuntu/.ledger-0-*"
   delegate_to: "{{ source_node }}"
   remote_user: ubuntu
+  retries: 15
+  delay: 20
+  register: archive_result
+  until: archive_result is not failed
+
+- name: swap_ledgers | swap | Remove existing ledger_backups.tar.gz to prevent checksum mismatches if copy failed but there was a version.
+  ansible.builtin.shell:
+    cmd: "rm -rf /home/ubuntu/aleo_testing/tests/swap_ledgers/ledger_backups/ledger_backup.tar.gz"
+  delegate_to: "{{ node }}"
+  remote_user: ubuntu
+  loop: "{{ current_group }}"
+  loop_control:
+    loop_var: node
 
 - name: swap_ledgers | swap | Fetch ledger backup from source node
   ansible.builtin.fetch:

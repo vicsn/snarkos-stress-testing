@@ -179,7 +179,11 @@ read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
 # Destroy the infrastructure
 echo "Destroying infrastructure..."
+
 cd "$PARENT_DIR/terraform"
 terraform destroy -auto-approve -parallelism=50
+
 cd "$PARENT_DIR/terraform_tx_cannon"
+# Init the terraform_tx_cannon as if it is not used in this test run, we'll see 'Error: Module not installed' without an init.
+terraform init -backend-config="bucket=${TFSTATE_BUCKET}"
 terraform destroy -auto-approve -parallelism=50
