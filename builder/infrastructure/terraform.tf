@@ -23,6 +23,10 @@ variable "PUBLIC_KEY_PATH" {
   default = "~/.ssh/id_ed25519.pub"
 }
 
+# We can put empty strings and then slack integration will be turned off
+variable "SLACK_CHANNEL_ID" {}
+variable "SLACK_TOKEN" {}
+
 variable github_token {
   sensitive = true
 }
