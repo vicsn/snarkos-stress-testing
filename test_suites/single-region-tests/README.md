@@ -52,7 +52,19 @@ Authentication happens via Google SSO:
 
 - [Grafana](https://aleostresstest.grafana.net/d/single-region-tests/single-region-tests?from=now-3h&to=now&refresh=) can be used with `devnet_name=single-region-tests`. If you change your `devnet_name`, you'll need to customize and import `grafana.json` to a new dashboard.
 - [Elastic](https://eq-external.kb.eu-north-1.aws.elastic-cloud.com:9243/app/discover#/).
-- If ECR logging is enabled, [AWS console](https://us-west-2.console.aws.amazon.com/ecs/v2/clusters?region=us-west-2).
+- If ECR logging is enabled, [AWS console](https://us-west-2.console.aws.amazon.com/ecs/v2/clusters?region=us-west-2). Example Terraform config:
+```
+      # NOTE: ECS logging configuration is commented out due to high costs.
+      # Only enable if absolutely necessary for debugging.
+      # logConfiguration = {
+      #   logDriver = "awslogs"
+      #   options = {
+      #     awslogs-group         = aws_cloudwatch_log_group.tx_cannon_logs.name
+      #     awslogs-region        = data.aws_region.current.name
+      #     awslogs-stream-prefix = "service-${each.key}"
+      #   }
+      # }
+```
 
 ## Running multiple devnets in parallel
 
