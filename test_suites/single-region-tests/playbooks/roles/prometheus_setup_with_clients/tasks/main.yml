@@ -19,6 +19,8 @@
     src: prometheus.yml
     dest: /home/ubuntu/prometheus.yml
     mode: '0664'
+  vars:
+    custom_metrics_ip: "{{ test_runner_for_metrics_ip | default('localhost') }}"
 
 - name: Create data folder for possible snapshots
   ansible.builtin.file:

@@ -109,6 +109,14 @@
         mode: '0600'
       become: true
 
+    - name: Get IP from inside the builder EC2 instance
+      shell: curl -s http://checkip.amazonaws.com
+      register: ip_result
+
+    - name: Set fact for the builder IP
+      set_fact:
+        builder_ip: "{{ ip_result.stdout | trim }}"
+
     - name: Set up testing ansible vars
       template:
         src: ansible_vars.yml

@@ -46,4 +46,3 @@ scrape_configs:
                  {%- endfor %}]
       labels:
         group: "process_exporter"
-

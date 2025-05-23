@@ -49,8 +49,16 @@ resource "aws_vpc_security_group_ingress_rule" "allow_ssh_ipv4" {
   cidr_ipv4         = "0.0.0.0/0"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "allow_api_ipv4" {
+  security_group_id = aws_security_group.aleo_builder.id
+  from_port         = 3030
+  to_port           = 3030
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
 #
-# Ingress rule to allow incoming Aloe peer-2-peer traffic
+# Ingress rule to allow incoming Aleo peer-2-peer traffic
 #
 
 #

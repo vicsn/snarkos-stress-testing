@@ -358,6 +358,8 @@
   gather_facts: true
   roles:
     - prometheus_setup_with_clients
+  vars:
+    test_runner_for_metrics_ip: "{{ test_runner_ip | default('localhost') }}"
   tags: prometheus
 
 # ------------------------------------------------

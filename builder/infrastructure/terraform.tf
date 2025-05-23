@@ -27,6 +27,18 @@ variable "PUBLIC_KEY_PATH" {
 variable "SLACK_CHANNEL_ID" {}
 variable "SLACK_TOKEN" {}
 
+variable "ELASTIC_CLOUD_ID" {
+  default = "your_elastic_cloud_id_here"
+}
+
+variable "ELASTIC_API_KEY" {
+  default = "your_elastic_api_key_here"
+}
+
+variable "GRAFANA_CLOUD_API_KEY" {
+  default = "your_grafana_cloud_api_key_here"
+}
+
 variable github_token {
   sensitive = true
 }

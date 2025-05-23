@@ -2,9 +2,9 @@
 devnet_name: "single-region-tests"
 
 # Observability keys received from Infra team.
-cloud_id: "your_elastic_cloud_id_here"
-elastic_api_key: "your_elastic_api_key_here"
-grafana_cloud_api_key: "your_grafana_cloud_api_key_here"
+cloud_id: "{{ elastic_cloud_id }}"
+elastic_api_key: "{{ elastic_api_key }}"
+grafana_cloud_api_key: "{{ grafana_cloud_api_key }}"
 
 # Your own github access token.
 github_token: "your_github_token_here" # link to generate: https://github.com/settings/tokens/new?scopes=repo&description=burn-in-testing-snarkos
@@ -29,3 +29,4 @@ snarkos_network: mainnet
 snarkos_network_int: 0 # mainnet is 0, testnet is 1, canarynet is 2
 rest_rps: 1000000000
 
+test_runner_ip: {{ builder_ip }}

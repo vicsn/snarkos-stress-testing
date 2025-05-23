@@ -128,3 +128,16 @@ scrape_configs:
           group: "node_exporter_clients"
           instance_type: "{{ hostvars[host]['instance_type'] }}"
       {% endfor %}
+
+
+  - job_name: 'test_identity_data'
+    honor_timestamps: true
+    scrape_interval: 240s
+    scrape_timeout: 30s
+    metrics_path: /metrics
+    scheme: http
+    follow_redirects: true
+    static_configs:
+      - targets: ["{{ custom_metrics_ip }}:3030"]
+        labels:
+          group: "test_identity_data"

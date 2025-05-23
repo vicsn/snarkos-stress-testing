@@ -57,7 +57,12 @@ resource "null_resource" "ansible_provisioner" {
         echo "Waiting for $ip to be ready..."
         sleep 2
       done
-      ansible-playbook --extra-vars "ARDBEG_SECRET=${var.ARDBEG_SECRET}" --extra-vars "github_token=${var.github_token}" --extra-vars "slack_channel_id=${var.SLACK_CHANNEL_ID}" --extra-vars "slack_token=${var.SLACK_TOKEN}" --extra-vars "releases_bucket=${var.RELEASES_BUCKET}" --extra-vars "results_bucket=${var.RESULTS_BUCKET}" -i ${aws_instance.builder.public_ip}, playbook.yml
+      ansible-playbook --extra-vars "ARDBEG_SECRET=${var.ARDBEG_SECRET}" \
+          --extra-vars "github_token=${var.github_token}" \
+            --extra-vars "slack_channel_id=${var.SLACK_CHANNEL_ID}" --extra-vars "slack_token=${var.SLACK_TOKEN}" \
+              --extra-vars "releases_bucket=${var.RELEASES_BUCKET}" --extra-vars "results_bucket=${var.RESULTS_BUCKET}" \
+                --extra-vars "elastic_cloud_id=${vars.ELASTIC_CLOUD_ID}" --extra-vars "elastic_api_key=${vars.ELASTIC_API_KEY}" --extra-vars "grafana_cloud_api_key=${vars.GRAFANA_CLOUD_API_KEY}" \
+                -i ${aws_instance.builder.public_ip}, playbook.yml
     EOF
     working_dir = "${path.module}/ansible"
   }
