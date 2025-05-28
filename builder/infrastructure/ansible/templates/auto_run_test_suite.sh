@@ -66,6 +66,11 @@ run_test() {
         "./pre-test.sh"
     fi
 
+    # Won't be defined if somebody kills the script and the logs cleanup kicks in as a run:
+    if [[ -z "${LB_URL}" ]]; then
+      LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+    fi
+
     # Run the test
     cd "$PARENT_DIR/playbooks"
     ansible-playbook run_test.yml --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
