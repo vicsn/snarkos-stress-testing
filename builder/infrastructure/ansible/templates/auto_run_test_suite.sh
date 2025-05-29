@@ -16,6 +16,8 @@ export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 export USER=builder
 export OWNER=$USER
 
+sed -i "s|{{ lookup('env', 'USER') }}|$OWNER|" inventory/dynamic_inventory.aws_ec2.yml
+
 # Functions to clean up resources using Terraform
 cleanup_on_error() {
     echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
@@ -50,7 +52,7 @@ cleanup() {
 init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
 
-    terraform init -migrate-state -backend-config="bucket=${TFSTATE_BUCKET}"
+    terraform init -migrate-state
     terraform apply -auto-approve -var="owner=$OWNER"
 
     # Save the load balancer DNS name
