@@ -10,6 +10,9 @@ TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:release-bucket-2122415}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
+export OWNER=$USER
+
+echo "About to run setup/tests for user $OWNER"
 
 # Function to clean up resources using Terraform
 cleanup() {
@@ -18,16 +21,16 @@ cleanup() {
     read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
     cd "$PARENT_DIR/terraform"
-    terraform destroy -auto-approve -parallelism=50
+    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
 
     cd "$PARENT_DIR/terraform_tx_cannon"
-    terraform destroy -auto-approve -parallelism=50
+    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
 }
 
 # Function to init and apply Terraform
 init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
-    terraform init -backend-config="bucket=${TFSTATE_BUCKET}"
+    terraform init
 
     # Store the currently loaded tx-cannon services
     replace_args="" 
@@ -36,7 +39,7 @@ init_and_apply_terraform() {
             replace_args+=" -replace=$instance"
         done
     # Always replace the tx-cannon ECS cluster, because they have a state root cached.
-    terraform apply $replace_args
+    terraform apply $replace_args -var="owner=$OWNER"
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
     LB_URL=$(cat $PARENT_DIR/lb_url.txt)
@@ -181,9 +184,9 @@ read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 echo "Destroying infrastructure..."
 
 cd "$PARENT_DIR/terraform"
-terraform destroy -auto-approve -parallelism=50
+terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
 
 cd "$PARENT_DIR/terraform_tx_cannon"
 # Init the terraform_tx_cannon as if it is not used in this test run, we'll see 'Error: Module not installed' without an init.
-terraform init -backend-config="bucket=${TFSTATE_BUCKET}"
-terraform destroy -auto-approve -parallelism=50
+terraform init
+terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"

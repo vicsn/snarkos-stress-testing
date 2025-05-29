@@ -1,5 +1,5 @@
 resource "aws_iam_policy" "snarkos_s3_access" {
-  name        = "SnarkOS-S3-Access-Policy"
+  name        = "${var.owner}-SnarkOS-S3-Access-Policy"
   description = "Allows SnarkOS EC2 instances to access the S3 bucket for binaries."
 
   policy = jsonencode({

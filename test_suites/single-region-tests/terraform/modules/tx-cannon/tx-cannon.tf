@@ -24,8 +24,12 @@ variable "devnet_name" {
   description = "The devnet"
 }
 
+variable "owner" {
+  description = "The deployment owner"
+}
+
 resource "aws_iam_role" "tx_cannon_node_ec2_role" {
-  name = "TXCannon-EC2-Role"
+  name = "${var.owner}-TXCannon-EC2-Role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -41,7 +45,7 @@ resource "aws_iam_role" "tx_cannon_node_ec2_role" {
 }
 
 resource "aws_iam_policy" "tx_cannon_node_s3_access" {
-  name        = "TXCannon-S3-Access-Policy"
+  name        = "${var.owner}-TXCannon-S3-Access-Policy"
   description = "Allows SnarkOS EC2 instances to access the S3 bucket for binaries."
   policy = jsonencode({
     Version = "2012-10-17"
@@ -67,7 +71,7 @@ resource "aws_iam_role_policy_attachment" "tx_cannon_node_access_attach" {
 }
 
 resource "aws_iam_instance_profile" "tx_cannon_node_ec2_instance_profile" {
-  name = "TXCannon-EC2-Instance-Profile"
+  name = "${var.owner}-TXCannon-EC2-Instance-Profile"
   role = aws_iam_role.tx_cannon_node_ec2_role.name
 }
 
@@ -86,9 +90,10 @@ resource "aws_instance" "tx_cannon_node" {
   }
 
   tags = {
-    Name = "tx-cannon-node-${count.index}",
-    Role = "tx-cannon-node",
-    Dev = count.index
+    Name   = "${var.owner}-tx-cannon-node-${count.index}",
+    Role   = "tx-cannon-node",
+    Owner  = "${var.owner}",
+    Dev    = count.index,
     Devnet = var.devnet_name
   }
 }

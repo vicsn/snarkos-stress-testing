@@ -22,6 +22,7 @@ keyed_groups:
 filters:
   instance-state-name: running
   "tag:Devnet": "single-region-tests"
+  "tag:Owner": "{{ lookup('env', 'USER') }}"
   "tag:Role":
     - "snarkos-validator"
     - "prometheus-server"

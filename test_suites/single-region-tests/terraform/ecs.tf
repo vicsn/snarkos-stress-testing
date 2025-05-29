@@ -20,7 +20,7 @@ data "aws_subnets" "default" {
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "tx_cannon_logs" {
-  name              = "/ecs/${var.devnet_name}-tx-cannon"
+  name              = "/ecs/${var.owner}-${var.devnet_name}-tx-cannon"
   retention_in_days = 1
 }
 
@@ -28,7 +28,7 @@ resource "aws_cloudwatch_log_group" "tx_cannon_logs" {
 resource "aws_ecs_task_definition" "tx_cannon_tasks" {
   for_each = var.tx_cannon_services
 
-  family                   = "${var.devnet_name}-tx-cannon-task-${each.key}"
+  family                   = "${var.owner}-${var.devnet_name}-tx-cannon-task-${each.key}"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = "4096"  # 4 vCPU
@@ -42,7 +42,7 @@ resource "aws_ecs_task_definition" "tx_cannon_tasks" {
 
   container_definitions = jsonencode([
     {
-      name  = "tx-cannon-container"
+      name  = "${var.owner}-tx-cannon-container"
       image = "${var.ecr_repository_url}:latest"
       environment = [
         { name = "SNARKOS_URL", value = "http://${aws_elb.snarkos_lb.dns_name}:3030" },
@@ -66,7 +66,7 @@ resource "aws_ecs_task_definition" "tx_cannon_tasks" {
 resource "aws_ecs_service" "tx_cannon_services" {
   for_each = var.tx_cannon_services
 
-  name            = "${var.devnet_name}-tx-cannon-service-${each.key}"
+  name            = "${var.owner}-${var.devnet_name}-tx-cannon-service-${each.key}"
   cluster         = data.aws_ecs_cluster.existing_cluster.id
   task_definition = aws_ecs_task_definition.tx_cannon_tasks[each.key].arn
   launch_type     = "FARGATE"
@@ -79,7 +79,8 @@ resource "aws_ecs_service" "tx_cannon_services" {
   }
 
   tags = {
-    Name    = "${var.devnet_name}-tx-cannon-service-${each.key}"
+    Name    = "${var.owner}-${var.devnet_name}-tx-cannon-service-${each.key}"
+    Owner   = "${var.owner}"
     Devnet  = var.devnet_name
     Service = each.key
   }
@@ -87,7 +88,7 @@ resource "aws_ecs_service" "tx_cannon_services" {
 
 # IAM Role for ECS Task Execution
 resource "aws_iam_role" "ecs_execution_role" {
-  name = "${var.devnet_name}-ecs-execution-role"
+  name = "${var.owner}-${var.devnet_name}-ecs-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

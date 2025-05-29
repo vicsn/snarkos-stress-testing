@@ -5,7 +5,7 @@
 # After setting this up, the root account needs to create a permission set and grant access to users
 
 # resource "aws_iam_policy" "ec2_instance_connect" {
-#   name        = "${var.devnet_name}-ec2-instance-connect-policy"
+#   name        = "${var.owner}-${var.devnet_name}-ec2-instance-connect-policy"
 #   path        = "/"
 #   description = "Policy to allow EC2 Instance Connect for specific Devnet"
 #

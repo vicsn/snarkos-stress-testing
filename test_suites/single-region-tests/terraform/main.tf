@@ -1,8 +1,10 @@
-
 terraform {
-  backend "s3" {
-    key            = "terraform/state/single-region-tests/terraform.tfstate"
-    profile        = "ephnet"
+  backend "local" {}
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
 }
 
@@ -10,7 +12,7 @@ terraform {
 # Generated key to be used for ssh access to the nodes
 
 resource "aws_key_pair" "generated_key" {
-  key_name   = "${var.devnet_name}-devnet-key"
+  key_name   = "${var.owner}-${var.devnet_name}-devnet-key"
   public_key = file("../${path.module}/devnet-key.pub")
 }
 
@@ -23,7 +25,7 @@ module "stress_base_ami" {
 
 module "sg" {
   source      = "./modules/security_group"
-  name        = "${var.devnet_name}-sg"
+  name        = "${var.owner}-${var.devnet_name}-sg"
   description = "Security group for all nodes in ${var.devnet_name}"
 }
 
@@ -48,6 +50,7 @@ module "tx-cannon" {
   key_name = aws_key_pair.generated_key.key_name
   sec_group_name = module.sg.security_group_name
   devnet_name = var.devnet_name
+  owner = var.owner
   tx_cannon_instance_count = var.tx_cannon_instance_count
   tx_cannon_instance_type = var.tx_cannon_instance_type
 }
@@ -71,9 +74,10 @@ resource "aws_instance" "snarkos_validator" {
   }
 
   tags = {
-    Name = "${var.devnet_name}-snarkos-validator-${count.index}",
+    Name = "${var.owner}-${var.devnet_name}-snarkos-validator-${count.index}",
     Role = "snarkos-validator",
     Dev = count.index,
+    Owner = "${var.owner}"
     Devnet = var.devnet_name
   }
 }
@@ -98,12 +102,13 @@ resource "aws_instance" "snarkos_client" {
   }
 
   tags = {
-    Name      = "${var.devnet_name}-snarkos-client-${each.key}",
+    Name      = "${var.owner}-${var.devnet_name}-snarkos-client-${each.key}",
     Role      = "snarkos-client",
     Dev       = each.value.index,
+    Owner     = "${var.owner}",
     Type      = each.value.type,
     Validator = each.value.validator,
-    Devnet     = var.devnet_name
+    Devnet    = var.devnet_name
   }
 }
 
@@ -116,8 +121,12 @@ locals {
   sanitized_devnet_name = lower(replace(var.devnet_name, "/[^a-zA-Z0-9-]/", "-"))
 }
 
+locals {
+  sanitized_owner = lower(replace(var.owner, "/[^a-zA-Z0-9-]/", "-"))
+}
+
 resource "aws_elb" "snarkos_lb" {
-  name               = "${substr(local.sanitized_devnet_name, 0, 15)}-snarkos-lb"
+  name               = "${substr(local.sanitized_owner, 0, 6)}-${substr(local.sanitized_devnet_name, 0, 10)}-snarkos-lb"
   security_groups    = [module.sg.security_group_id]
   availability_zones = data.aws_availability_zones.available.names
 
@@ -139,7 +148,8 @@ resource "aws_elb" "snarkos_lb" {
   instances = [for i in aws_instance.snarkos_validator : i.id]
 
   tags = {
-    Name = "${var.devnet_name}-snarkos-lb"
+    Name   = "${var.owner}-${var.devnet_name}-snarkos-lb"
+    Owner  = "${var.owner}"
     Devnet = var.devnet_name
   }
 }
@@ -168,8 +178,9 @@ resource "aws_instance" "prometheus_server" {
   }
 
   tags = {
-    Name = "${var.devnet_name}-prometheus-server"
-    Role = "prometheus-server"
+    Name   = "${var.owner}-${var.devnet_name}-prometheus-server"
+    Role   = "prometheus-server"
+    Owner  = "${var.owner}"
     Devnet = var.devnet_name
   }
 }

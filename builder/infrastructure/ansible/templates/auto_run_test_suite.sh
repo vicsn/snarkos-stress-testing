@@ -11,6 +11,11 @@ export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 
+# Override the USER var for the run, as USER is just ubuntu for the builder and we want a special, visible name:
+# Ansible also uses this var to create its dynamic inventory, that's why we need it set the same as the OWNER for terraform.
+export USER=builder
+export OWNER=$USER
+
 # Functions to clean up resources using Terraform
 cleanup_on_error() {
     echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
@@ -34,10 +39,11 @@ react_on_error() {
 
 cleanup() {
     cd "$PARENT_DIR/terraform"
-    terraform destroy -auto-approve -parallelism=50
+    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
 
     cd "$PARENT_DIR/terraform_tx_cannon"
-    terraform destroy -auto-approve -parallelism=50
+    terraform init
+    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
 }
 
 # Function to init and apply Terraform
@@ -45,7 +51,7 @@ init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
 
     terraform init -migrate-state -backend-config="bucket=${TFSTATE_BUCKET}"
-    terraform apply -auto-approve
+    terraform apply -auto-approve -var="owner=$OWNER"
 
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt

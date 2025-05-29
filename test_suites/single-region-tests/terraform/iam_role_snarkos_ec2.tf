@@ -1,5 +1,5 @@
 resource "aws_iam_role" "snarkos_ec2_role" {
-  name = "SnarkOS-EC2-Role"
+  name = "${var.owner}-SnarkOS-EC2-Role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

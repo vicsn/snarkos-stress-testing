@@ -2,7 +2,7 @@
 # Generated key to be used for ssh access to the nodes
 
 resource "aws_key_pair" "generated_key" {
-  key_name   = "tx-cannon-devnet-key"
+  key_name   = "${var.owner}-tx-cannon-devnet-key"
   public_key = file("../${path.module}/devnet-key.pub")
 }
 
@@ -15,7 +15,7 @@ module "stress_base_ami" {
 
 module "sg" {
   source      = "./modules/security_group"
-  name        = "tx-cannon-sg"
+  name        = "${var.owner}-tx-cannon-sg"
   description = "Security group for tx-cannons"
 }
 
@@ -29,6 +29,10 @@ variable "tx_cannon_instance_type" {
   default     = "m5.2xlarge"
 }
 
+variable "owner" {
+  description = "The deployment owner"
+}
+
 module "tx-cannon" {
   source = "./modules/tx-cannon"
   count  = 1
@@ -36,6 +40,7 @@ module "tx-cannon" {
   key_name = aws_key_pair.generated_key.key_name
   sec_group_name = module.sg.security_group_name
   devnet_name = var.devnet_name
+  owner = var.owner
   tx_cannon_instance_count = var.tx_cannon_instance_count
   tx_cannon_instance_type = var.tx_cannon_instance_type
 }

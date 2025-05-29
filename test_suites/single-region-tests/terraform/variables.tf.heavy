@@ -1,3 +1,8 @@
+variable "owner" {
+  description = "Identifier for the user or team deploying this infrastructure"
+  type        = string
+}
+
 variable "devnet_name" {
   description = "Unique name for this devnet deployment"
   default     = "single-region-tests"

@@ -6,4 +6,4 @@ cd ../../terraform_tx_cannon
 # Add tx-cannon nodes.
 echo "Adding tx-cannon nodes"
 terraform init -migrate-state
-terraform apply -auto-approve -var="tx_cannon_instance_count=2" | grep -E 'Plan|Resources'
+terraform apply -auto-approve -var="owner=$OWNER" -var="tx_cannon_instance_count=2" | grep -E 'Plan|Resources'
