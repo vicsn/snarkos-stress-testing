@@ -9,7 +9,7 @@
 #   debug:
 #     msg: "Source node is {{ source_node }}"
 
-- name: swap_ledgers | swap | Stop the validators in the current group
+- name: prerelease_swap_ledgers | swap | Stop the validators in the current group
   ansible.builtin.systemd:
     name: snarkos
     state: stopped
@@ -20,11 +20,11 @@
   loop_control:
     loop_var: node
 
-- name: swap_ledgers | swap | Pause for 60 seconds
+- name: prerelease_swap_ledgers | swap | Pause for 60 seconds
   pause:
     seconds: 60
 
-- name: swap_ledgers | swap | Remove existing .ledger-0-* directories on each validator
+- name: prerelease_swap_ledgers | swap | Remove existing .ledger-0-* directories on each validator
   ansible.builtin.shell:
     cmd: "rm -rf /home/ubuntu/.ledger-0-*"
   delegate_to: "{{ node }}"
@@ -34,7 +34,7 @@
   become: true
   remote_user: ubuntu
 
-- name: swap_ledgers | swap | Adjust permissions for .ledger-0-* directories
+- name: prerelease_swap_ledgers | swap | Adjust permissions for .ledger-0-* directories
   ansible.builtin.file:
     path: "/home/ubuntu/.ledger-0-*"
     owner: ubuntu
@@ -45,7 +45,7 @@
   become: true
   remote_user: ubuntu
 
-- name: swap_ledgers | swap | Archive .ledger-0-* directories on source node
+- name: prerelease_swap_ledgers | swap | Archive .ledger-0-* directories on source node
   ansible.builtin.shell:
     cmd: "tar -czf /tmp/ledger_backup.tar.gz /home/ubuntu/.ledger-0-*"
   delegate_to: "{{ source_node }}"
@@ -55,7 +55,7 @@
   register: archive_result
   until: archive_result is not failed
 
-- name: swap_ledgers | swap | Remove existing ledger_backups.tar.gz to prevent checksum mismatches if copy failed but there was a version.
+- name: prerelease_swap_ledgers | swap | Remove existing ledger_backups.tar.gz to prevent checksum mismatches if copy failed but there was a version.
   ansible.builtin.shell:
     cmd: "rm -rf /home/ubuntu/aleo_testing/tests/swap_ledgers/ledger_backups/ledger_backup.tar.gz"
   delegate_to: "{{ node }}"
@@ -64,7 +64,7 @@
   loop_control:
     loop_var: node
 
-- name: swap_ledgers | swap | Fetch ledger backup from source node
+- name: prerelease_swap_ledgers | swap | Fetch ledger backup from source node
   ansible.builtin.fetch:
     src: "/tmp/ledger_backup.tar.gz"
     dest: "./ledger_backups/ledger_backup.tar.gz"
@@ -76,7 +76,7 @@
   register: fetch_result
   until: fetch_result is not failed
 
-- name: swap_ledgers | swap | Copy ledger backup to each validator in the current group
+- name: prerelease_swap_ledgers | swap | Copy ledger backup to each validator in the current group
   ansible.builtin.copy:
     src: "./ledger_backups/ledger_backup.tar.gz"
     dest: "/tmp/ledger_backup.tar.gz"
@@ -87,7 +87,7 @@
   loop_control:
     loop_var: node
 
-- name: swap_ledgers | swap | Extract ledger tarball on each validator in the current group
+- name: prerelease_swap_ledgers | swap | Extract ledger tarball on each validator in the current group
   ansible.builtin.shell:
     cmd: "tar -xzf /tmp/ledger_backup.tar.gz -C /home/ubuntu/"
   delegate_to: "{{ node }}"
@@ -96,11 +96,11 @@
   loop_control:
     loop_var: node
 
-- name: swap_ledgers | swap | Pause for 60 seconds
+- name: prerelease_swap_ledgers | swap | Pause for 60 seconds
   pause:
     seconds: 60
 
-- name: swap_ledgers | swap | Restart the validators in the current group
+- name: prerelease_swap_ledgers | swap | Restart the validators in the current group
   ansible.builtin.systemd:
     name: snarkos
     state: restarted
@@ -111,7 +111,7 @@
   loop_control:
     loop_var: node
 
-- name: swap_ledgers | swap | Include tasks to retry. Configure max attempts and retry delay as needed.
+- name: prerelease_swap_ledgers | swap | Include tasks to retry. Configure max attempts and retry delay as needed.
   include_tasks: ../../playbooks/is_synced.yml
   vars:
     node_to_check: "{{ node }}"
@@ -120,7 +120,7 @@
   loop_control:
     loop_var: node
 
-- name: swap_ledgers | swap | Continue if synchronization is successful
+- name: prerelease_swap_ledgers | swap | Continue if synchronization is successful
   debug:
     msg: "Synchronization successful"
   when: sync_successful | default(false)

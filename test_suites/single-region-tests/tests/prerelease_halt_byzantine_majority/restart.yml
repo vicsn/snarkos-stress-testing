@@ -1,20 +1,20 @@
-- name: halt_byzantine_majority | restart | Select half of the validators randomly with Python
+- name: prerelease_halt_byzantine_majority | restart | Select half of the validators randomly with Python
   ansible.builtin.command: >
     python3 -c "import random; import sys; hosts=sys.argv[1].split(','); random.shuffle(hosts); half=len(hosts)//2; \
                 selected_hosts=hosts[:half]; print(','.join(selected_hosts))" "{{ groups['snarkos_validator'] | join(',') }}"
   register: validators_to_stop_raw
   run_once: true
 
-- name: halt_byzantine_majority | restart | Convert output to list
+- name: prerelease_halt_byzantine_majority | restart | Convert output to list
   set_fact:
     validators_to_stop: "{{ validators_to_stop_raw.stdout.split(',') }}"
   run_once: true
 
-- name: halt_byzantine_majority | restart | Debug selected validators
+- name: prerelease_halt_byzantine_majority | restart | Debug selected validators
   debug:
     msg: "Validators to stop: {{ validators_to_stop }}"
 
-- name: halt_byzantine_majority | restart | Stop snarkos service on selected validators
+- name: prerelease_halt_byzantine_majority | restart | Stop snarkos service on selected validators
   delegate_to: "{{ item }}"
   become: true
   remote_user: ubuntu
@@ -23,11 +23,11 @@
     state: stopped
   loop: "{{ validators_to_stop }}"
 
-- name: halt_byzantine_majority | restart | Pause for 15 seconds
+- name: prerelease_halt_byzantine_majority | restart | Pause for 15 seconds
   pause:
     seconds: 15
 
-- name: halt_byzantine_majority | restart | Restart snarkos service on selected validators
+- name: prerelease_halt_byzantine_majority | restart | Restart snarkos service on selected validators
   delegate_to: "{{ item }}"
   become: true
   remote_user: ubuntu
@@ -36,11 +36,11 @@
     state: restarted
   loop: "{{ validators_to_stop }}"
 
-- name: halt_byzantine_majority | restart | Pause for 120 more seconds
+- name: prerelease_halt_byzantine_majority | restart | Pause for 120 more seconds
   pause:
     seconds: 120
 
-- name: halt_byzantine_majority | restart | Fetch the current block height
+- name: prerelease_halt_byzantine_majority | restart | Fetch the current block height
   ansible.builtin.uri:
     url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
     method: GET
@@ -48,15 +48,15 @@
   register: current_block
   run_once: true
 
-- name: halt_byzantine_majority | restart | Debug the URL
+- name: prerelease_halt_byzantine_majority | restart | Debug the URL
   debug:
     msg: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
 
-- name: halt_byzantine_majority | restart | Debug current block height
+- name: prerelease_halt_byzantine_majority | restart | Debug current block height
   debug:
     msg: "Current block height: {{  current_block.json['header']['metadata']['height'] }}"
 
-- name: halt_byzantine_majority | restart | Wait for the network to progress by one block
+- name: prerelease_halt_byzantine_majority | restart | Wait for the network to progress by one block
   ansible.builtin.uri:
     url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
     method: GET
@@ -66,6 +66,6 @@
   retries: 60
   delay: 10
 
-- name: halt_byzantine_majority | restart | Debug next block height
+- name: prerelease_halt_byzantine_majority | restart | Debug next block height
   debug:
     msg: "Next block height: {{  next_block.json['header']['metadata']['height'] }}"

@@ -6,7 +6,6 @@ PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
 bold=$(tput bold)
 normal=$(tput sgr0)
 
-TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:release-bucket-2122415}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
@@ -171,6 +170,17 @@ if [ "$RUN_TESTS" == "y" ]; then
             export SELECTED=$test
             run_test
         done
+
+    # We have a special case for the prerelease ones too:
+    elif [ "$SELECTED" == "prerelease" ]; then
+        echo Running prerelease tests...
+
+        PRERELEASE_TESTS=($(printf "%s\n" "${TESTS[@]}" | grep '^prerelease_'))
+        for test in "${PRERELEASE_TESTS[@]}"; do
+            export SELECTED=$test
+            run_test
+        done
+
     # Else run the selected test
     else
         run_test
