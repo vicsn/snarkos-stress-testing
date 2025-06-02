@@ -79,7 +79,6 @@
         - /home/ubuntu/tx-cannon/tests/nested_imports/generated_programs/generated_programs_2_4_2.txt
       loop_control:
         loop_var: manifest
-        pause: 3
       register: deploy_results
 
     - name: Debugging nested

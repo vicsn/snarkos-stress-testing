@@ -6,6 +6,15 @@
     - name: Wait for SSH to become ready
       ansible.builtin.wait_for_connection:
 
+- name: Check setup integrity
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Fail if both snarkos_git_hash and snarkos_binary_tag are set
+      fail:
+        msg: "You cannot set both 'snarkos_git_hash' and 'snarkos_binary_tag'. Choose only one."
+      when: snarkos_git_hash is defined and snarkos_git_hash | length > 0 and snarkos_binary_tag is defined and snarkos_binary_tag | length > 0
+
 - name: Check which installation method is used
   hosts: localhost
   gather_facts: false
