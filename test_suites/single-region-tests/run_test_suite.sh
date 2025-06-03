@@ -7,11 +7,57 @@ bold=$(tput bold)
 normal=$(tput sgr0)
 
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
-RELEASE_BUCKET="${RELEASE_BUCKET:release-bucket-2122415}"
+RELEASE_BUCKET="${RELEASE_BUCKET:-release-bucket-2122415}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
 export OWNER=$USER
 
 echo "About to run setup/tests for user $OWNER"
+
+# Bucket for the logs:
+RESULTS_AND_LOGS_BUCKET="${RESULTS_AND_LOGS_BUCKET:-provable-logs-results}"
+TEST_RUNNER="${STRESS_TEST_RUNNER:-$USER}"
+DATE_OF_RUN=$(date -u '+%Y%m%dT%H%M%SZ')
+BASE_BUCKET_PATH="manual_test_runs/$USER/$DATE_OF_RUN"
+
+
+download_and_upload_logs() {
+  echo "Downloading test logs..."
+  local test_ran=$SELECTED
+
+  # Cleanup old logs:
+  rm -rf $PARENT_DIR/log_files
+
+  # Download client logs:
+  export SELECTED=_download_logs_clients
+  run_test
+
+  # Download validator logs:
+  export SELECTED=_download_logs_validators
+  run_test
+
+  echo "Uploading test logs to S3..."
+
+  if test -d $PARENT_DIR/log_files; then
+    for log_file in $PARENT_DIR/log_files/*
+    do
+        if test -f "$log_file"
+        then
+          local destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/$(basename ${log_file})"
+          echo "Copying $log_file to $destination ..."
+          aws s3 cp $log_file $destination
+        fi
+    done
+  fi
+
+  if test -f $PARENT_DIR/observability_runner.log; then
+    local destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/observability_runner.log"
+    aws s3 cp "$PARENT_DIR/observability_runner.log" $destination
+
+    rm -f $PARENT_DIR/observability_runner.log
+  fi
+
+  echo "Log files uploaded to https://console.aws.amazon.com/s3/buckets/$RESULTS_AND_LOGS_BUCKET?prefix=$BASE_BUCKET_PATH/$test_ran/"
+}
 
 # Function to clean up resources using Terraform
 cleanup() {
@@ -113,6 +159,9 @@ read -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
 # Ask if any tests should be run
 read -p "Do you want to select a test to run? (y/n): " RUN_TESTS
 
+# Ask if results and logs should be uploaded:
+read -p "Do you want to upload the test results and logs to S3? (y/n): " UPLOAD_LOGS
+
 # Find and list all tests
 TESTS=($(find tests -maxdepth 1 -mindepth 1 -type d | while read f; do basename "$f"; done | sort))
 export TESTS
@@ -168,7 +217,13 @@ if [ "$RUN_TESTS" == "y" ]; then
                 continue
             fi
             export SELECTED=$test
-            run_test
+
+            if [ "$UPLOAD_LOGS" == "y" ]; then
+                run_test | tee -a "$PARENT_DIR/observability_runner.log"
+                download_and_upload_logs
+            else
+                run_test
+            fi
         done
 
     # We have a special case for the prerelease ones too:
@@ -183,7 +238,12 @@ if [ "$RUN_TESTS" == "y" ]; then
 
     # Else run the selected test
     else
-        run_test
+        if [ "$UPLOAD_LOGS" == "y" ]; then
+            run_test | tee -a "$PARENT_DIR/observability_runner.log"
+            download_and_upload_logs
+        else
+            run_test
+        fi
     fi
 fi
 
