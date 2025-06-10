@@ -1,6 +1,6 @@
 [Service]
 User=ubuntu
-WorkingDirectory=/home/ubuntu/tx-cannon
+WorkingDirectory=/home/ubuntu
 ExecStart=/usr/bin/{{ txcannon_command }}
 Type=simple
 Restart=no

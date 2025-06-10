@@ -10,5 +10,6 @@ python3 -m ansiblelint -v --force-color -c test_suites/single-region-tests/.ansi
         --exclude "test_suites/network-sync-tests/playbooks/[var|ip|log]*" \
         --exclude "test_suites/network-sync-tests/playbooks/set_client_facts.yml" \
         --exclude "test_suites/network-sync-tests/playbooks/snarkos-shallow/*" \
+        --exclude "test_suites/single-region-tests/tests/_save_deployments/snarkos-shallow/*" \
         --exclude "test_suites/single-region-tests/playbooks/[var|set_|ip|log]*"
 

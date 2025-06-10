@@ -5,4 +5,4 @@
 cd ../../terraform_tx_cannon
 # Remove tx-cannon nodes.
 echo "Removing tx-cannon nodes"
-terraform destroy -parallelism=50 -auto-approve | grep -E 'Plan|Resources'
+terraform destroy -parallelism=50 -var="owner=$OWNER" -auto-approve | grep -E 'Plan|Resources'

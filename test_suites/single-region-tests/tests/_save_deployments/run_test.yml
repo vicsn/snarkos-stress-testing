@@ -1,22 +1,82 @@
 # ------------------------------------------------
 # tx-cannon
 
+- name: Check which installation method is used
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Check if local build should be used
+      ansible.builtin.set_fact:
+        use_local_build: >-
+          {{
+            (snarkos_pre_build_location is undefined) and
+            (use_snarkos_pre_build_s3 is undefined or not use_snarkos_pre_build_s3|bool) and
+            (snarkos_repo is defined and snarkos_repo | length > 0) and
+            (snarkos_git_commit_local_build is defined and snarkos_git_commit_local_build | length > 0)
+          }}
+
+- name: Build and upload snarkOS to S3 if required
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Set git commit variable for standard build
+      set_fact:
+        snarkos_git_commit_to_build: "{{ snarkos_git_commit_local_build }}"
+      when: snarkos_git_commit_local_build is defined
+
+    - name: Set standard release name
+      set_fact:
+        standard_release_name: "{{ generate_release_name | replace('COMMIT_HASH', snarkos_git_commit_to_build) | trim }}"
+      when: snarkos_git_commit_local_build is defined
+
+    - name: Debug standard release name
+      debug:
+        msg: "Standard release name: '{{ standard_release_name }}'"
+      when: snarkos_git_commit_local_build is defined
+
+    - name: Build and upload standard snarkOS to S3
+      include_role:
+        name: snarkos_build_locally
+      when: hostvars['localhost'].use_local_build
+
+    - name: Set git commit variable for update build
+      set_fact:
+        snarkos_git_commit_to_build: "{{ snarkos_git_commit_local_build_update }}"
+      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
+
+    - name: Set update release name
+      set_fact:
+        update_release_name: "{{ generate_release_name | replace('commit_hash', snarkos_git_commit_to_build) | trim }}"
+      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
+
+    - name: Debug update release name
+      debug:
+        msg: "Update release name: '{{ update_release_name }}'"
+      when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0
+
+    - name: Build and upload update snarkOS to S3
+      include_role:
+        name: snarkos_build_locally
+      when: >
+        hostvars['localhost'].use_local_build and
+        snarkos_git_commit_local_build_update is defined and
+        snarkos_git_commit_local_build_update | length > 0
+
 # prepare the cannons
 - name: Install and configure tx-cannon and snarkos on all nodes
   hosts: tx_cannon_node
   become: true
   remote_user: ubuntu
   vars:
-    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('provable-binaries-releases') }}"
+    ecr_region: "{{ txcannon_ecr_region | default('us-east-1') }}"
+    ecr_repo: "{{ txcannon_ecr_repo | default('637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon') }}"
+    image_tag: "{{ txcannon_image_tag | default('latest') }}"
+    snarkos_install_s3_release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
+    snarkos_install_s3_dest_name: "snarkos"
   roles:
-    - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
-    - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }
+    - txcannon_setup_ecr
     - logstash_txcannon_setup
-    - role: snarkos_install_binary
-      when: use_prebuild_tx_cannon is undefined
-    - role: snarkos_install_s3
-      s3_bucket: "snarkos-releases-for-testing"
-      when: use_prebuild_tx_cannon is defined
+    - snarkos_install_s3
     - role: snarkos_service
       num_instances: "{{ groups['snarkos_validator'] | length }}"
       validator_index: 0
@@ -34,8 +94,19 @@
 - name: GENERATE THE DEPLOYMENTS!
   hosts: tx_cannon_node
   become: true
+  become_user: ubuntu
   remote_user: ubuntu
   tasks:
+    - name: Extract tests folder from container
+      vars:
+        ecr_region: "{{ txcannon_ecr_region | default('us-east-1') }}"
+        ecr_repo: "{{ txcannon_ecr_repo | default('637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon') }}"
+        image_tag: "{{ txcannon_image_tag | default('latest') }}"
+      shell: |
+        podman run --rm -v /home/ubuntu:/out \
+          {{ ecr_repo }}:{{ image_tag }} \
+          bash -c "cp -r /aleo/tx-cannon/tests /out/"
+
     - name: Ask the user for the number of validators in the target network
       pause:
         prompt: "How many validators do you expect in the target network?"
@@ -63,14 +134,15 @@
 
     - name: Run tx-cannon
       shell: |
-        cd /home/ubuntu/tx-cannon
+        mkdir -p /home/ubuntu/.ledger-0-0
+        cd /home/ubuntu
         python3 tests/scripts/tx_pregeneration.py --transaction_type deployment --num_validators {{ num_validators }} \
           --num_transactions {{ num_deployments }} --num_proofs_in_parallel {{ prover_parallelization }} \
           --program_file {{ program_file }} --program_suffix {{ program_suffix }} --network {{ snarkos_network_int }}
       args:
         executable: /bin/bash
       vars:
-        program_file: "/home/ubuntu/tx-cannon/tests/1M_constraint_deployment_100_programs_50_nodes/program_original.txt"
+        program_file: "tests/1M_constraint_deployment_100_programs_50_nodes/program_original.txt"
         program_suffix: "{{ node_id }}"
         # the default snarkOS rate-limits allow 8 per second for 10 minutes per validator, spread over the different number of tx-cannon workers
         # however, 1000 deployments already cost as much as a month's budget so we go with that
@@ -92,7 +164,7 @@
 
     - name: Fetch pregenerated transactions
       fetch:
-        src: "/home/ubuntu/tx-cannon/program_deployments/all_deployments.txt"
+        src: "/home/ubuntu/program_deployments/all_deployments.txt"
         dest: "../../transaction_files/deploys-{{ snarkos_network }}-{{ num_validators }}val-{{ node_id }}.txt"
         flat: true
   tags: tx-cannon

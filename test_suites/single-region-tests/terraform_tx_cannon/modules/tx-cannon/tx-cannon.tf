@@ -58,10 +58,28 @@ resource "aws_iam_policy" "tx_cannon_node_s3_access" {
           "s3:GetObject",
           "s3:ListBucket"
         ]
-        Resource = [
-          "arn:aws:s3:::provable-binaries-releases",
-          "arn:aws:s3:::provable-binaries-releases/*"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "tx_cannon_node_ecr_access" {
+  name        = "${var.owner}-TXCannon-ECR-Access-Policy"
+  description = "Allows SnarkOS EC2 instances to access ECR for tx-cannon docker containers."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
         ]
+        Resource = "*"
       }
     ]
   })
@@ -70,6 +88,11 @@ resource "aws_iam_policy" "tx_cannon_node_s3_access" {
 resource "aws_iam_role_policy_attachment" "tx_cannon_node_access_attach" {
   role       = aws_iam_role.tx_cannon_service_node_ec2_role.name
   policy_arn = aws_iam_policy.tx_cannon_node_s3_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "tx_cannon_node_ecr_access_attach" {
+  role       = aws_iam_role.tx_cannon_service_node_ec2_role.name
+  policy_arn = aws_iam_policy.tx_cannon_node_ecr_access.arn
 }
 
 resource "aws_iam_instance_profile" "tx_cannon_service_node_ec2_instance_profile" {

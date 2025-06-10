@@ -106,7 +106,7 @@ variable "tx_cannon_services" {
       tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_1_5_2.toml --network"
       task_count = 1
     }
-    
+
     BatchRecordFund_2_30_1 = {
       tx_command = "tx-cannon batch-execute --test tests/nested_imports/funding_execution_2_30_1.toml --network"
       task_count = 1

@@ -19,6 +19,10 @@
         update_cache: yes
         cache_valid_time: 3600
         name:
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
           - jq
           - python3-pip
           - build-essential
@@ -91,13 +95,6 @@
       systemd:
         daemon_reload: true
 
-    - name: Restart talisker service
-      become: true
-      become_user: root
-      systemd:
-        name: talisker
-        state: restarted
-
     - name: Run aws config
       ansible.builtin.shell: |
         aws configure set default.region us-central-1
@@ -130,3 +127,85 @@
         dest: /home/ubuntu/stress_testing/test_suites/single-region-tests/auto_run_test_suite.sh
         mode: '0755'
       become: true
+
+    - name: Create keyrings directory
+      become: true
+      become_user: root
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker GPG key
+      become: true
+      become_user: root
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.gpg
+        mode: '0644'
+
+    - name: Add Docker APT repository
+      become: true
+      become_user: root
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release | lower }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker
+      become: true
+      become_user: root
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+        state: present
+        update_cache: yes
+
+    - name: Enable and start Docker service
+      become: true
+      become_user: root
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Add ubuntu user to docker group
+      become: true
+      become_user: root
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Reboot to apply group membership
+      become_user: root
+      become: true
+      reboot:
+
+    - name: Wait for system to become reachable
+      wait_for_connection:
+        delay: 10
+        timeout: 300
+
+    - name: Register QEMU emulators for multi-platform builds
+      shell: docker run --privileged --rm tonistiigi/binfmt --install all
+
+    - name: Create Buildx builder if not present
+      shell: |
+        docker buildx inspect multiarch-builder || \
+        docker buildx create --name multiarch-builder --driver docker-container --use
+      args:
+        executable: /bin/bash
+
+    - name: Bootstrap Buildx builder
+      shell: docker buildx inspect --bootstrap
+
+    - name: Restart talisker service
+      become: true
+      become_user: root
+      systemd:
+        name: talisker
+        state: restarted

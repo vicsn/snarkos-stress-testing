@@ -1,0 +1,59 @@
+- name: Install required packages
+  apt:
+    name:
+      - podman
+      - awscli
+      - curl
+      - jq
+    state: present
+    update_cache: true
+
+- name: Ensure Podman storage dirs exist
+  file:
+    path: /run/containers/storage
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Login to ECR
+  become: true
+  become_user: ubuntu
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/1000"
+    XDG_CONFIG_HOME: "/home/ubuntu/.config"
+  shell: |
+    aws ecr get-login-password --region {{ ecr_region }} | podman login --username AWS --password-stdin {{ ecr_repo }}
+
+- name: Pull container image
+  become: true
+  become_user: ubuntu
+  shell: podman pull {{ ecr_repo }}:{{ image_tag }}
+
+- name: Ensure old container is gone
+  shell: |
+    podman rm -f tx-cannon || true
+
+- name: Create tx-cannon wrapper script
+  copy:
+    dest: /usr/bin/tx-cannon
+    mode: '0755'
+    owner: ubuntu
+    group: ubuntu
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      LOG_PATH="/tmp/tx-cannon.log"
+      touch "$LOG_PATH"
+      chmod 666 "$LOG_PATH"
+
+      exec podman run --rm -v "$LOG_PATH":"$LOG_PATH" {{ ecr_repo }}:{{ image_tag }} tx-cannon "$@"
+
+- name: Test tx-cannon wrapper script
+  become: true
+  become_user: ubuntu
+  shell: /usr/bin/tx-cannon --help
+  register: tx_cannon_test
+  changed_when: false
+  failed_when: tx_cannon_test.rc != 0

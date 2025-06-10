@@ -66,7 +66,13 @@ resource "aws_iam_role_policy" "builder_access_policy" {
           "iam:AttachRolePolicy",
           "iam:CreateRole",
           "iam:CreatePolicy",
-          "iam:PutRolePolicy"
+          "iam:PutRolePolicy",
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload"
         ],
         Resource = "*"
       }

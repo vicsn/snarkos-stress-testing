@@ -25,10 +25,11 @@
   become: true
   remote_user: ubuntu
   vars:
-    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('provable-binaries-releases') }}"
+    ecr_region: "{{ txcannon_ecr_region | default('us-east-1') }}"
+    ecr_repo: "{{ txcannon_ecr_repo | default('637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon') }}"
+    image_tag: "{{ txcannon_image_tag | default('latest') }}"
   roles:
-    - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
-    - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }
+    - txcannon_setup_ecr
     - logstash_txcannon_setup
   tags: tx-cannon
 
@@ -38,10 +39,11 @@
   become: true
   remote_user: ubuntu
   vars:
-    txcannon_setup_s3_bucket: "{{ txcannon_s3_bucket | default('provable-binaries-releases') }}"
+    ecr_region: "{{ txcannon_ecr_region | default('us-east-1') }}"
+    ecr_repo: "{{ txcannon_ecr_repo | default('637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon') }}"
+    image_tag: "{{ txcannon_image_tag | default('latest') }}"
   roles:
-    - { role: txcannon_setup_s3, when: use_prebuild_tx_cannon is defined }
-    - { role: txcannon_setup, when: use_prebuild_tx_cannon is undefined }
+    - txcannon_setup_ecr
     - logstash_txcannon_setup
   tags: tx-cannon
 

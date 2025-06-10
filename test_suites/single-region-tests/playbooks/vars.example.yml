@@ -30,7 +30,6 @@ features: "test_targets,test_skip_tx_checks" # optional, e.g., "test_targets,tes
 
 # Other vars
 snarkos_malice_tag: "malice-2349f3eda" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs. Only GitHub build installation method currently supported.
-tx_cannon_binary_tag: "mainnet-latest"
 
 # Optional vars
 # snarkos_git_commit_local_build_update: "520c8c3f71d4544c222037b3b2b01e2d4b055c65" # necessary for the update_validators_and_clients_one_by_one test. Should be used together with the local build method.
@@ -43,15 +42,17 @@ tx_cannon_binary_tag: "mainnet-latest"
 # use_snarkos_pre_build_s3: true 
 # s3_bucket: '<existing-bucket-containing-the-snarkos-binary>'
 
-# To use a pre-built tx_cannon binary located on the provable-binaries-releases bucket. The bucket name is `tx-cannons`.
-# use_prebuild_tx_cannon: true
-
 # To use malicious SnarkOS pre-built binary located on the configured `s3_bucket` under folder named like the `snarkos_malice_tag`:
 # use_malicious_snarkos_pre_build: true 
 # s3_bucket: '<existing-bucket-containing-the-malicious-snarkos-binary>'
 
 # To use a local pre-built SnarkOS binary on the given path.
 # snarkos_pre_build_location: "/home/ubuntu/bin/snarkos" 
+
+# To change the ECR, region or image tx-cannon is installed from:
+# txcannon_ecr_region: 'us-east-1'
+# txcannon_ecr_repo: '637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon'
+# txcannon_image_tag: '60606a83b4527b9ff11848d591788fdeeacbf08b'
 
 
 # Application vars
