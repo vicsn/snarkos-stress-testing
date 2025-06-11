@@ -96,6 +96,13 @@
             else "--features {{ features }}"
           }}
 
+    - name: Download and modify snarkvm consensus versions
+      shell: "{{ patch_script_path }} {{ snarkos_network }}"
+      args:
+        executable: /bin/bash
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
+      when: s3_ls_output.failed
+
     - name: Build the Rust project with OpenSSL
       command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }}
       args:

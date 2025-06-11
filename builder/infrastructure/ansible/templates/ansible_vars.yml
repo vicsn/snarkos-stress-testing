@@ -29,3 +29,6 @@ snarkos_network_int: 0 # mainnet is 0, testnet is 1, canarynet is 2
 rest_rps: 1000000000
 
 test_runner_ip: {{ builder_ip }}
+
+# Custom scripts
+patch_script_path: "{{ playbook_dir }}/../scripts/patch_snarkvm.sh"
