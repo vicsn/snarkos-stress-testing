@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+if [ -f "$HOME/.cargo/env" ]; then
+  source $HOME/.cargo/env
+fi
+
 export SNARKVM_VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == "snarkvm-console-network") | .version' | head -n 1)
 curl -L https://crates.io/api/v1/crates/snarkvm-console-network/$SNARKVM_VERSION/download -o snarkvm-console-network.tar.gz
 tar -xzf snarkvm-console-network.tar.gz

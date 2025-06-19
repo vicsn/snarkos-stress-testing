@@ -20,8 +20,21 @@ sed -i "s|{{ lookup('env', 'USER') }}|$OWNER|" inventory/dynamic_inventory.aws_e
 
 # Functions to clean up resources using Terraform
 cleanup_on_error() {
-    echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
-    cleanup
+  rc=$?
+  echo "ERR (rc: $rc)"
+
+  # Download client logs:
+  export SELECTED=_download_logs_clients
+  run_test
+
+  # Download validator logs:
+  export SELECTED=_download_logs_validators
+  run_test
+
+  echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
+  cleanup
+
+  exit $rc
 }
 
 react_on_error() {
@@ -220,7 +233,6 @@ parse_tests_to_run() {
 # Trap setup:
 
 trap cleanup_on_error ERR
-trap 'rc=$?; echo "ERR at line ${LINENO} (rc: $rc)"; exit $rc' ERR
 
 trap react_on_error EXIT
 
@@ -327,7 +339,7 @@ if [ "$RUN_TESTS" == "y" ]; then
       run_test
 
       # Download prometheus snapshot:
-      export SELECTED=_download_prometheus_snapshot
-      run_test
+      # export SELECTED=_download_prometheus_snapshot
+      # run_test
   done
 fi

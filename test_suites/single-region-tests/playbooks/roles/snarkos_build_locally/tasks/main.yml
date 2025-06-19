@@ -32,37 +32,55 @@
       ignore_errors: true
       failed_when: "'does not exist' in s3_ls_output.msg"
 
+    - name: Construct authenticated repo URL if GitHub token is set
+      set_fact:
+        effective_snarkos_repo: >-
+          {{
+            snarkos_repo | regex_replace('https://', 'https://' ~ github_token ~ '@')
+            if github_token is defined and github_token != '' and github_token != 'your_github_token_here'
+            else snarkos_repo
+          }}
+      when: s3_ls_output.failed
+
     - name: Clone the repository if the binary is not found in S3
       git:
-        repo: "{{ snarkos_repo }}"
+        repo: "{{ effective_snarkos_repo }}"
         dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
         version: "{{ snarkos_git_commit_to_build }}"
         depth: 1
       when: s3_ls_output.failed
 
-    - name: Override Rust version
+    - name: Override Rust version (macOS only)
       shell: cd {{ clone_dir_base }}/{{ snarkos_git_commit_to_build }} && rustup override set nightly-aarch64-apple-darwin
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
     - name: Create tmp directory for building OpenSSL
       file:
         path: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
         state: directory
         mode: '0755'
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
     - name: Download OpenSSL tarball
       get_url:
         url: "{{ openssl_url }}"
         dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_tarball }}"
         mode: '0755'
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
     - name: Extract OpenSSL tarball using tar command
       command: tar -xzf "{{ openssl_tarball }}"
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
     - name: Configure OpenSSL
       command: >
@@ -74,19 +92,25 @@
       environment:
         CROSS_COMPILE: "x86_64-unknown-linux-gnu-"
         CFLAGS: "-fPIC -fPIE -pie"
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
     - name: Build OpenSSL with make -j12
       command: make -j12
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
     - name: Install OpenSSL
       command: make install
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
     - name: Set features flag
       set_fact:
@@ -103,7 +127,27 @@
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
       when: s3_ls_output.failed
 
-    - name: Build the Rust project with OpenSSL
+    - name: Check if the folders are too old (including the cache)
+      ansible.builtin.find:
+        paths: "{{ clone_dir_base }}"
+        age: 30d
+        age_stamp: mtime
+        file_type: directory
+      register: old_dirs
+
+    - name: Delete old source folders
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_dirs.files }}"
+
+    - name: Ensure the shared target directory exists
+      ansible.builtin.file:
+        path: "{{ clone_dir_base }}/shared"
+        state: directory
+        mode: '0755'
+
+    - name: Build the Rust project with OpenSSL (macOS)
       command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }}
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
@@ -113,19 +157,57 @@
             'OPENSSL_INCLUDE_DIR': openssl_install_prefix + '/include',
             'OPENSSL_LIB_DIR': openssl_install_prefix + '/lib64',
             'OPENSSL_STATIC': '1',
+            'CARGO_TARGET_DIR': '../shared',
             'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER': 'x86_64-unknown-linux-gnu-gcc'
           } | combine(envs_dict | default({}))
         }}
-      when: s3_ls_output.failed
+      register: build_output_mac
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
 
-    - name: Upload the built snarkos binary to S3
+    - name: Build the Rust project (Linux)
+      shell: source "$HOME/.cargo/env" && cargo build --release {{ featureflags }}
+      args:
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
+        executable: /bin/bash
+      environment:
+        CARGO_TARGET_DIR: "../shared"
+      register: build_output
+      when:
+        - s3_ls_output.failed
+        - ansible_system != 'Darwin'
+
+    - name: Debug build_output_mac
+      debug:
+        var: build_output_mac
+
+    - name: Debug build_output
+      debug:
+        var: build_output
+
+    - name: Upload the built snarkos binary to S3 (macOS)
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ releasename | trim }}"
-        src: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/target/x86_64-unknown-linux-gnu/release/snarkos"
+        src: "{{ clone_dir_base }}/shared/x86_64-unknown-linux-gnu/release/snarkos"
         mode: put
         profile: "{{ s3_profile }}"
-      when: s3_ls_output.failed
+      when:
+        - s3_ls_output.failed
+        - ansible_system == 'Darwin'
+      register: s3_upload_output
+
+    - name: Upload the built snarkos binary to S3 (Linux)
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        object: "{{ releasename | trim }}"
+        src: "{{ clone_dir_base }}/shared/release/snarkos"
+        mode: put
+        profile: "{{ s3_profile }}"
+      when:
+        - s3_ls_output.failed
+        - ansible_system != 'Darwin'
       register: s3_upload_output
 
     - name: Debug message after upload
