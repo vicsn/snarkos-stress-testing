@@ -1,0 +1,230 @@
+# ------------------------------------------------
+# tx-cannon
+
+# Get load balancer DNS name
+- name: Gather information about all ELBs
+  hosts: localhost
+  gather_facts: false
+  remote_user: ubuntu
+  tasks:
+    - name: Wait for the network to be healthly
+      uri:
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/height/latest"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 10
+  tags: tx-cannon
+
+# prepare the cannons
+- name: Install and Configure tx-cannon on all nodes
+  hosts: tx_cannon_node
+  become: true
+  remote_user: ubuntu
+  vars:
+    ecr_region: "{{ txcannon_ecr_region | default('us-east-1') }}"
+    ecr_repo: "{{ txcannon_ecr_repo | default('637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon') }}"
+    image_tag: "{{ txcannon_image_tag | default('latest') }}"
+  roles:
+    - txcannon_setup_ecr
+    - logstash_txcannon_setup
+  tags: tx-cannon
+
+# Deploy programs
+- name: Deploy programs to tx-cannon server 0
+  hosts: tx_cannon_node[0]
+  become: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Deploy base programs
+      ansible.builtin.shell:
+        cmd: |
+          tx-cannon deploy -p tests/ridiculous_finalize_hash/{{ program }} \
+          --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+          -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH \
+          --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
+      async: 1800
+      poll: 10
+      loop:
+        - ridiculous_finalize_hash.aleo
+      loop_control:
+        loop_var: program
+      register: deploy_results
+
+    - name: Deploy more base programs
+      ansible.builtin.shell:
+        cmd: |
+          tx-cannon batch-deploy \
+          --manifest tests/normal_network_traffic/normal_network_traffic.txt \
+          --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+          -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH \
+          --concurrent-deployments 1 \
+          --check-retries 5 \
+          --network {{ snarkos_network }} >> /home/ubuntu/txcannon.log 2>&1
+      async: 1800
+      poll: 0
+      register: deploy_results
+
+- name: Deploy programs to tx-cannon server 1
+  hosts: tx_cannon_node[1]
+  become: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Deploy nested programs
+      ansible.builtin.shell:
+        cmd: |
+          tx-cannon batch-deploy --manifest {{ manifest }} \
+            --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+            -a APrivateKey1zkp2RWGDcde3efb89rjhME1VYA8QMxcxep5DShNBR6n8Yjh \
+            --concurrent-deployments 1 \
+            --check-retries 20 \
+            --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
+      async: 1800
+      poll: 0
+      loop:
+        - tests/nested_imports/generated_programs/generated_programs_1_31_1.txt
+      loop_control:
+        loop_var: manifest
+      register: deploy_results
+
+- name: Deploy programs to tx-cannon server 2
+  hosts: tx_cannon_node[2]
+  become: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Deploy nested programs
+      ansible.builtin.shell:
+        cmd: |
+          tx-cannon batch-deploy --manifest {{ manifest }} \
+            --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+            -a APrivateKey1zkpBjpEgLo4arVUkQmcLdKQMiAKGaHAQVVwmF8HQby8vdYs \
+            --concurrent-deployments 1 \
+            --check-retries 20 \
+            --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
+      async: 1800
+      poll: 0
+      loop:
+        - tests/nested_imports/generated_programs/generated_programs_2_30_1.txt
+      loop_control:
+        loop_var: manifest
+      register: deploy_results
+
+- name: Deploy programs to tx-cannon server 3
+  hosts: tx_cannon_node[3]
+  become: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Deploy nested programs
+      ansible.builtin.shell:
+        cmd: |
+          tx-cannon batch-deploy --manifest {{ manifest }} \
+            --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+            -a APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG \
+            --concurrent-deployments 1 \
+            --check-retries 20 \
+            --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
+      async: 1800
+      poll: 0
+      loop:
+        - tests/nested_imports/generated_programs/generated_programs_1_5_2.txt
+      loop_control:
+        loop_var: manifest
+      register: deploy_results
+
+- name: Deploy programs to tx-cannon server 4
+  hosts: tx_cannon_node[4]
+  become: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Deploy nested programs
+      ansible.builtin.shell:
+        cmd: |
+          tx-cannon batch-deploy --manifest {{ manifest }} \
+            --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
+            -a APrivateKey1zkp3J6rRrDEDKAMMzSQmkBqd3vPbjp4XTyH7oMKFn7eVFwf \
+            --concurrent-deployments 1 \
+            --check-retries 20 \
+            --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
+      async: 1800
+      poll: 0
+      loop:
+        - tests/nested_imports/generated_programs/generated_programs_2_4_2.txt
+      loop_control:
+        loop_var: manifest
+      register: deploy_results
+
+- name: Check if all programs are deployed
+  hosts: snarkos_validator[1]
+  become: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Wait for multiple endpoints with rescue on fail, so logs are downloaded  always
+      block:
+        - name: Wait for multiple endpoints to be ready
+          vars:
+            endpoints:
+              - "http://localhost:3030/{{ snarkos_network }}/program/ridiculous_finalize_hash.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/hello_hello.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/calculator.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/temperatureconverter.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/animals_nft_v30.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/ideaground_friends_beta9.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/cassino_game_test_fp.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/twoadicity_mmbbn88.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/ideaground_friends_beta1.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/ans_coupon_card_v1.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/root_1_5_2.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/root_2_4_2.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/root_1_31_1.aleo"
+              - "http://localhost:3030/{{ snarkos_network }}/program/root_2_30_1.aleo"
+          run_once: true
+          block:
+            - name: Check each endpoint
+              uri:
+                url: "{{ item }}"
+                method: GET
+                status_code: 200
+                timeout: 10
+              register: result
+              until: result.status == 200
+              retries: 180
+              delay: 10
+              loop: "{{ endpoints }}"
+
+      rescue:
+        - name: Mark validator check failed
+          set_fact:
+            validator_check_failed: true
+
+      always:
+        - name: Zip txcannon logs from all nodes
+          delegate_to: "{{ item }}"
+          archive:
+            path: "/home/ubuntu/txcannon.log"
+            dest: "/home/ubuntu/txcannon.log.gz"
+            mode: "0644"
+          ignore_errors: true
+          loop: "{{ groups['tx_cannon_node'] }}"
+
+        - name: Fetch txcannon logs
+          delegate_to: "{{ item }}"
+          fetch:
+            src: "/home/ubuntu/txcannon.log.gz"
+            dest: "../../log_files/tx_cannon_{{ item }}.log.gz"
+            flat: true
+          ignore_errors: true
+          loop: "{{ groups['tx_cannon_node'] }}"
+
+        - name: Fail explicitly if validator check failed
+          fail:
+            msg: "One or more program endpoints did not become ready."
+          when: validator_check_failed | default(false)

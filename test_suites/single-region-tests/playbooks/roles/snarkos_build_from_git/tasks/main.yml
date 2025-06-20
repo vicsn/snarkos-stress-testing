@@ -35,8 +35,10 @@
 
 - name: Install Rust programming language
   ansible.builtin.shell:
-    cmd: "set -o pipefail && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+    cmd: >-
+      set -o pipefail && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   args:
+    executable: /bin/bash
     creates: "$HOME/.cargo/bin/rustup"
 
 - name: Initialize envs_dict

@@ -5,6 +5,7 @@
       set -o pipefail && wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes \
         --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
   args:
+    executable: /bin/bash
     creates: /usr/share/keyrings/elastic-keyring.gpg
 
 - name: Add Elastic APT repository

@@ -38,11 +38,12 @@
         executable: pip3
 
     - name: Install Rust and Cargo
-      shell: |
-        set -o pipefail
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
-        source $HOME/.cargo/env
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+          source $HOME/.cargo/env
       args:
         executable: /bin/bash
         creates: /home/ubuntu/.cargo/bin/cargo

@@ -61,15 +61,7 @@ download_and_upload_logs() {
 
 # Function to clean up resources using Terraform
 cleanup() {
-    echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
-
-    read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-
-    cd "$PARENT_DIR/terraform"
-    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
-
-    cd "$PARENT_DIR/terraform_tx_cannon"
-    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
+    source destroy_infra.sh
 }
 
 # Function to init and apply Terraform
