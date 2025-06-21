@@ -188,7 +188,7 @@
               - "http://localhost:3030/{{ snarkos_network }}/program/root_2_30_1.aleo"
           run_once: true
           block:
-            - name: Check each endpoint
+            - name: Check each endpoint max. 5 minutes a piece.
               uri:
                 url: "{{ item }}"
                 method: GET
@@ -196,7 +196,7 @@
                 timeout: 10
               register: result
               until: result.status == 200
-              retries: 180
+              retries: 30
               delay: 10
               loop: "{{ endpoints }}"
 
