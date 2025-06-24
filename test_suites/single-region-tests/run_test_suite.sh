@@ -3,6 +3,8 @@
 ulimit -n 2048
 
 PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
+SCRIPT_DIR=$(pwd)
+
 bold=$(tput bold)
 normal=$(tput sgr0)
 
@@ -61,7 +63,7 @@ download_and_upload_logs() {
 
 # Function to clean up resources using Terraform
 cleanup() {
-    source destroy_infra.sh
+    source "$SCRIPT_DIR/destroy_infra.sh"
 }
 
 # Function to init and apply Terraform

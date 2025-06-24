@@ -8,11 +8,33 @@
 
 - name: Assign client to validator index
   set_fact:
-    validator_index: "{{ tags['Validator'] }}"
+    validator_id: "{{ tags['Validator'] }}"
+
+- name: Debug validator IP by Dev tag
+  debug:
+    msg: >-
+      {{
+        groups['snarkos_validator']
+        | map('extract', hostvars)
+        | selectattr('tags.Dev', 'equalto', validator_id | string)
+        | map(attribute='public_ip_address')
+        | first
+      }}
+
+- name: Debug validator_id
+  debug:
+    msg: "Vid: '{{ validator_id }}'"
 
 - name: Set validator address
   set_fact:
-    validator_address: "{{ hostvars[groups['snarkos_validator'][validator_index | int]]['public_ip_address'] }}"
+    validator_ip: >-
+      {{
+        groups['snarkos_validator']
+        | map('extract', hostvars)
+        | selectattr('tags.Dev', 'equalto', validator_id | string)
+        | map(attribute='public_ip_address')
+        | first
+      }}
 
 - name: Set own address
   set_fact:
@@ -39,7 +61,7 @@
 
 - name: Set node_id based on instance tag
   set_fact:
-    node_id: "{{ (num_instances | int) + 100*(validator_index | int) + 10000*(tags['Dev'] | int) }}"
+    node_id: "{{ (num_instances | int) + 100*(validator_id | int) + 10000*(tags['Dev'] | int) }}"
 
 - name: Assert that num_instances is lower than 100
   assert:
@@ -50,7 +72,9 @@
 - name: Set snarkos command with the assigned validator
   set_fact:
     snarkos_command: >-
-      snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 \
-        --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_address }}:4130,{{ client_addresses }} \
-        --dev {{ node_id }} --dev-num-validators {{ num_instances }} --rest-rps {{ rest_rps }} \
-        --network {{ snarkos_network_int }}
+      snarkos start --client --nocdn --nodisplay \
+        --rest 0.0.0.0:3030 --node 0.0.0.0:4130 \
+        --verbosity {{ snarkos_verbosity }} --metrics \
+        --peers {{ validator_ip }}:4130,{{ client_addresses }} \
+        --dev {{ node_id }} --dev-num-validators {{ num_instances }} \
+        --rest-rps {{ rest_rps }}  --network {{ snarkos_network_int }}

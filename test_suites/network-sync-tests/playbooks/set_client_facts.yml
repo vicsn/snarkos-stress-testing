@@ -1,10 +1,8 @@
-- name: Gather facts from all nodes
-  setup:
-
 - name: Set snarkos command
   set_fact:
     snarkos_command: >-
-      snarkos start --client --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 \
+      snarkos start --client --nodisplay \
+        --rest 0.0.0.0:3030 --node 0.0.0.0:4130 \
         --verbosity {{ snarkos_verbosity }} --metrics \
         --rest-rps {{ rest_rps }} \
         --network {{ snarkos_network_int }}

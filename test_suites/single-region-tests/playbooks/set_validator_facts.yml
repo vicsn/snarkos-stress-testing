@@ -1,13 +1,13 @@
 - name: Gather facts from all validators
   setup:
 
-- name: set global facts
+- name: Set global facts
   set_fact:
     num_instances: "{{ groups['snarkos_validator'] | length }}"
     malicemode: ""
   run_once: true
 
-- name: set instance-specific facts
+- name: Set instance-specific facts
   set_fact:
     formatted_validator_ips: >-
       {{
@@ -40,7 +40,12 @@
 - name: Set snarkos command with peers and validators
   set_fact:
     snarkos_command: >-
-      snarkos start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 --peers {{ validator_client_ips }} \
-        --validators {{ formatted_validator_ips }} --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} \
-        --dev-num-validators {{ num_instances }} --validator --rest-rps {{ rest_rps }} --no-dev-txs \
+      snarkos start --metrics --nodisplay  --validator \
+        --node 0.0.0.0:4130  --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 \
+        --validators {{ formatted_validator_ips }} \
+        --verbosity {{ snarkos_verbosity }} \
+        --dev {{ node_id }} \
+        --dev-num-validators {{ num_instances }} --no-dev-txs \
+        --rest-rps {{ rest_rps }} \
+        --peers={{ validator_client_ips }} \
         --network {{ snarkos_network_int }}
