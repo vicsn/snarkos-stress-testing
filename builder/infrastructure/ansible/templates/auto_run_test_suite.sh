@@ -37,7 +37,7 @@ cleanup_on_error() {
   exit $rc
 }
 
-react_on_error() {
+react_on_exit() {
   rc=$?
   echo "EXIT (rc: $rc)"
 
@@ -234,7 +234,7 @@ parse_tests_to_run() {
 
 trap cleanup_on_error ERR
 
-trap react_on_error EXIT
+trap react_on_exit EXIT
 
 # Exit immediately if a command exits with a non-zero status.
 set -e

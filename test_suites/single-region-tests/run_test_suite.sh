@@ -9,7 +9,7 @@ bold=$(tput bold)
 normal=$(tput sgr0)
 
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
-RELEASE_BUCKET="${RELEASE_BUCKET:-release-bucket-2122415}"
+RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
 export OWNER=$USER
 

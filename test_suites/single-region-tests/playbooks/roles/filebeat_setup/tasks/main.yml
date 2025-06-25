@@ -23,8 +23,8 @@
     name: filebeat
     state: latest # noqa package-latest
   register: apt_result
-  retries: 10
-  delay: 30
+  retries: 15
+  delay: 60
   until: apt_result is success
 
 - name: Copy Filebeat Configuration Template for snarkOS
