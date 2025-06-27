@@ -51,7 +51,30 @@ Authentication happens via Google SSO:
 ## Monitoring
 
 - [Grafana](https://aleostresstest.grafana.net/d/single-region-tests/single-region-tests?from=now-3h&to=now&refresh=) can be used with `devnet_name=single-region-tests`. If you change your `devnet_name`, you'll need to customize and import `grafana.json` to a new dashboard.
-- [Elastic](https://eq-external.kb.eu-north-1.aws.elastic-cloud.com:9243/app/discover#/).
+- You can easily access logs as follows:
+  - Let `.ssh/config` know about your `devnet-key`:
+```
+host *.*.compute.amazonaws.com
+  User ubuntu
+  addkeystoagent yes
+  usekeychain yes
+  identityfile /path/to/stress-testing/test_suites/single-region-tests/devnet-key
+```
+ - Add hosts to known hosts and connect with lnav
+```
+TXCANNON_SUBDOMAIN="ec2-35-90-249-139"
+TXCANNON_DOMAIN="${TXCANNON_SUBDOMAIN}.us-west-2.compute.amazonaws.com"
+ssh-keyscan -H ${TXCANNON_DOMAIN} >> ~/.ssh/known_hosts
+lnav ubuntu@${TXCANNON_DOMAIN}:txcannon.log
+```
+```
+NODE_SUBDOMAIN="ec2-44-251-75-89"
+NODE_DOMAIN="${NODE_SUBDOMAIN}.us-west-2.compute.amazonaws.com"
+ssh-keyscan -H ${NODE_DOMAIN} >> ~/.ssh/known_hosts
+lnav ubuntu@${NODE_DOMAIN}:/tmp/snarkos.log
+```
+
+- Elastic is not functional at this time.
 - If ECR logging is enabled, [AWS console](https://us-west-2.console.aws.amazon.com/ecs/v2/clusters?region=us-west-2). Example Terraform config:
 ```
       # NOTE: ECS logging configuration is commented out due to high costs.

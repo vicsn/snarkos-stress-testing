@@ -17,7 +17,7 @@ flamegraph_node_id: "0" # Validator node ID to generate flamegraph for
 snarkos_git_commit_local_build: "5f58ab1abfdfcdb00876766dccb57af6633982d9"
 snarkos_repo: "git@github.com:ProvableHQ/snarkOS-staging.git" # note the changed URL format
 envs: "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
-features: "test_network" # optional, e.g., "test_network,test_skip_tx_checks"
+features: "test_network" # WARNING: if you turn off test_network, tx-cannon may not use the correct consensus versions.
 
 # For GitHub build: (note that it uses the ProvableHQ/snarkOS-staging repository. Comment out if using another installation method)
 # snarkos_binary_tag: "mainnet-latest"

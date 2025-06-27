@@ -48,6 +48,7 @@
         dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
         version: "{{ snarkos_git_commit_to_build }}"
         depth: 1
+        force: true
       when: s3_ls_output.failed
 
     - name: Override Rust version (macOS only)
@@ -55,6 +56,11 @@
       when:
         - s3_ls_output.failed
         - ansible_system == 'Darwin'
+
+    - name: Check if OpenSSL is installed
+      stat:
+        path: "{{ openssl_install_prefix }}"
+      register: openssl_stat
 
     - name: Create tmp directory for building OpenSSL
       file:
@@ -64,6 +70,7 @@
       when:
         - s3_ls_output.failed
         - ansible_system == 'Darwin'
+        - not openssl_stat.stat.isdir
 
     - name: Download OpenSSL tarball
       get_url:
@@ -73,6 +80,7 @@
       when:
         - s3_ls_output.failed
         - ansible_system == 'Darwin'
+        - not openssl_stat.stat.isdir
 
     - name: Extract OpenSSL tarball using tar command
       command: tar -xzf "{{ openssl_tarball }}"
@@ -81,6 +89,7 @@
       when:
         - s3_ls_output.failed
         - ansible_system == 'Darwin'
+        - not openssl_stat.stat.isdir
 
     - name: Configure OpenSSL
       command: >
@@ -95,6 +104,7 @@
       when:
         - s3_ls_output.failed
         - ansible_system == 'Darwin'
+        - not openssl_stat.stat.isdir
 
     - name: Build OpenSSL with make -j12
       command: make -j12
@@ -103,6 +113,7 @@
       when:
         - s3_ls_output.failed
         - ansible_system == 'Darwin'
+        - not openssl_stat.stat.isdir
 
     - name: Install OpenSSL
       command: make install
@@ -111,6 +122,7 @@
       when:
         - s3_ls_output.failed
         - ansible_system == 'Darwin'
+        - not openssl_stat.stat.isdir
 
     - name: Set features flag
       set_fact:

@@ -28,12 +28,16 @@
 - name: Collect client IPs for the current validator
   set_fact:
     validator_client_ips: >-
-      {{ formatted_validator_routers }},{{
-        groups['snarkos_client']
-        | map('extract', hostvars)
-        | selectattr('tags.Validator', 'equalto', node_id | string)
-        | map(attribute='public_ip_address')
-        | map('regex_replace', '^(.*)$', '\1:4130')
+      {{ (
+        [formatted_validator_routers] 
+        + groups['snarkos_client']
+          | map('extract', hostvars)
+          | selectattr('tags.Validator', 'equalto', node_id | string)
+          | map(attribute='public_ip_address')
+          | map('regex_replace', '^(.*)$', '\1:4130')
+          | list
+        )
+        | reject("equalto","")
         | join(',')
       }}
 

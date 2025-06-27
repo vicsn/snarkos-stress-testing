@@ -20,7 +20,7 @@ variable "client_instance_type" {
 
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 40
+  default     = 5 # minimum 5 for prerelease tests
 }
 
 variable "client_instance_count" {
@@ -37,20 +37,14 @@ variable "RELEASE_BUCKET" {
 # Clients
 
 locals {
-  snarkos_network = "testnet" # Note: some tx-cannons below only work for mainnet. The heavy network may be larger than the max mainnet validator set size, though.
+  snarkos_network = "mainnet" # Note: some tx-cannons below only work for mainnet. The heavy network may be larger than the max mainnet validator set size, though.
 
   client_instance_config = [
     { type = var.client_instance_type, count = var.client_instance_count, validator = 0 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 1 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 2 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 3 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 4 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 5 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 6 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 7 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 8 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 9 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 10 }
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 4 }
   ]
 
   snarkos_clients = flatten([

@@ -43,21 +43,6 @@
     - name: Deploy base programs
       ansible.builtin.shell:
         cmd: |
-          tx-cannon deploy -p tests/ridiculous_finalize_hash/{{ program }} \
-          --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
-          -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH \
-          --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
-      async: 1800
-      poll: 10
-      loop:
-        - ridiculous_finalize_hash.aleo
-      loop_control:
-        loop_var: program
-      register: deploy_results
-
-    - name: Deploy more base programs
-      ansible.builtin.shell:
-        cmd: |
           tx-cannon batch-deploy \
           --manifest tests/normal_network_traffic/normal_network_traffic.txt \
           --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
@@ -188,7 +173,7 @@
               - "http://localhost:3030/{{ snarkos_network }}/program/root_2_30_1.aleo"
           run_once: true
           block:
-            - name: Check each endpoint max. 5 minutes a piece.
+            - name: Check each endpoint max. 10 minutes a piece.
               uri:
                 url: "{{ item }}"
                 method: GET
@@ -197,7 +182,7 @@
               register: result
               until: result.status == 200
               retries: 30
-              delay: 10
+              delay: 20
               loop: "{{ endpoints }}"
 
       rescue:

@@ -20,7 +20,7 @@ variable "client_instance_type" {
 
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 5
+  default     = 5 # minimum 5 for prerelease tests
 }
 
 variable "client_instance_count" {

@@ -203,7 +203,7 @@
   become: true
   remote_user: ubuntu
   tasks:
-    - name: Stop unattended-upgrades service temporarily
+    - name: Stop unattended-upgrades service because it can block apt
       ansible.builtin.systemd:
         name: unattended-upgrades
         state: stopped
@@ -221,12 +221,6 @@
       retries: 20
       delay: 30
       until: apt_result is success
-      
-    - name: Restart unattended-upgrades service
-      ansible.builtin.systemd:
-        name: unattended-upgrades
-        state: started
-      ignore_errors: yes
 
 # ------------------------------------------------
 # flamegraph
