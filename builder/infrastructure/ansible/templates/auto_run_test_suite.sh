@@ -16,7 +16,9 @@ export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 export USER=builder
 export OWNER=$USER
 
+{% raw %}
 sed -i "s|{{ lookup('env', 'USER') }}|$OWNER|" inventory/dynamic_inventory.aws_ec2.yml
+{% endraw %}
 
 # Functions to clean up resources using Terraform
 cleanup_on_error() {

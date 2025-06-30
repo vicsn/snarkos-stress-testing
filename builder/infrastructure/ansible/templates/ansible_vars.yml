@@ -31,4 +31,6 @@ rest_rps: 1000000000
 test_runner_ip: {{ builder_ip }}
 
 # Custom scripts
+{% raw %}
 patch_script_path: "{{ playbook_dir }}/../scripts/patch_snarkvm.sh"
+{% endraw %}

@@ -24,6 +24,40 @@ packer build image.json.pkr.hcl
 Then add your account to the list in `infrastructure/base_ami.tf` on line `4`. Now the image will be available for your
 account too.
 
+### Preparations
+
+The terraform run will require environment variables. It is recomended to keep a `.env` file in the infrastructure folder like:
+
+```
+export TF_VAR_SLACK_CHANNEL_ID="<value>"
+export TF_VAR_SLACK_TOKEN="<value>"
+
+export TF_VAR_github_token="<value>"
+
+export TF_VAR_ELASTIC_CLOUD_ID="<value>"
+export TF_VAR_ELASTIC_API_KEY="<value>"
+export TF_VAR_GRAFANA_CLOUD_API_KEY="<value>"
+```
+
+Just source it before the run:
+
+```
+source .env
+```
+
+There is a file with pub keys that will be added to the `authorized_keys` of the new server, if yours is not there,
+add it to it, the logic is written in a way it won't duplicate a key. The key has to be added in:
+
+```
+builder/infrastructure/ansible/templates/extra_keys.pub
+```
+
+Can be done like in this example:
+
+```
+echo `cat ~/.ssh/id_rsa.pub` >> builder/infrastructure/ansible/templates/extra_keys.pub
+```
+
 ### Running terraform
 
 Navigate to `infrastructure` and run:

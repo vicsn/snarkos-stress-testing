@@ -1,7 +1,6 @@
 resource "aws_instance" "builder" {
   ami                         = data.aws_ami.latest_builder_base_ubuntu.id
-  instance_type               = "t2.large"
-  subnet_id                   = aws_subnet.public.id
+  instance_type               = "t2.xlarge"
   associate_public_ip_address = true
   key_name                    = aws_key_pair.builder_main_key.key_name
 
@@ -61,7 +60,7 @@ resource "null_resource" "ansible_provisioner" {
           --extra-vars "github_token=${var.github_token}" \
             --extra-vars "slack_channel_id=${var.SLACK_CHANNEL_ID}" --extra-vars "slack_token=${var.SLACK_TOKEN}" \
               --extra-vars "releases_bucket=${var.RELEASES_BUCKET}" --extra-vars "results_bucket=${var.RESULTS_BUCKET}" \
-                --extra-vars "elastic_cloud_id=${vars.ELASTIC_CLOUD_ID}" --extra-vars "elastic_api_key=${vars.ELASTIC_API_KEY}" --extra-vars "grafana_cloud_api_key=${vars.GRAFANA_CLOUD_API_KEY}" \
+                --extra-vars "elastic_cloud_id=${var.ELASTIC_CLOUD_ID}" --extra-vars "elastic_api_key=${var.ELASTIC_API_KEY}" --extra-vars "grafana_cloud_api_key=${var.GRAFANA_CLOUD_API_KEY}" \
                 -i ${aws_instance.builder.public_ip}, playbook.yml
     EOF
     working_dir = "${path.module}/ansible"

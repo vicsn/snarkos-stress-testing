@@ -5,6 +5,21 @@
   remote_user: ubuntu
   become_user: ubuntu
   tasks:
+    - name: Read additional authorized keys from the template
+      set_fact:
+        extra_keys_raw: "{{ lookup('file', 'templates/extra_keys.pub') }}"
+
+    - name: Parse keys into a list
+      set_fact:
+        extra_keys_list: "{{ extra_keys_raw.splitlines() | select('match', '^ssh-') | list }}"
+
+    - name: Add each key if not already present
+      ansible.posix.authorized_key:
+        user: "ubuntu"
+        key: "{{ item }}"
+        state: present
+      loop: "{{ extra_keys_list }}"
+
     - name: Clone the stress-testing repository
       git:
         repo: "https://{{ github_token }}@github.com/ProvableHQ/stress-testing.git"
@@ -37,16 +52,36 @@
         state: present
         executable: pip3
 
-    - name: Install Rust and Cargo
-      ansible.builtin.shell:
-        cmd: >-
-          set -o pipefail
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
-          source $HOME/.cargo/env
+    - name: Download rustup-init script
+      become: false
+      run_once: false
+      ansible.builtin.get_url:
+        url: https://sh.rustup.rs
+        dest: /tmp/rustup-init.sh
+        mode: '0755'
+
+    - name: Run rustup-init.sh to install Rust and Cargo
+      become: false
+      run_once: false
+      ansible.builtin.command: >
+        /tmp/rustup-init.sh -y --no-modify-path
+      environment:
+        CARGO_HOME: /home/ubuntu/.cargo
+        RUSTUP_HOME: /home/ubuntu/.rustup
+        HOME: /home/ubuntu
       args:
-        executable: /bin/bash
         creates: /home/ubuntu/.cargo/bin/cargo
+      register: rustup_result
+      changed_when: "'Rust is installed now' in rustup_result.stdout or rustup_result.rc == 0"
+      become_user: ubuntu
+
+    - name: Add Cargo to PATH in .bashrc
+      lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: 'export PATH="$HOME/.cargo/bin:$PATH"'
+        insertafter: EOF
+      become: false
+      become_user: ubuntu
 
     - name: Add Cargo to PATH for this session
       shell: |
@@ -66,6 +101,19 @@
         dest: "/home/ubuntu/talisker-src"
         version: master
         force: true
+
+    - name: Check if talisker.service unit file exists
+      stat:
+        path: /etc/systemd/system/talisker.service
+      register: talisker_service_file
+
+    - name: Stop talisker service if it exists
+      become: true
+      become_user: root
+      systemd:
+        name: talisker.service
+        state: stopped
+      when: talisker_service_file.stat.exists
 
     - name: Compile Talisker
       shell: |
@@ -129,6 +177,18 @@
         mode: '0755'
       become: true
 
+    - name: Set up the talisker control script
+      template:
+        src: talisker_control.sh
+        dest: /home/ubuntu/talisker_control.sh
+        mode: '0755'
+      become: true
+
+    - name: Check if Docker is installed
+      command: which docker
+      register: docker_installed
+      ignore_errors: true
+
     - name: Create keyrings directory
       become: true
       become_user: root
@@ -136,22 +196,45 @@
         path: /etc/apt/keyrings
         state: directory
         mode: '0755'
+      when: docker_installed.rc != 0
 
-    - name: Download Docker GPG key
+    - name: Download and dearmor Docker GPG key
       become: true
       become_user: root
-      get_url:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        dest: /etc/apt/keyrings/docker.gpg
+      shell: |
+        set -o pipefail
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/docker-archive-keyring.gpg
+      when: docker_installed.rc != 0
+
+    - name: Set permissions on Docker GPG key
+      become: true
+      become_user: root
+      file:
+        path: /usr/share/keyrings/docker-archive-keyring.gpg
         mode: '0644'
+      when: docker_installed.rc != 0
 
     - name: Add Docker APT repository
       become: true
       become_user: root
       apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release | lower }} stable"
-        state: present
+        repo: >
+          deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg]
+          https://download.docker.com/linux/ubuntu {{ ansible_distribution_release | lower }} stable
         filename: docker
+        state: present
+      when: docker_installed.rc != 0
+
+    - name: Stop unattended-upgrades service (if running)
+      become_user: root
+      become: true
+      systemd:
+        name: unattended-upgrades.service
+        state: stopped
+        enabled: false
+      when: docker_installed.rc != 0
 
     - name: Install Docker
       become: true
@@ -164,6 +247,7 @@
           - docker-buildx-plugin
         state: present
         update_cache: yes
+      when: docker_installed.rc != 0
 
     - name: Enable and start Docker service
       become: true
@@ -172,6 +256,7 @@
         name: docker
         enabled: yes
         state: started
+      when: docker_installed.rc != 0
 
     - name: Add ubuntu user to docker group
       become: true
@@ -180,19 +265,23 @@
         name: ubuntu
         groups: docker
         append: yes
+      when: docker_installed.rc != 0
 
     - name: Reboot to apply group membership
       become_user: root
       become: true
       reboot:
+      when: docker_installed.rc != 0
 
     - name: Wait for system to become reachable
       wait_for_connection:
         delay: 10
         timeout: 300
+      when: docker_installed.rc != 0
 
     - name: Register QEMU emulators for multi-platform builds
       shell: docker run --privileged --rm tonistiigi/binfmt --install all
+      when: docker_installed.rc != 0
 
     - name: Create Buildx builder if not present
       shell: |
@@ -200,9 +289,11 @@
         docker buildx create --name multiarch-builder --driver docker-container --use
       args:
         executable: /bin/bash
+      when: docker_installed.rc != 0
 
     - name: Bootstrap Buildx builder
       shell: docker buildx inspect --bootstrap
+      when: docker_installed.rc != 0
 
     - name: Restart talisker service
       become: true
