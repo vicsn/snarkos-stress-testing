@@ -73,7 +73,7 @@ NODE_DOMAIN="${NODE_SUBDOMAIN}.us-west-2.compute.amazonaws.com"
 ssh-keyscan -H ${NODE_DOMAIN} >> ~/.ssh/known_hosts
 lnav ubuntu@${NODE_DOMAIN}:/tmp/snarkos.log
 ```
-
+- You can check out tx-cannon builds here currently: https://us-east-1.console.aws.amazon.com/ecr/repositories/private/637423331354/tx-cannon?region=us-east-1
 - Elastic is not functional at this time.
 - If ECR logging is enabled, [AWS console](https://us-west-2.console.aws.amazon.com/ecs/v2/clusters?region=us-west-2). Example Terraform config:
 ```

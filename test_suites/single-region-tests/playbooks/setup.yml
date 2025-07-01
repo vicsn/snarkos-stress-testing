@@ -2,6 +2,7 @@
   hosts: all
   remote_user: ubuntu
   gather_facts: false
+  any_errors_fatal: true
   tasks:
     - name: Wait for SSH to become ready
       ansible.builtin.wait_for_connection:
@@ -9,6 +10,7 @@
 - name: Check setup integrity
   hosts: localhost
   gather_facts: false
+  any_errors_fatal: true
   tasks:
     - name: Fail if both snarkos_git_hash and snarkos_binary_tag are set
       fail:
@@ -18,6 +20,7 @@
 - name: Check which installation method is used
   hosts: localhost
   gather_facts: false
+  any_errors_fatal: true
   tasks:
     - name: Check if a local pre-built version should be used
       ansible.builtin.set_fact:
@@ -81,9 +84,35 @@
         msg: "If snarkos_git_commit_local_build_update is set, then use the local build installation method."
       when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0 and not use_local_build
 
+# ------------------------------------------------
+# Purge unattended-upgrades
+- name: Purge unattended-upgrades
+  hosts: snarkos*
+  become: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  tasks:
+    - name: Stop unattended-upgrades service because it can block apt
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        state: stopped
+      ignore_errors: yes
+
+    - name: Purge unattended-upgrades package
+      ansible.builtin.apt:
+        name: unattended-upgrades
+        state: absent
+        purge: yes
+        autoremove: yes
+      register: apt_result
+      retries: 20
+      delay: 30
+      until: apt_result is success
+
 - name: Build and upload snarkOS to S3 if required
   hosts: localhost
   gather_facts: true
+  any_errors_fatal: true
   tasks:
     - name: Set git commit variable for standard build
       set_fact:
@@ -135,6 +164,7 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   vars:
     s3_bucket: "{{ s3_bucket }}"
     snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
@@ -202,13 +232,8 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   tasks:
-    - name: Stop unattended-upgrades service because it can block apt
-      ansible.builtin.systemd:
-        name: unattended-upgrades
-        state: stopped
-      ignore_errors: yes
-      
     - name: Install zip
       ansible.builtin.apt:
         name: "{{ item }}"
@@ -229,6 +254,7 @@
   hosts: snarkos_validator
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   pre_tasks:
     - name: Set Validator Facts
       ansible.builtin.include_tasks: set_validator_facts.yml
@@ -272,6 +298,7 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   roles:
     - process_exporter_setup
   tags: process_exporter
@@ -283,6 +310,7 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   roles:
     - node_exporter_setup
   tags: node_exporter
@@ -294,6 +322,7 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   pre_tasks:
     - name: Add logging enrichment to Logstash
       include_tasks: logging_enrichment.yml
@@ -316,6 +345,7 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   pre_tasks:
     - name: Add logging enrichment to Metricbeat
       include_tasks: logging_enrichment.yml
@@ -337,6 +367,7 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   pre_tasks:
     - name: Add logging enrichment to Filebeat
       include_tasks: logging_enrichment.yml
@@ -359,6 +390,7 @@
   become: true
   remote_user: ubuntu
   gather_facts: true
+  any_errors_fatal: true
   roles:
     - prometheus_setup_with_clients
   vars:
@@ -372,6 +404,7 @@
   hosts: snarkos_validator
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   pre_tasks:
     - name: Set Validator facts
       include_tasks: set_validator_facts.yml
@@ -386,6 +419,7 @@
   hosts: snarkos_client
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   pre_tasks:
     - name: Set client facts
       include_tasks: set_client_facts.yml
@@ -400,6 +434,7 @@
   hosts: snarkos_validator
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   pre_tasks:
     - name: Set Validator facts
       include_tasks: set_validator_facts.yml
@@ -410,3 +445,32 @@
         state: restarted
       when: create_flamegraph
   tags: snarkos
+
+# ------------------------------------------------
+# Check if the network is advancing and blocks are being produced
+
+- name: Check if the network is advancing
+  hosts: snarkos_validator
+  become: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  tasks:
+    - name: Fetch the current block height
+      ansible.builtin.uri:
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
+        method: GET
+        return_content: true
+      register: current_block
+      until: current_block.json is defined
+      retries: 10
+      delay: 10
+
+    - name: Wait for the network to progress by one block
+      ansible.builtin.uri:
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
+        method: GET
+        return_content: true
+      register: next_block
+      until: next_block.json['header']['metadata']['height'] | int > current_block.json['header']['metadata']['height'] | int
+      retries: 10
+      delay: 10
