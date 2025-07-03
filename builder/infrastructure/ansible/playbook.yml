@@ -130,6 +130,13 @@
         path: "/home/ubuntu/talisker/bin/talisker"
         mode: '0755'
 
+    - name: Copy scripts used by Talisker
+      ansible.builtin.shell: |
+        cp -r /home/ubuntu/talisker-src/scripts /home/ubuntu/scripts
+      args:
+        executable: /bin/bash
+        warn: false
+
     - name: Deploy the talisker systemd service file
       become: true
       become_user: root
@@ -205,6 +212,7 @@
         set -o pipefail
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
       args:
+        executable: /bin/bash
         creates: /usr/share/keyrings/docker-archive-keyring.gpg
       when: docker_installed.rc != 0
 

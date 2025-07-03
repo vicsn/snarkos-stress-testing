@@ -54,6 +54,10 @@ snarkos_malice_tag: "malice-2349f3eda" # NOTE: test_skip_tx_checks feature may c
 # txcannon_ecr_repo: '637423331354.dkr.ecr.us-east-1.amazonaws.com/tx-cannon'
 # txcannon_image_tag: '60606a83b4527b9ff11848d591788fdeeacbf08b'
 
+# TXCannon build related vars,
+# Make sure it uses the same snarkVM rev as snarkOS:
+txcannon_envs: ""
+txcannon_features: "test_network"
 
 # Application vars
 snarkos_verbosity: "1"
