@@ -1,0 +1,38 @@
+---
+- name: Provision remote host with GitHub SSH agent forwarding support
+  hosts: all
+  become: true
+  tasks:
+    - name: Ensure git is installed
+      apt:
+        name: git
+        state: present
+        update_cache: yes
+
+    - name: Ensure OpenSSH client is installed (if needed for debugging from remote)
+      apt:
+        name: openssh-client
+        state: present
+
+    - name: Ensure GitHub is in known_hosts on remote
+      become: false
+      shell: ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts
+      args:
+        executable: /bin/bash
+
+    - name: Test GitHub access (this will only work if SSH agent forwarding is active)
+      become: false
+      shell: |
+        set -eo pipefail
+        ssh -T -o BatchMode=yes git@github.com || true
+      args:
+        executable: /bin/bash
+      register: github_test
+
+    - name: Show GitHub SSH test result
+      debug:
+        var: github_test.stdout_lines
+
+    - name: Print SSH example command
+      debug:
+        msg: "Try: ssh -A -i ${SSH_KEY_PATH} ubuntu@{{ inventory_hostname}}"
