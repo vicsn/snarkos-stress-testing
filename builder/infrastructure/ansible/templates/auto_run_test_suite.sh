@@ -73,10 +73,11 @@ init_and_apply_terraform() {
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
     LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+    export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
 
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook ips.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
+    ansible-playbook ips.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
 }
 
 run_test() {
@@ -94,9 +95,12 @@ run_test() {
       LB_URL=$(cat $PARENT_DIR/lb_url.txt)
     fi
 
+    (cd "$PARENT_DIR/terraform" && terraform init -input=false)
+    export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_test.yml --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
+    ansible-playbook run_test.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then

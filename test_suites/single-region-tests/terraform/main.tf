@@ -184,3 +184,8 @@ resource "aws_instance" "prometheus_server" {
     Devnet = var.devnet_name
   }
 }
+
+output "snarkos_network" {
+  value = local.snarkos_network
+  description = "The snarkos network name"
+}

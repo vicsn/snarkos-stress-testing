@@ -2,7 +2,7 @@
   hosts: snarkos_validator
   remote_user: ubuntu
   become: true
-  serial: 1
+  serial: "30%"
   pre_tasks:
     - name: Set Validators facts
       include_tasks: ../../playbooks/set_validator_facts.yml

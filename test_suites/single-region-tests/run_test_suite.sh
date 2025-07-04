@@ -24,6 +24,12 @@ BASE_BUCKET_PATH="manual_test_runs/$USER/$DATE_OF_RUN"
 
 download_and_upload_logs() {
   echo "Downloading test logs..."
+
+  # If no tests were ran:
+  if [ -z "${SELECTED+x}" ]; then
+    SELECTED=""
+  fi
+
   local test_ran=$SELECTED
 
   # Cleanup old logs:
@@ -82,9 +88,11 @@ init_and_apply_terraform() {
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
     LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+    export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook ips.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook ips.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
 
     # Tell it like it is
     if [ "$(uname)" == "Darwin" ]; then
@@ -102,9 +110,12 @@ run_test() {
         "./pre-test.sh"
     fi
 
+    (cd "$PARENT_DIR/terraform" && terraform init -input=false)
+    export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_test.yml --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook run_test.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@vars.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
@@ -182,13 +193,11 @@ fi
 
 # Read the load balancer DNS name from lb_url.txt
 LB_URL=$(cat $PARENT_DIR/lb_url.txt)
-# Read the network from $PARENT_DIR/playbooks/vars.yml
-export NETWORK=$(grep "network:" $PARENT_DIR/playbooks/vars.yml | cut -d " " -f2)
 
 # Optionally run Ansible playbook to setup services
 if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook setup.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook setup.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
     if [ "$(uname)" == "Darwin" ]; then
         say "Finished running setup"
     fi
@@ -212,12 +221,7 @@ if [ "$RUN_TESTS" == "y" ]; then
             fi
             export SELECTED=$test
 
-            if [ "$UPLOAD_LOGS" == "y" ]; then
-                run_test | tee -a "$PARENT_DIR/observability_runner.log"
-                download_and_upload_logs
-            else
-                run_test
-            fi
+            run_test | tee -a "$PARENT_DIR/observability_runner.log"
         done
 
     # We have a special case for the prerelease ones too:
@@ -232,13 +236,16 @@ if [ "$RUN_TESTS" == "y" ]; then
 
     # Else run the selected test
     else
-        if [ "$UPLOAD_LOGS" == "y" ]; then
-            run_test | tee -a "$PARENT_DIR/observability_runner.log"
-            download_and_upload_logs
-        else
-            run_test
-        fi
+        run_test | tee -a "$PARENT_DIR/observability_runner.log"
     fi
+fi
+
+# Final catch-all log upload
+if [ "$UPLOAD_LOGS" == "y" ]; then
+    mkdir "$PARENT_DIR/log_files" || true
+
+    echo "Uploading logs (final pass)..."
+    download_and_upload_logs
 fi
 
 # Wait for user input before destroying the infrastructure
