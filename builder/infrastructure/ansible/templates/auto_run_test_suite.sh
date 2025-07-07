@@ -63,6 +63,25 @@ cleanup() {
     terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
 }
 
+set_network_vars() {
+  export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+  case "$NETWORK" in
+    mainnet)
+      export NETWORK_INT=0
+      ;;
+    testnet)
+      export NETWORK_INT=1
+      ;;
+    canary)
+      export NETWORK_INT=2
+      ;;
+    *)
+      echo "Error: Unknown network '$NETWORK'" >&2
+      return 1
+      ;;
+  esac
+}
+
 # Function to init and apply Terraform
 init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
@@ -73,11 +92,11 @@ init_and_apply_terraform() {
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
     LB_URL=$(cat $PARENT_DIR/lb_url.txt)
-    export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+    set_network_vars || exit 1
 
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook ips.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
+    ansible-playbook ips.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
 }
 
 run_test() {
@@ -96,11 +115,11 @@ run_test() {
     fi
 
     (cd "$PARENT_DIR/terraform" && terraform init -input=false)
-    export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+    set_network_vars || exit 1
 
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_test.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
+    ansible-playbook run_test.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
@@ -314,12 +333,12 @@ fi
 LB_URL=$(cat $PARENT_DIR/lb_url.txt)
 
 # Read the network from $PARENT_DIR/playbooks/vars.yml
-export NETWORK=$(grep "network:" $PARENT_DIR/playbooks/${VARS}.yml | cut -d " " -f2)
+set_network_vars || exit 1
 
 # Optionally run Ansible playbook to setup services
 if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook setup.yml --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
+    ansible-playbook setup.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
 elif [ "$RUN_SETUP" == "n" ]; then
     echo "Skipping setup..."
 else

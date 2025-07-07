@@ -35,4 +35,4 @@
 
     - name: Print SSH example command
       debug:
-        msg: "Try: ssh -A -i ${SSH_KEY_PATH} ubuntu@{{ inventory_hostname}}"
+        msg: "Try: ssh -A -i ${SSH_KEY_PATH} ubuntu@{{ inventory_hostname }}"
