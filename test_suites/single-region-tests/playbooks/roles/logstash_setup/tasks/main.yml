@@ -1,4 +1,8 @@
 ---
+- name: Set preinstalled
+  set_fact:
+    installed: "{{ preinstalled | default(false) | bool }}"
+
 - name: Copy Logstash Configuration Template for snarkOS
   ansible.builtin.template:
     src: logstash.conf
@@ -10,6 +14,7 @@
     src: logstash.service
     dest: /lib/systemd/system/logstash.service
     mode: "0664"
+  when: not installed
 
 - name: Restart Logstash service
   systemd:

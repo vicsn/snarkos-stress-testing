@@ -11,6 +11,8 @@ export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 
+ANSIBLE_FORKS=40
+
 # Override the USER var for the run, as USER is just ubuntu for the builder and we want a special, visible name:
 # Ansible also uses this var to create its dynamic inventory, that's why we need it set the same as the OWNER for terraform.
 export USER=builder
@@ -119,7 +121,7 @@ run_test() {
 
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_test.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
+    ansible-playbook run_test.yml -f $ANSIBLE_FORKS --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
@@ -338,7 +340,7 @@ set_network_vars || exit 1
 # Optionally run Ansible playbook to setup services
 if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook setup.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
+    ansible-playbook setup.yml -f $ANSIBLE_FORKS --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@${VARS}.yml"
 elif [ "$RUN_SETUP" == "n" ]; then
     echo "Skipping setup..."
 else

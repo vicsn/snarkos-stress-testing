@@ -1,13 +1,6 @@
 ## Using
 
-Latest built by Brent can automatically be pulled via `stress_base_ami` module found at `common/terraform_modules/stress_base_ami/main.tf`
-
-```terraform
-module "stress_base_ami" {
-    # source = "../../../common/terraform_modules/stress_base_ami"
-    source = "../../../common/terraform_modules/ubuntu_ami"
-}
-```
+Latest built can automatically be pulled via `stress_base_ami` module found at `test_suites/single-region-tests/terraform/modules/stress_base_ami/main.tf`
 
 ## Prerequisites
 

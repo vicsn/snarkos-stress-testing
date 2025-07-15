@@ -24,13 +24,15 @@
     - name: Check if the binary for the git hash exists in S3 bucket
       aws_s3:
         bucket: "{{ s3_bucket }}"
-        object: "{{ releasename }}"
-        mode: get
-        dest: "/dev/null"  # Dummy destination to check existence
+        mode: list
+        prefix: "{{ releasename }}"
         profile: "{{ s3_profile }}"
       register: s3_ls_output
-      ignore_errors: true
-      failed_when: "'does not exist' in s3_ls_output.msg"
+      failed_when: false
+
+    - name: Set fact if object exists
+      set_fact:
+        s3_binary_exists: "{{ releasename in (s3_ls_output.s3_keys | default([])) }}"
 
     - name: Construct authenticated repo URL if GitHub token is set
       set_fact:
@@ -40,7 +42,7 @@
             if github_token is defined and github_token != '' and github_token != 'your_github_token_here'
             else snarkos_repo
           }}
-      when: s3_ls_output.failed
+      when: not s3_binary_exists
 
     - name: Clone the repository if the binary is not found in S3
       git:
@@ -49,12 +51,12 @@
         version: "{{ snarkos_git_commit_to_build }}"
         depth: 1
         force: true
-      when: s3_ls_output.failed
+      when: not s3_binary_exists
 
     - name: Override Rust version (macOS only)
       shell: cd {{ clone_dir_base }}/{{ snarkos_git_commit_to_build }} && rustup override set nightly-aarch64-apple-darwin
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Check if OpenSSL is installed
@@ -68,7 +70,7 @@
         state: directory
         mode: '0755'
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.isdir
 
@@ -78,7 +80,7 @@
         dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_tarball }}"
         mode: '0755'
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.isdir
 
@@ -87,7 +89,7 @@
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.isdir
 
@@ -102,7 +104,7 @@
         CROSS_COMPILE: "x86_64-unknown-linux-gnu-"
         CFLAGS: "-fPIC -fPIE -pie"
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.isdir
 
@@ -111,7 +113,7 @@
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.isdir
 
@@ -120,7 +122,7 @@
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.isdir
 
@@ -137,7 +139,7 @@
       args:
         executable: /bin/bash
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
-      when: s3_ls_output.failed
+      when: not s3_binary_exists
 
     - name: Check if the folders are too old (including the cache)
       ansible.builtin.find:
@@ -175,7 +177,7 @@
         }}
       register: build_output_mac
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Build the Rust project (Linux)
@@ -187,7 +189,7 @@
         CARGO_TARGET_DIR: "../shared"
       register: build_output
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system != 'Darwin'
 
     - name: Debug build_output_mac
@@ -206,7 +208,7 @@
         mode: put
         profile: "{{ s3_profile }}"
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system == 'Darwin'
       register: s3_upload_output
 
@@ -218,7 +220,7 @@
         mode: put
         profile: "{{ s3_profile }}"
       when:
-        - s3_ls_output.failed
+        - not s3_binary_exists
         - ansible_system != 'Darwin'
       register: s3_upload_output
 

@@ -84,31 +84,6 @@
         msg: "If snarkos_git_commit_local_build_update is set, then use the local build installation method."
       when: snarkos_git_commit_local_build_update is defined and snarkos_git_commit_local_build_update | length > 0 and not use_local_build
 
-# ------------------------------------------------
-# Purge unattended-upgrades
-- name: Purge unattended-upgrades
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  tasks:
-    - name: Stop unattended-upgrades service because it can block apt
-      ansible.builtin.systemd:
-        name: unattended-upgrades
-        state: stopped
-      ignore_errors: yes
-
-    - name: Purge unattended-upgrades package
-      ansible.builtin.apt:
-        name: unattended-upgrades
-        state: absent
-        purge: yes
-        autoremove: yes
-      register: apt_result
-      retries: 20
-      delay: 30
-      until: apt_result is success
-
 - name: Build and upload snarkOS to S3 if required
   hosts: localhost
   gather_facts: true
@@ -227,27 +202,6 @@
   tags: snarkos_install
 
 # ------------------------------------------------
-# zip
-- name: Install zip
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  tasks:
-    - name: Install zip
-      ansible.builtin.apt:
-        name: "{{ item }}"
-        state: present
-        update_cache: true
-        force_apt_get: yes
-      with_items:
-        - zip
-      register: apt_result
-      retries: 20
-      delay: 30
-      until: apt_result is success
-
-# ------------------------------------------------
 # flamegraph
 
 - name: Install flamegraph dependencies
@@ -294,25 +248,40 @@
 # ------------------------------------------------
 # snarkOS Process Exporter
 
-- name: Install and Configure Process Exporter
+- name: Force-Run docker-compose up with process exporter # noqa: no-changed-when
   hosts: snarkos*
   become: true
   remote_user: ubuntu
-  any_errors_fatal: true
-  roles:
-    - process_exporter_setup
+  tasks:
+    - name: Rename docker-compose.yml if process-exporter version does not exist
+      ansible.builtin.command: mv /home/ubuntu/docker-compose.yml /home/ubuntu/docker-compose-process-exporter.yml
+      args:
+        removes: /home/ubuntu/docker-compose.yml  # only runs if this file exists
+        creates: /home/ubuntu/docker-compose-process-exporter.yml  # only runs if this doesn't exist
+    - name: Force-Run docker-compose up with process exporter, restart
+      any_errors_fatal: true
+      command:
+        cmd: docker-compose -f docker-compose-process-exporter.yml up -d --force-recreate
+        chdir: /home/ubuntu/
   tags: process_exporter
 
 # ------------------------------------------------
 # snarkOS Node Exporter
 
-- name: Install and Configure Node Exporter
+- name: Force-Run docker-compose up with node exporter # noqa: no-changed-when
   hosts: snarkos*
   become: true
   remote_user: ubuntu
-  any_errors_fatal: true
-  roles:
-    - node_exporter_setup
+  tasks:
+    - name: Force-Run docker-compose up with node exporter, restart
+      any_errors_fatal: true
+      command:
+        cmd: docker-compose -f docker-compose-node-exporter.yml up -d --force-recreate
+        chdir: /home/ubuntu/
+      retries: 5
+      delay: 20
+      register: docker_compose_up_result
+      until: docker_compose_up_result.rc == 0
   tags: node_exporter
 
 # ------------------------------------------------
@@ -336,6 +305,8 @@
 
   roles:
     - logstash_setup
+  vars:
+    preinstalled: true
   tags: logstash
 
 # ------------------------------------------------
@@ -358,6 +329,8 @@
         snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
   roles:
     - metricbeat_setup
+  vars:
+    preinstalled: true
   tags: metricbeat
 
 # ------------------------------------------------
@@ -380,6 +353,8 @@
         snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
   roles:
     - filebeat_setup
+  vars:
+    preinstalled: true
   tags: filebeat
 
 # ------------------------------------------------

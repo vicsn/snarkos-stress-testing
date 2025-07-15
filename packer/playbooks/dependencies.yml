@@ -1,0 +1,228 @@
+# dependencies.yml
+# dependencies for all stress testing instances used to create base AMI
+- name: Install dependencies
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  tasks:
+    # github dependencies
+    - name: Install GitHub CLI
+      shell: |
+        set -o pipefail
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+      args:
+        executable: /bin/bash
+      become: yes
+
+    # docker dependencies
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: "/usr/local/bin/docker-compose"
+        mode: 'u+x,g+x'
+
+    - name: Ensure Docker service is started
+      service:
+        name: docker
+        state: started
+
+    # logstash dependencies
+    - name: Add Elastic GPG key
+      ansible.builtin.shell: |
+        set -o pipefail
+        wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --batch --yes --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
+      args:
+        executable: /bin/bash
+
+    - name: Add Elastic APT repository
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/elastic-8.x.list
+        line: "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
+        create: yes
+        mode: '0644'
+        state: present
+
+    - name: Update and install Logstash
+      ansible.builtin.apt:
+        update_cache: yes
+        name: logstash
+        state: latest
+
+    # grafana dependencies
+    - name: Install unzip
+      ansible.builtin.package:
+        name: unzip
+        state: present
+
+    - name: Download, unzip, and set execute permissions on Grafana Agent
+      ansible.builtin.shell: |
+        curl -O -L "https://github.com/grafana/agent/releases/latest/download/grafana-agent-linux-amd64.zip" &&
+        unzip "grafana-agent-linux-amd64.zip" &&
+        chmod a+x grafana-agent-linux-amd64
+      args:
+        chdir: /home/ubuntu
+        creates: grafana-agent-linux-amd64
+
+    - name: Install zip
+      ansible.builtin.apt:
+        name: zip
+        state: present
+        update_cache: true
+        force_apt_get: yes
+      register: apt_result
+      retries: 20
+      delay: 30
+      until: apt_result is success
+
+# ------------------------------------------------
+# snarkOS Process Exporter
+
+- name: Install and Configure Process Exporter
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  roles:
+    - process_exporter_setup
+  tags: process_exporter
+
+# ------------------------------------------------
+# snarkOS Node Exporter
+
+- name: Install and Configure Node Exporter
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  roles:
+    - node_exporter_setup
+  tags: node_exporter
+
+
+# ------------------------------------------------
+# Logstash
+
+- name: Install and Configure Logstash
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  roles:
+    - logstash_setup
+  vars:
+    tags: {} # noqa var-naming[no-reserved]
+    devnet_name: "image_setup"
+    cloud_id: "image_setup"
+    elastic_api_key: "image_setup"
+  tags: logstash
+
+# ------------------------------------------------
+# Metricbeat
+
+- name: Install and Configure Metricbeat
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  roles:
+    - metricbeat_setup
+  vars:
+    tags: {} # noqa var-naming[no-reserved]
+    devnet_name: "image_setup"
+    cloud_id: "image_setup"
+    elastic_api_key: "image_setup"
+  tags: metricbeat
+
+# ------------------------------------------------
+# Filebeat
+
+- name: Install and Configure Filebeat
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  roles:
+    - filebeat_setup
+  vars:
+    tags: {} # noqa var-naming[no-reserved]
+    devnet_name: "image_setup"
+    cloud_id: "image_setup"
+    elastic_api_key: "image_setup"
+  tags: filebeat
+
+# ------------------------------------------------
+# Purge unattended-upgrades
+- name: Purge unattended-upgrades
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  tasks:
+    - name: Stop unattended-upgrades service because it can block apt
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        state: stopped
+      ignore_errors: yes
+
+    - name: Purge unattended-upgrades package
+      ansible.builtin.apt:
+        name: unattended-upgrades
+        state: absent
+        purge: yes
+        autoremove: yes
+      register: apt_result
+      retries: 20
+      delay: 30
+      until: apt_result is success
+
+# ------------------------------------------------
+# Ensure python and boto3
+- name: Install python, pip and boto3
+  hosts: all
+  become: true
+  gather_facts: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  tasks:
+    - name: Update APT package index
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure Python3 is installed
+      apt:
+        name: python3
+        state: present
+
+    - name: Ensure pip3 is installed
+      apt:
+        name: python3-pip
+        state: present
+      register: apt_result
+      retries: 5
+      delay: 30
+      until: apt_result is success
+
+    - name: Ensure Python boto3 is installed
+      pip:
+        name: boto3
+        state: present
+        executable: pip3

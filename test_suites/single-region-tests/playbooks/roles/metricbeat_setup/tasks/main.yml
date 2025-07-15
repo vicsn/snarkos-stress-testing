@@ -1,4 +1,8 @@
 ---
+- name: Set preinstalled
+  set_fact:
+    installed: "{{ preinstalled | default(false) | bool }}"
+
 - name: Add Elastic GPG key
   ansible.builtin.shell:
     cmd: >-
@@ -7,16 +11,19 @@
   args:
     executable: /bin/bash
     creates: /usr/share/keyrings/elastic-keyring.gpg
+  when: not installed
 
 - name: Add Elastic APT repository
   ansible.builtin.apt_repository:
     repo: "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
     state: present
     filename: elastic-8.x
+  when: not installed
 
 - name: Update APT cache
   ansible.builtin.apt:
     update_cache: true
+  when: not installed
 
 - name: Install Metricbeat
   ansible.builtin.apt:
@@ -26,6 +33,7 @@
   retries: 10
   delay: 30
   until: apt_result is success
+  when: not installed
 
 - name: Copy Metricbeat Configuration Template for snarkOS
   ansible.builtin.template:

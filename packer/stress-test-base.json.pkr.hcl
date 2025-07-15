@@ -45,7 +45,7 @@ source "amazon-ebs" "stress-test-base" {
   source_ami    = "${data.amazon-ami.stress-test-base.id}"
   ssh_username  = "ubuntu"
 
-  ami_regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
+  ami_regions = ["us-east-1", "us-west-2"]
 
   ami_groups = ["all"]
 }
@@ -55,7 +55,7 @@ build {
 
   provisioner "ansible" {
     extra_arguments = ["--scp-extra-args", "'-O'"]
-    playbook_file   = "../common/ansible_playbooks/dependencies.yml"
+    playbook_file   = "playbooks/dependencies.yml"
   }
 
 }
