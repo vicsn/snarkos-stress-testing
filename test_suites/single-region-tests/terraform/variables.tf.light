@@ -10,7 +10,7 @@ variable "devnet_name" {
 
 variable "validator_instance_type" {
   description = "Instance type for snarkOS validators"
-  default     = "m7i.2xlarge"
+  default     = "m7i.8xlarge"
 }
 
 variable "client_instance_type" {
@@ -20,12 +20,12 @@ variable "client_instance_type" {
 
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 5 # minimum 5 for prerelease tests
+  default     = 40 # minimum 5 for prerelease tests
 }
 
 variable "client_instance_count" {
   description = "Number of snarkOS clients per validator"
-  default     = 3
+  default     = 2
 }
 
 variable "RELEASE_BUCKET" {
@@ -37,14 +37,49 @@ variable "RELEASE_BUCKET" {
 # Clients
 
 locals {
-  snarkos_network = "mainnet"
+  snarkos_network = "testnet"
 
   client_instance_config = [
     { type = var.client_instance_type, count = var.client_instance_count, validator = 0 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 1 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 2 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 3 },
-    { type = var.client_instance_type, count = var.client_instance_count, validator = 4 }
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 4 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 5 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 6 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 7 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 8 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 9 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 10 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 11 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 12 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 13 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 14 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 15 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 16 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 17 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 18 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 19 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 20 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 21 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 22 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 23 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 24 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 25 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 26 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 27 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 28 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 29 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 30 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 31 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 32 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 33 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 34 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 35 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 36 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 37 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 38 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 39 },
   ]
 
   snarkos_clients = flatten([
@@ -97,33 +132,33 @@ variable "tx_cannon_services" {
       task_count = 1
     }
 
-    BatchNestedExecute_1_31_1 = {# Note: only works for mainnet, requires running the add_deployments test
-      tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_1_31_1.toml --network"
-      task_count = 1
-    }
+    #BatchNestedExecute_1_31_1 = {# Note: only works for mainnet, requires running the add_deployments test
+    #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_1_31_1.toml --network"
+    #  task_count = 1
+    #}
 
-    BatchNestedExecute_1_5_2 = { # Note: only works for mainnet, requires running the add_deployments test
-      tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_1_5_2.toml --network"
-      task_count = 1
-    }
+    #BatchNestedExecute_1_5_2 = { # Note: only works for mainnet, requires running the add_deployments test
+    #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_1_5_2.toml --network"
+    #  task_count = 1
+    #}
 
-    BatchRecordFund_2_30_1 = {
-      tx_command = "tx-cannon batch-execute --test tests/nested_imports/funding_execution_2_30_1.toml --network"
-      task_count = 1
-    }
-    BatchNestedExecute_2_30_1 = { # Note: only works for mainnet, requires running the add_deployments test
-      tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_2_30_1.toml --network"
-      task_count = 1
-    }
+    #BatchRecordFund_2_30_1 = {
+    #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/funding_execution_2_30_1.toml --network"
+    #  task_count = 1
+    #}
+    #BatchNestedExecute_2_30_1 = { # Note: only works for mainnet, requires running the add_deployments test
+    #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_2_30_1.toml --network"
+    #  task_count = 1
+    #}
 
-    BatchRecordFund_2_4_2 = {
-      tx_command = "tx-cannon batch-execute --test tests/nested_imports/funding_execution_2_4_2.toml --network"
-      task_count = 1
-    }
-    BatchNestedExecute_2_4_2 = { # Note: only works for mainnet, requires running the add_deployments test
-      tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_2_4_2.toml --network"
-      task_count = 1
-    }
+    #BatchRecordFund_2_4_2 = {
+    #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/funding_execution_2_4_2.toml --network"
+    #  task_count = 1
+    #}
+    #BatchNestedExecute_2_4_2 = { # Note: only works for mainnet, requires running the add_deployments test
+    #  tx_command = "tx-cannon batch-execute --test tests/nested_imports/execution_2_4_2.toml --network"
+    #  task_count = 1
+    #}
 
     ProgramProbe = {
       tx_command = "tx-cannon program-probe --wait 500 --randomize --network"

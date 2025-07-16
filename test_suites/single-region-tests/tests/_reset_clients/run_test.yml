@@ -1,0 +1,26 @@
+- name: Reset clients
+  hosts: snarkos_client
+  remote_user: ubuntu
+  become: true
+  strategy: free
+  pre_tasks:
+    - name: Set clients facts
+      include_tasks: ../../playbooks/set_client_facts.yml
+
+    - name: Stop the clients
+      systemd:
+        name: snarkos
+        state: stopped
+
+    - name: Remove existing .ledger-* directories on clients
+      ansible.builtin.shell:
+        cmd: "rm -rf /home/ubuntu/.ledger-*"
+
+    # - name: Reinstall snarkOS from a specific branch
+    #   include_tasks: ../../playbooks/reinstall_with_branch.yml
+    #   vars:
+    #     reinstall_branch: fix_sync_off_by_one
+
+  roles:
+    - snarkos_service
+  tags: snarkos_client

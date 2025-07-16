@@ -63,6 +63,18 @@
         else "--features {{ features }}"
       }}
 
+- name: Enable locktick build features in Cargo.tml
+  shell: |
+    tmp="$(mktemp)"
+    sed 's/^# debug = "line-tables-only"/debug = "line-tables-only"/' Cargo.toml > "$tmp"
+    mv "$tmp" Cargo.toml
+    sed 's/^# strip = "none"/strip = "none"/' Cargo.toml > "$tmp"
+    mv "$tmp" Cargo.toml
+  args:
+    executable: /bin/bash
+    chdir: /home/ubuntu/snarkOS
+  when: features is defined and 'locktick' in features
+
 - name: Source cargo env and install snarkOS with git CLI
   ansible.builtin.shell:
     cmd: "source $HOME/.cargo/env && cargo install --locked --path . {{ features_flag }}"

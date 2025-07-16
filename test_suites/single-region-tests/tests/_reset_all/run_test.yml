@@ -2,6 +2,7 @@
   hosts: snarkos_validator
   remote_user: ubuntu
   become: true
+  strategy: free
   pre_tasks:
     - name: Set validators facts
       include_tasks: ../../playbooks/set_validator_facts.yml
@@ -28,6 +29,7 @@
   hosts: snarkos_client
   remote_user: ubuntu
   become: true
+  strategy: free
   pre_tasks:
     - name: Set clients facts
       include_tasks: ../../playbooks/set_client_facts.yml

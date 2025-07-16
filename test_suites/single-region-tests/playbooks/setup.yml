@@ -140,6 +140,7 @@
   become: true
   remote_user: ubuntu
   any_errors_fatal: true
+  strategy: free
   vars:
     s3_bucket: "{{ s3_bucket }}"
     snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
@@ -170,88 +171,90 @@
         name: snarkos_build_from_git
       when: hostvars['localhost'].use_remote_build
 
-    - name: Download malice snarkOS binary with GitHub CLI
-      ansible.builtin.shell: >
-        TAG="{{ snarkos_malice_tag }}"
+    # - name: Download malice snarkOS binary with GitHub CLI
+    #   ansible.builtin.shell: >
+    #     TAG="{{ snarkos_malice_tag }}"
 
-        apt-get install -y unzip
+    #     apt-get install -y unzip
 
-        GITHUB_TOKEN="{{ github_token }}" gh release download ${TAG}
-        --repo ProvableHQ/snarkOS-staging
-        --pattern "snarkos*unknown-linux-gnu.zip"
-        --output "/tmp/snarkos-malicious.zip"
-        --clobber
+    #     GITHUB_TOKEN="{{ github_token }}" gh release download ${TAG}
+    #     --repo ProvableHQ/snarkOS-staging
+    #     --pattern "snarkos*unknown-linux-gnu.zip"
+    #     --output "/tmp/snarkos-malicious.zip"
+    #     --clobber
 
-        unzip -o /tmp/snarkos-malicious.zip -d /tmp/snarkos-malicious
+    #     unzip -o /tmp/snarkos-malicious.zip -d /tmp/snarkos-malicious
 
-        mv /tmp/snarkos-malicious/snarkos /usr/bin/snarkos-malice
-      args:
-        executable: /bin/bash
-      register: download_malice_result
-      changed_when: download_malice_result is success
-      when: not hostvars['localhost'].use_malicious_snarkos_pre_build
+    #     mv /tmp/snarkos-malicious/snarkos /usr/bin/snarkos-malice
+    #   args:
+    #     executable: /bin/bash
+    #   register: download_malice_result
+    #   changed_when: download_malice_result is success
+    #   when: not hostvars['localhost'].use_malicious_snarkos_pre_build
 
-    - name: Download malice snarkOS binary from S3
-      vars:
-        snarkos_install_s3_release_name: "{{ snarkos_malice_tag }}/snarkos"
-        snarkos_install_s3_dest_name: "snarkos-malice"
-      ansible.builtin.include_role:
-        name: snarkos_install_s3
-      when: hostvars['localhost'].use_malicious_snarkos_pre_build
+    # - name: Download malice snarkOS binary from S3
+    #   vars:
+    #     snarkos_install_s3_release_name: "{{ snarkos_malice_tag }}/snarkos"
+    #     snarkos_install_s3_dest_name: "snarkos-malice"
+    #   ansible.builtin.include_role:
+    #     name: snarkos_install_s3
+    #   when: hostvars['localhost'].use_malicious_snarkos_pre_build
 
   tags: snarkos_install
 
 # ------------------------------------------------
 # flamegraph
 
-- name: Install flamegraph dependencies
-  hosts: snarkos_validator
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  pre_tasks:
-    - name: Set Validator Facts
-      ansible.builtin.include_tasks: set_validator_facts.yml
-  tasks:
-    - name: Capture kernel version
-      ansible.builtin.command: uname -r
-      register: kernel_version
-      when: create_flamegraph
-      changed_when: kernel_version is success
+# - name: Install flamegraph dependencies
+#   hosts: snarkos_validator
+#   become: true
+#   remote_user: ubuntu
+#   any_errors_fatal: true
+#   pre_tasks:
+#     - name: Set Validator Facts
+#       ansible.builtin.include_tasks: set_validator_facts.yml
+#   tasks:
+#     - name: Capture kernel version
+#       ansible.builtin.command: uname -r
+#       register: kernel_version
+#       when: create_flamegraph
+#       changed_when: kernel_version is success
 
-    - name: Install flamegraph dependencies
-      ansible.builtin.apt:
-        name: "{{ item }}"
-        state: present
-        update_cache: true
-      with_items:
-        - linux-tools-common
-        - linux-tools-generic
-        - linux-tools-{{ kernel_version.stdout }}
-        - build-essential
-      retries: 20
-      delay: 30
-      until: apt_result is success
-      when: create_flamegraph
+#     - name: Install flamegraph dependencies
+#       ansible.builtin.apt:
+#         name: "{{ item }}"
+#         state: present
+#         update_cache: true
+#       with_items:
+#         - linux-tools-common
+#         - linux-tools-generic
+#         - linux-tools-{{ kernel_version.stdout }}
+#         - build-essential
+#       retries: 20
+#       delay: 30
+#       until: apt_result is success
+#       when: create_flamegraph
 
-    - name: Install Rustup and flamegraph # As advised by https://github.com/flamegraph-rs/flamegraph
-      ansible.builtin.command: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    # - name: Install Rustup and flamegraph # As advised by https://github.com/flamegraph-rs/flamegraph
+    #   ansible.builtin.command: |
+    #     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
-        . "$HOME/.cargo/env"
+    #     . "$HOME/.cargo/env"
 
-        cargo install flamegraph
-      args:
-        executable: /bin/bash
-      when: create_flamegraph
+    #     cargo install flamegraph
+    #   args:
+    #     executable: /bin/bash
+    #   when: create_flamegraph
 
 # ------------------------------------------------
-# snarkOS Process Exporter
+# Observability setup
 
 - name: Force-Run docker-compose up with process exporter # noqa: no-changed-when
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
+  strategy: free
   tasks:
     - name: Rename docker-compose.yml if process-exporter version does not exist
       ansible.builtin.command: mv /home/ubuntu/docker-compose.yml /home/ubuntu/docker-compose-process-exporter.yml
@@ -272,9 +275,10 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
+  strategy: free
   tasks:
     - name: Force-Run docker-compose up with node exporter, restart
-      any_errors_fatal: true
       command:
         cmd: docker-compose -f docker-compose-node-exporter.yml up -d --force-recreate
         chdir: /home/ubuntu/
@@ -285,15 +289,16 @@
   tags: node_exporter
 
 # ------------------------------------------------
-# Logstash
+# Metricbeat, Filebeat, Logstash
 
-- name: Install and Configure Logstash
+- name: Install and Configure Metricbeat, Filebeat and Logstash
   hosts: snarkos*
   become: true
   remote_user: ubuntu
   any_errors_fatal: true
+  strategy: free
   pre_tasks:
-    - name: Add logging enrichment to Logstash
+    - name: Add logging enrichment to Metricbeat, Filebeat and Logstash
       include_tasks: logging_enrichment.yml
       vars:
         use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
@@ -302,60 +307,12 @@
         use_github_build: "{{ hostvars['localhost'].use_github_build }}"
         use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
         snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-
   roles:
     - logstash_setup
-  vars:
-    preinstalled: true
-  tags: logstash
-
-# ------------------------------------------------
-# Metricbeat
-
-- name: Install and Configure Metricbeat
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  pre_tasks:
-    - name: Add logging enrichment to Metricbeat
-      include_tasks: logging_enrichment.yml
-      vars:
-        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
-        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
-        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
-        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
-        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
-        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-  roles:
     - metricbeat_setup
-  vars:
-    preinstalled: true
-  tags: metricbeat
-
-# ------------------------------------------------
-# Filebeat
-
-- name: Install and Configure Filebeat
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  pre_tasks:
-    - name: Add logging enrichment to Filebeat
-      include_tasks: logging_enrichment.yml
-      vars:
-        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
-        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
-        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
-        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
-        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
-        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-  roles:
     - filebeat_setup
   vars:
     preinstalled: true
-  tags: filebeat
 
 # ------------------------------------------------
 # Prometheus for Grafana metrics
@@ -368,9 +325,9 @@
   any_errors_fatal: true
   roles:
     - prometheus_setup_with_clients
+    # - logstash_setup # Enable this again if we use a hosted logging solution.
   vars:
     test_runner_for_metrics_ip: "{{ test_runner_ip | default('localhost') }}"
-  tags: prometheus
 
 # ------------------------------------------------
 # snarkOS validators
@@ -380,6 +337,7 @@
   become: true
   remote_user: ubuntu
   any_errors_fatal: true
+  strategy: free
   pre_tasks:
     - name: Set Validator facts
       include_tasks: set_validator_facts.yml
@@ -395,6 +353,7 @@
   become: true
   remote_user: ubuntu
   any_errors_fatal: true
+  strategy: free
   pre_tasks:
     - name: Set client facts
       include_tasks: set_client_facts.yml
@@ -405,21 +364,21 @@
 # ------------------------------------------------
 # Optionall restart validators if creating a flamegraph to avoid measuring genesis block creation
 
-- name: Optionally restart snarkOS validators
-  hosts: snarkos_validator
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  pre_tasks:
-    - name: Set Validator facts
-      include_tasks: set_validator_facts.yml
-  tasks:
-    - name: Restart snarkOS validators
-      systemd:
-        name: snarkos
-        state: restarted
-      when: create_flamegraph
-  tags: snarkos
+# - name: Optionally restart snarkOS validators
+#   hosts: snarkos_validator
+#   become: true
+#   remote_user: ubuntu
+#   any_errors_fatal: true
+#   pre_tasks:
+#     - name: Set Validator facts
+#       include_tasks: set_validator_facts.yml
+#   tasks:
+#     - name: Restart snarkOS validators
+#       systemd:
+#         name: snarkos
+#         state: restarted
+#       when: create_flamegraph
+#   tags: snarkos
 
 # ------------------------------------------------
 # Check if the network is advancing and blocks are being produced

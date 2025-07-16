@@ -30,7 +30,7 @@ download_and_upload_logs() {
     SELECTED=""
   fi
 
-  local test_ran=$SELECTED
+  local test_ran="${SELECTED:-download_and_upload_logs}"
 
   # Cleanup old logs:
   rm -rf $PARENT_DIR/log_files
@@ -52,14 +52,14 @@ download_and_upload_logs() {
         then
           local destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/$(basename ${log_file})"
           echo "Copying $log_file to $destination ..."
-          aws s3 cp $log_file $destination
+          aws s3 cp $log_file $destination --profile ephnet
         fi
     done
   fi
 
   if test -f $PARENT_DIR/observability_runner.log; then
     local destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/observability_runner.log"
-    aws s3 cp "$PARENT_DIR/observability_runner.log" $destination
+    aws s3 cp "$PARENT_DIR/observability_runner.log" $destination --profile ephnet
 
     rm -f $PARENT_DIR/observability_runner.log
   fi

@@ -68,10 +68,11 @@ ssh-keyscan -H ${TXCANNON_DOMAIN} >> ~/.ssh/known_hosts
 lnav ubuntu@${TXCANNON_DOMAIN}:txcannon.log
 ```
 ```
-NODE_SUBDOMAIN="ec2-44-251-75-89"
+NODE_SUBDOMAIN="ec2-18-236-122-120"
 NODE_DOMAIN="${NODE_SUBDOMAIN}.us-west-2.compute.amazonaws.com"
 ssh-keyscan -H ${NODE_DOMAIN} >> ~/.ssh/known_hosts
-lnav ubuntu@${NODE_DOMAIN}:/tmp/snarkos.log
+ssh ubuntu@${NODE_DOMAIN} "tail -n 10000 /tmp/snarkos.log > /tmp/snarkos_tail.log"
+lnav ubuntu@${NODE_DOMAIN}:/tmp/snarkos_tail.log
 ```
 - You can check out tx-cannon builds here currently: https://us-east-1.console.aws.amazon.com/ecr/repositories/private/637423331354/tx-cannon?region=us-east-1
 - Elastic is not functional at this time.

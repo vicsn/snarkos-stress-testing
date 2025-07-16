@@ -1,4 +1,3 @@
-
 - name: Download snarkos binary from S3
   aws_s3:
     bucket: "{{ s3_bucket }}"

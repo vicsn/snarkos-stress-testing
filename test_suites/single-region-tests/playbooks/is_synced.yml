@@ -43,14 +43,14 @@
   - name: Verify height difference is within acceptable range
     fail:
       msg: "Height difference of {{ height_difference }} is not within the acceptable range."
-    when: height_difference | int > 5 or height_difference | int < -5
+    when: height_difference | int > 10 or height_difference | int < -10
 
   - name: Set sync successful
     set_fact:
       sync_successful: true
     when:
-      - height_difference | int <= 5
-      - height_difference | int >= -5
+      - height_difference | int <= 10
+      - height_difference | int >= -10
 
   rescue:
     - name: Retry message

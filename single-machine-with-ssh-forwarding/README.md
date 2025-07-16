@@ -101,10 +101,11 @@ ssh -A -i ~/.ssh/id_rsa ubuntu@52.12.101.154
 
 Now you can use the machine and will have full access to github private repositories.
 
-To quickly get started with Rust, you'll likely want to:
+To quickly get started with snarkVM projects, you may want to:
 
 ```
-sudo apt install rustup pkg-config libssl-dev tmux
+git clone git@github.com:ProvableHQ/snarkOS.git
+cd snarkOS && ./build_ubuntu.sh
 ```
 
 ## Cleanup

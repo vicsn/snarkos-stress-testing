@@ -1,0 +1,51 @@
+- name: Stash any local changes
+  ansible.builtin.command: git stash
+  args:
+    chdir: /home/ubuntu/snarkOS
+
+- name: Update to branch from the snarkos repository
+  ansible.builtin.git:
+    repo: "https://{{ github_token }}@github.com/{{ snarkos_repo | regex_replace('^https?://github\\.com/', '') }}"
+    dest: "/home/ubuntu/snarkOS"
+    version: "{{ reinstall_branch }}"
+    update: true
+
+- name: Unstash local changes
+  ansible.builtin.command: git stash pop
+  args:
+    chdir: /home/ubuntu/snarkOS
+
+- name: Print status
+  ansible.builtin.shell:
+    cmd: "git diff"
+  register: git_diff
+  args:
+    executable: /bin/bash
+    chdir: /home/ubuntu/snarkOS
+
+- name: Print git diff
+  ansible.builtin.debug:
+    msg: "{{ git_diff.stdout }}"
+
+- name: Set features flag
+  set_fact:
+    features_flag: >-
+      {{
+        "" if (features is not defined or features | length == 0)
+        else "--features {{ features }}"
+      }}
+  
+- name: Source cargo env and install snarkOS with git CLI
+  ansible.builtin.shell:
+    cmd: "source $HOME/.cargo/env && cargo install --locked --path . {{ features_flag }}"
+  args:
+    executable: /bin/bash
+    chdir: /home/ubuntu/snarkOS
+  environment: >-
+    {{
+      {
+        'HOME': ansible_env.HOME,
+        'CARGO_NET_GIT_FETCH_WITH_CLI': 'true'
+      } | combine(envs_dict | default({}))
+    }}
+  become: true

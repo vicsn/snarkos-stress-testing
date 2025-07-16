@@ -48,7 +48,7 @@ resource "aws_instance" "single_machine_with_ssh_forwarding" {
 
   ebs_block_device {
     device_name = "/dev/sda1"
-    volume_size = 100
+    volume_size = 2000
     volume_type = "gp2"
   }
 

@@ -34,6 +34,11 @@
       set_fact:
         s3_binary_exists: "{{ releasename in (s3_ls_output.s3_keys | default([])) }}"
 
+    - name: Fail if compiling with the 'locktick' feature on macOS - cross-compilation is not supported
+      fail:
+        msg: "Compiling with the 'locktick' feature is not supported on macOS. Please remove it from the features variable."
+      when: not s3_binary_exists and ansible_system == 'Darwin' and features is defined and 'locktick' in features
+
     - name: Construct authenticated repo URL if GitHub token is set
       set_fact:
         effective_snarkos_repo: >-
@@ -160,6 +165,18 @@
         path: "{{ clone_dir_base }}/shared"
         state: directory
         mode: '0755'
+
+    - name: Enable locktick build features in Cargo.tml
+      shell: |
+        tmp="$(mktemp)"
+        sed 's/^# debug = "line-tables-only"/debug = "line-tables-only"/' Cargo.toml > "$tmp"
+        mv "$tmp" Cargo.toml
+        sed 's/^# strip = "none"/strip = "none"/' Cargo.toml > "$tmp"
+        mv "$tmp" Cargo.toml
+      args:
+        executable: /bin/bash
+        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
+      when: not s3_binary_exists and features is defined and 'locktick' in features and ansible_system != 'Darwin'
 
     - name: Build the Rust project with OpenSSL (macOS)
       command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }}

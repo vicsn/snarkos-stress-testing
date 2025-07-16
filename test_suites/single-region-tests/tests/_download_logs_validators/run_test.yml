@@ -2,6 +2,7 @@
   hosts: snarkos_validator
   become: true
   remote_user: ubuntu
+  strategy: free
   pre_tasks:
     - name: Set validator facts
       include_tasks: ../../playbooks/set_validator_facts.yml
@@ -12,13 +13,13 @@
         dest: "/tmp/snarkos.log.gz"
         mode: "0644"
 
-    - name: Determine how big the zipped file is.
-      command: du -sh /tmp/snarkos.log.gz
-      register: du_output
+    # - name: Determine how big the zipped file is.
+    #   command: du -sh /tmp/snarkos.log.gz
+    #   register: du_output
 
-    - name: "Check logs size"
-      debug:
-        var: du_output
+    # - name: "Check logs size"
+    #   debug:
+    #     var: du_output
 
     - name: Fetch logs
       fetch:
