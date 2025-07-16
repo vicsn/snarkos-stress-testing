@@ -1,8 +1,8 @@
-- name: Reset clients
+- name: Reset all clients in parallel
   hosts: snarkos_client
   remote_user: ubuntu
   become: true
-  serial: 3
+  strategy: free
   pre_tasks:
     - name: Set Client facts
       include_tasks: ../../playbooks/set_client_facts.yml
@@ -16,18 +16,25 @@
       systemd:
         name: snarkos-malice
         state: stopped
-      ignore_errors: yes # in case we never deployed malice
+      ignore_errors: yes  # in case we never deployed malice
 
     - name: Remove existing ledgers on clients
       ansible.builtin.shell:
         cmd: "rm -rf /home/ubuntu/.ledger-*"
-  post_tasks:
-    - name: Check if the node is synced.
-      include_tasks: ../../playbooks/is_synced.yml
-      vars:
-        node_to_check: localhost
-        node_to_compare: "{{ test_network_url }}"
 
   roles:
     - snarkos_service
   tags: snarkos_client
+
+# Strategy: free doesn't work when we have `pause` and is_synced calles it, so we do it in 3-4 batches instead:
+- name: Check sync status in up to 25% of clients at a time
+  hosts: snarkos_client
+  remote_user: ubuntu
+  become: true
+  serial: "30%"
+  tasks:
+    - name: Check if the node is synced
+      include_tasks: ../../playbooks/is_synced.yml
+      vars:
+        node_to_check: "localhost"
+        node_to_compare: "{{ test_network_url }}"

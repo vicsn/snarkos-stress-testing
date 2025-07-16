@@ -140,7 +140,6 @@
         cp -r /home/ubuntu/talisker-src/scripts /home/ubuntu/scripts
       args:
         executable: /bin/bash
-        warn: false
 
     - name: Deploy the talisker systemd service file
       become: true

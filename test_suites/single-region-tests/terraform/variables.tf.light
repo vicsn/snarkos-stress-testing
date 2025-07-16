@@ -15,7 +15,7 @@ variable "validator_instance_type" {
 
 variable "client_instance_type" {
   description = "Instance type for snarkOS clients"
-  default     = "m7i.2xlarge"
+  default     = "m7i.4xlarge"
 }
 
 variable "validator_instance_count" {

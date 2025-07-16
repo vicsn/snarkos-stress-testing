@@ -45,14 +45,6 @@ react_on_exit() {
   rc=$?
   echo "EXIT (rc: $rc)"
 
-  # Download client logs:
-  export SELECTED=_download_logs_clients
-  run_test
-
-  # Download validator logs:
-  export SELECTED=_download_logs_validators
-  run_test
-
   exit $rc
 }
 
