@@ -50,11 +50,11 @@ react_on_exit() {
 
 cleanup() {
     cd "$PARENT_DIR/terraform"
-    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
+    terraform destroy -auto-approve -parallelism=80 -var="owner=$OWNER"
 
     cd "$PARENT_DIR/terraform_tx_cannon"
     terraform init
-    terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
+    terraform destroy -auto-approve -parallelism=80 -var="owner=$OWNER"
 }
 
 set_network_vars() {
@@ -81,7 +81,7 @@ init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
 
     terraform init -migrate-state
-    terraform apply -auto-approve -var="owner=$OWNER"
+    terraform apply -auto-approve -parallelism=80 -var="owner=$OWNER" 
 
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
@@ -134,13 +134,13 @@ usage() {
   echo "----------"
   echo -e "Usage:\n" 1>&2
   echo -e "Set up:\n"  1>&2
-  echo "  $0 setup [-a] [-t] [-m <l|light|h|heavy>] [-v <vars-file-name>]" 1>&2
+  echo "  $0 setup [-a] [-t] [-m <l|light|h|heavy|pr|prerelease>] [-v <vars-file-name>]" 1>&2
   echo -e "\n  Sets up the infrastructure." 1>&2
   echo "    -a : If passed it sets up ansible provisioning." 1>&2
   echo "    -t : If passed it sets up only terraform." 1>&2
-  echo "    -m : Stands for mode. Can be passed as light or heavy, default is light." 1>&2
+  echo "    -m : Stands for mode. Can be passed as prerelease, light or heavy, default is prerelease." 1>&2
   echo "    -v : Stands for the name of the vars file used by ansible." 1>&2
-  echo "  Defaults : -at -m light -v vars" 1>&2
+  echo "  Defaults : -at -m prerelease -v vars" 1>&2
   echo -e "\nClean up:\n"  1>&2
   echo -e "  $0 cleanup" 1>&2
   echo -e "\n  Cleans up the infrastructure. Basically runs terraform destroy." 1>&2
@@ -159,7 +159,7 @@ parse_setup() {
 
   run_ansible="default"
   run_terraform="default"
-  mode=l
+  mode=pr
   vars="vars"
 
   shift
@@ -175,6 +175,8 @@ parse_setup() {
         m=${OPTARG}
         if [ "$m" = "l" ] ||  [ "$m" == "light" ]; then
           mode=l
+        elif [ "$m" = "pr" ] ||  [ "$m" == "prerelease" ]; then
+          mode=pr
         elif [ "$m" = "h" ] ||  [ "$m" == "heavy" ]; then
           mode=h
         else
@@ -315,6 +317,9 @@ if [ "$RUN_TERRAFORM" == "h" ]; then
     init_and_apply_terraform
 elif [ "$RUN_TERRAFORM" == "l" ]; then
     cp $PARENT_DIR/terraform/variables.tf.light $PARENT_DIR/terraform/variables.tf
+    init_and_apply_terraform
+elif [ "$RUN_TERRAFORM" == "pr" ]; then
+    cp $PARENT_DIR/terraform/variables.tf.prerelease $PARENT_DIR/terraform/variables.tf
     init_and_apply_terraform
 elif [ "$RUN_TERRAFORM" == "n" ]; then
     echo "Skipping Terraform..."

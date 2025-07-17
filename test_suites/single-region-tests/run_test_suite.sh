@@ -177,7 +177,7 @@ else
 fi
 
 # Ask if terraform should be run
-read -p "Do you want to provision machines? (h)eavy / (l)ight / (n)o ): " RUN_TERRAFORM
+read -p "Do you want to provision machines? (h)eavy / (l)ight / (pr)erelease / (n)o ): " RUN_TERRAFORM
 # Ask if the nodes should be setup.
 read -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
 # Ask if any tests should be run
@@ -202,6 +202,9 @@ if [ "$RUN_TERRAFORM" == "h" ]; then
     init_and_apply_terraform
 elif [ "$RUN_TERRAFORM" == "l" ]; then
     cp $PARENT_DIR/terraform/variables.tf.light $PARENT_DIR/terraform/variables.tf
+    init_and_apply_terraform
+elif [ "$RUN_TERRAFORM" == "pr" ]; then
+    cp $PARENT_DIR/terraform/variables.tf.prerelease $PARENT_DIR/terraform/variables.tf
     init_and_apply_terraform
 elif [ "$RUN_TERRAFORM" == "n" ]; then
     echo "Skipping Terraform..."

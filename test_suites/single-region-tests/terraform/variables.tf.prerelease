@@ -15,12 +15,12 @@ variable "validator_instance_type" {
 
 variable "client_instance_type" {
   description = "Instance type for snarkOS clients"
-  default     = "m7i.2xlarge"
+  default     = "m7i.4xlarge"
 }
 
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 5 # minimum 5 for prerelease tests
+  default     = 40 # minimum 5 for prerelease tests
 }
 
 variable "client_instance_count" {
@@ -45,6 +45,41 @@ locals {
     { type = var.client_instance_type, count = var.client_instance_count, validator = 2 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 3 },
     { type = var.client_instance_type, count = var.client_instance_count, validator = 4 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 5 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 6 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 7 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 8 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 9 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 10 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 11 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 12 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 13 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 14 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 15 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 16 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 17 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 18 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 19 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 20 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 21 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 22 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 23 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 24 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 25 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 26 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 27 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 28 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 29 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 30 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 31 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 32 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 33 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 34 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 35 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 36 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 37 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 38 },
+    { type = var.client_instance_type, count = var.client_instance_count, validator = 39 },
   ]
 
   snarkos_clients = flatten([
