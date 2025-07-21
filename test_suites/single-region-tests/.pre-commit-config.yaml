@@ -1,4 +1,7 @@
 ---
+default_language_version:
+  python: python3.11
+
 repos:
 - repo: https://github.com/ansible/ansible-lint.git
   rev: v25.1.3
