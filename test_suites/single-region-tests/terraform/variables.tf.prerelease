@@ -5,7 +5,7 @@ variable "owner" {
 
 variable "devnet_name" {
   description = "Unique name for this devnet deployment"
-  default     = "single-region-tests"
+  default     = "prerelease-devnet"
 }
 
 variable "validator_instance_type" {

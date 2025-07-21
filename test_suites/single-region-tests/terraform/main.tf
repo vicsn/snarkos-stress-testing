@@ -189,3 +189,8 @@ output "snarkos_network" {
   value = local.snarkos_network
   description = "The snarkos network name"
 }
+
+output "devnet_name" {
+  value = var.devnet_name
+  description = "The devnet_name name"
+}

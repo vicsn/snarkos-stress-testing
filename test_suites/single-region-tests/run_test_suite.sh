@@ -10,8 +10,9 @@ normal=$(tput sgr0)
 
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
-export TF_RELEASE_BUCKET=$RELEASE_BUCKET
+export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 export OWNER=$USER
+export TF_VAR_devnet_name="${DEVNET_NAME:-single-region-tests}"
 
 echo "About to run setup/tests for user $OWNER"
 
@@ -74,6 +75,10 @@ cleanup() {
 
 set_network_vars() {
   export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+  export DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+
+  echo "devnet_name : $DEVNET_NAME"
+
   case "$NETWORK" in
     mainnet)
       export NETWORK_INT=0
@@ -111,7 +116,7 @@ init_and_apply_terraform() {
 
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook ips.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook ips.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
 
     # Tell it like it is
     if [ "$(uname)" == "Darwin" ]; then
@@ -134,7 +139,7 @@ run_test() {
 
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_test.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook run_test.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@vars.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
@@ -221,7 +226,7 @@ if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
     set_network_vars || exit 1
 
-    ansible-playbook setup.yml --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook setup.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
     if [ "$(uname)" == "Darwin" ]; then
         say "Finished running setup"
     fi

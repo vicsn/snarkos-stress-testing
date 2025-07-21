@@ -1,6 +1,3 @@
-# Devnet name uniquely identifies logs and metrics:
-devnet_name: "single-region-tests"
-
 # Observability keys received from Infra team.
 cloud_id: "your_elastic_cloud_id_here"
 elastic_api_key: "your_elastic_api_key_here"
@@ -14,7 +11,7 @@ create_flamegraph: false
 flamegraph_node_id: "0" # Validator node ID to generate flamegraph for
 
 # For local build: (leave commented out if using another installation method)
-snarkos_git_commit_local_build: "5f58ab1abfdfcdb00876766dccb57af6633982d9"
+snarkos_git_commit_local_build: "66a4dfbefd5d2a7aa75a62dbe3e98f09d262ea92"
 snarkos_repo: "git@github.com:ProvableHQ/snarkOS-staging.git" # note the URL format
 envs: "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
 features: "test_network" # WARNING: if you turn off test_network, tx-cannon may not use the correct consensus versions.

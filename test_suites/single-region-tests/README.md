@@ -37,6 +37,10 @@ Authentication happens via Google SSO:
 
 ## Running your devnet
 
+The devnet name can be set via the `DEVNET_NAME` env variable (for example `DEVNET_NAME="my_net" ./run_test_suite.sh`).
+By default for local test runs it is `single-region-tests` and for automatic pre-release tests it is `prerelease-devnet`.
+Alternatively the TF var `devnet_name` can be eddited to change it too.
+
 `./run_test_suite.sh` will allow you to choose infra to set up and tests to run.
 
 `./auto_run_test_suite.sh` is used mainly for atuomatically running the tests, but also can be ran manually. Examples:

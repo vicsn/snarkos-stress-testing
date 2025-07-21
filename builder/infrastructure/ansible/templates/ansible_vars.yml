@@ -1,6 +1,3 @@
-# Devnet name uniquely identifies logs and metrics:
-devnet_name: "single-region-tests"
-
 # Observability keys received from Infra team.
 cloud_id: "{{ elastic_cloud_id }}"
 elastic_api_key: "{{ elastic_api_key }}"

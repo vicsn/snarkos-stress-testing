@@ -1,6 +1,9 @@
 - name: Print ips
   hosts: localhost
   tasks:
+    - name: Print groups var
+      debug:
+        var: groups
     - name: store client ips
       copy:
         content: "{{ groups['snarkos_client'] | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"

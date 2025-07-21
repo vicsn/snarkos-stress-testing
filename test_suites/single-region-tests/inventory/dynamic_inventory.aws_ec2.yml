@@ -21,7 +21,7 @@ keyed_groups:
 
 filters:
   instance-state-name: running
-  "tag:Devnet": "single-region-tests"
+  "tag:Devnet": "{{ lookup('env', 'DEVNET_NAME') }}"
   "tag:Owner": "{{ lookup('env', 'USER') }}"
   "tag:Role":
     - "snarkos-validator"
