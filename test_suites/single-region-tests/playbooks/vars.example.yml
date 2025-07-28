@@ -60,9 +60,6 @@ txcannon_features: "test_network"
 snarkos_verbosity: "1"
 rest_rps: 1000000000
 
-# Custom scripts
-patch_script_path: "{{ playbook_dir }}/../scripts/patch_snarkvm.sh"
-
 # Ansible vars
 # ansible_python_interpreter: /usr/bin/python3.10
 

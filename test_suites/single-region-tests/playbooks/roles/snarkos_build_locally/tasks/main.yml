@@ -139,13 +139,6 @@
             else "--features {{ features }}"
           }}
 
-    - name: Download and modify snarkvm consensus versions
-      shell: "{{ patch_script_path }} {{ snarkos_network }}"
-      args:
-        executable: /bin/bash
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
-      when: not s3_binary_exists
-
     - name: Check if the folders are too old (including the cache)
       ansible.builtin.find:
         paths: "{{ clone_dir_base }}"
@@ -178,6 +171,12 @@
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
       when: not s3_binary_exists and features is defined and 'locktick' in features and ansible_system != 'Darwin'
 
+    - name: Read CONSENSUS_VERSION_HEIGHTS env var (if set)
+      set_fact:
+        consensus_version_heights_env: "{{ lookup('env', 'CONSENSUS_VERSION_HEIGHTS') | default('', true) }}"
+      when:
+        - not s3_binary_exists
+
     - name: Build the Rust project with OpenSSL (macOS)
       command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }}
       args:
@@ -190,7 +189,12 @@
             'OPENSSL_STATIC': '1',
             'CARGO_TARGET_DIR': '../shared',
             'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER': 'x86_64-unknown-linux-gnu-gcc'
-          } | combine(envs_dict | default({}))
+          }
+          | combine(
+              consensus_version_heights_env is defined and (consensus_version_heights_env | length > 0)
+              | ternary({'CONSENSUS_VERSION_HEIGHTS': consensus_version_heights_env}, {})
+          )
+          | combine(envs_dict | default({}))
         }}
       register: build_output_mac
       when:
@@ -202,8 +206,17 @@
       args:
         chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
         executable: /bin/bash
-      environment:
-        CARGO_TARGET_DIR: "../shared"
+      environment: >-
+        {{
+          {
+            'CARGO_TARGET_DIR': '../shared'
+          }
+          | combine(
+              consensus_version_heights_env is defined and (consensus_version_heights_env | length > 0)
+              | ternary({'CONSENSUS_VERSION_HEIGHTS': consensus_version_heights_env}, {})
+          )
+          | combine(envs_dict | default({}))
+        }}
       register: build_output
       when:
         - not s3_binary_exists

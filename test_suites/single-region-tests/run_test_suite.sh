@@ -22,7 +22,6 @@ TEST_RUNNER="${STRESS_TEST_RUNNER:-$USER}"
 DATE_OF_RUN=$(date -u '+%Y%m%dT%H%M%SZ')
 BASE_BUCKET_PATH="manual_test_runs/$USER/$DATE_OF_RUN"
 
-
 download_and_upload_logs() {
   echo "Downloading test logs..."
 

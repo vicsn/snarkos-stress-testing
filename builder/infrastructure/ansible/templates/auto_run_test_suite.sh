@@ -62,6 +62,10 @@ set_network_vars() {
   export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
   export DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
 
+  # Seems that on Ubuntu 22 we have problems with the lookup, so we inject the value here.
+  # On MacOS it works without this, so only in the auto-script:
+  sed -i "s|{{ lookup('env', 'DEVNET_NAME') }}|$DEVNET_NAME|" $PARENT_DIR/inventory/dynamic_inventory.aws_ec2.yml
+
   case "$NETWORK" in
     mainnet)
       export NETWORK_INT=0
