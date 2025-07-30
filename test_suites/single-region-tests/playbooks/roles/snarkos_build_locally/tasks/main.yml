@@ -52,14 +52,14 @@
     - name: Clone the repository if the binary is not found in S3
       git:
         repo: "{{ effective_snarkos_repo }}"
-        dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
+        dest: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
         version: "{{ snarkos_git_commit_to_build }}"
         depth: 1
         force: true
       when: not s3_binary_exists
 
     - name: Override Rust version (macOS only)
-      shell: cd {{ clone_dir_base }}/{{ snarkos_git_commit_to_build }} && rustup override set nightly-aarch64-apple-darwin
+      shell: cd {{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }} && rustup override set nightly-aarch64-apple-darwin
       when:
         - not s3_binary_exists
         - ansible_system == 'Darwin'
@@ -69,34 +69,38 @@
         path: "{{ openssl_install_prefix }}"
       register: openssl_stat
 
+    - name: Print the openssl_stat
+      debug:
+        var: openssl_stat
+
     - name: Create tmp directory for building OpenSSL
       file:
-        path: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
+        path: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
         state: directory
         mode: '0755'
       when:
         - not s3_binary_exists
         - ansible_system == 'Darwin'
-        - not openssl_stat.stat.isdir
+        - not openssl_stat.stat.exists
 
     - name: Download OpenSSL tarball
       get_url:
         url: "{{ openssl_url }}"
-        dest: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_tarball }}"
+        dest: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_tarball }}"
         mode: '0755'
       when:
         - not s3_binary_exists
         - ansible_system == 'Darwin'
-        - not openssl_stat.stat.isdir
+        - not openssl_stat.stat.exists
 
     - name: Extract OpenSSL tarball using tar command
       command: tar -xzf "{{ openssl_tarball }}"
       args:
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
+        chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
       when:
         - not s3_binary_exists
         - ansible_system == 'Darwin'
-        - not openssl_stat.stat.isdir
+        - not openssl_stat.stat.exists
 
     - name: Configure OpenSSL
       command: >
@@ -104,32 +108,32 @@
         --prefix={{ openssl_install_prefix }}
         --openssldir={{ openssl_install_prefix }}
       args:
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
+        chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
       environment:
         CROSS_COMPILE: "x86_64-unknown-linux-gnu-"
         CFLAGS: "-fPIC -fPIE -pie"
       when:
         - not s3_binary_exists
         - ansible_system == 'Darwin'
-        - not openssl_stat.stat.isdir
+        - not openssl_stat.stat.exists
 
     - name: Build OpenSSL with make -j12
       command: make -j12
       args:
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
+        chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
       when:
         - not s3_binary_exists
         - ansible_system == 'Darwin'
-        - not openssl_stat.stat.isdir
+        - not openssl_stat.stat.exists
 
     - name: Install OpenSSL
       command: make install
       args:
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
+        chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
       when:
         - not s3_binary_exists
         - ansible_system == 'Darwin'
-        - not openssl_stat.stat.isdir
+        - not openssl_stat.stat.exists
 
     - name: Set features flag
       set_fact:
@@ -141,7 +145,7 @@
 
     - name: Check if the folders are too old (including the cache)
       ansible.builtin.find:
-        paths: "{{ clone_dir_base }}"
+        paths: "{{ base_workspace_folder }}/{{ clone_dir_base }}"
         age: 30d
         age_stamp: mtime
         file_type: directory
@@ -155,7 +159,7 @@
 
     - name: Ensure the shared target directory exists
       ansible.builtin.file:
-        path: "{{ clone_dir_base }}/shared"
+        path: "{{ base_workspace_folder }}/{{ clone_dir_base }}/shared"
         state: directory
         mode: '0755'
 
@@ -168,7 +172,7 @@
         mv "$tmp" Cargo.toml
       args:
         executable: /bin/bash
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
+        chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
       when: not s3_binary_exists and features is defined and 'locktick' in features and ansible_system != 'Darwin'
 
     - name: Read CONSENSUS_VERSION_HEIGHTS env var (if set)
@@ -178,9 +182,9 @@
         - not s3_binary_exists
 
     - name: Build the Rust project with OpenSSL (macOS)
-      command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }}
+      command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }} --config rustflags=\"\"
       args:
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
+        chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
       environment: >-
         {{
           {
@@ -204,7 +208,7 @@
     - name: Build the Rust project (Linux)
       shell: source "$HOME/.cargo/env" && cargo build --release {{ featureflags }}
       args:
-        chdir: "{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
+        chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
         executable: /bin/bash
       environment: >-
         {{
@@ -234,7 +238,7 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ releasename | trim }}"
-        src: "{{ clone_dir_base }}/shared/x86_64-unknown-linux-gnu/release/snarkos"
+        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/shared/x86_64-unknown-linux-gnu/release/snarkos"
         mode: put
         profile: "{{ s3_profile }}"
       when:
@@ -246,7 +250,7 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ releasename | trim }}"
-        src: "{{ clone_dir_base }}/shared/release/snarkos"
+        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/shared/release/snarkos"
         mode: put
         profile: "{{ s3_profile }}"
       when:

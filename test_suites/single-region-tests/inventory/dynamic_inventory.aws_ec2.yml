@@ -12,6 +12,10 @@ keyed_groups:
     prefix: ""
     separator: ""
     value: "tx-cannon-node"
+  - key: tags.Role
+    prefix: ""
+    separator: ""
+    value: "tx-sender-node"
   - key: tags.Name
     prefix: ""
     separator: ""
@@ -28,6 +32,7 @@ filters:
     - "prometheus-server"
     - "snarkos-client"
     - "tx-cannon-node"
+    - "tx-sender-node"
 
 compose:
   ansible_host: public_ip_address

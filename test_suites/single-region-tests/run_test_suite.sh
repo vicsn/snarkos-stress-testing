@@ -69,11 +69,25 @@ download_and_upload_logs() {
 
 # Function to clean up resources using Terraform
 cleanup() {
+    cd "$SCRIPT_DIR/.."
     source "$SCRIPT_DIR/destroy_infra.sh"
 }
 
 set_network_vars() {
   export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+
+  if [[ -z "${NETWORK}" || "$NETWORK" == *"No outputs found"* ]]; then
+    echo "Output 'snarkos_network' not found. Applying noop target to generate it..."
+
+    cp $PARENT_DIR/terraform/variables.tf.light $PARENT_DIR/terraform/variables.tf
+
+    cd "$PARENT_DIR/terraform"
+    terraform init > /dev/null
+    terraform apply -target=null_resource.noop -var="owner=$OWNER" -auto-approve > /dev/null
+    export NETWORK=$(TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+    cd $PARENT_DIR
+  fi
+
   export DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
 
   echo "devnet_name : $DEVNET_NAME"
@@ -138,7 +152,14 @@ run_test() {
 
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_test.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars="test_name=$SELECTED" --extra-vars="test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook run_test.yml \
+      --extra-vars="devnet_name=${DEVNET_NAME}" \
+      --extra-vars="snarkos_network=${NETWORK}" \
+      --extra-vars="snarkos_network_int=${NETWORK_INT}" \
+      --extra-vars="test_name=$SELECTED" \
+      --extra-vars="test_network_url=${LB_URL}" \
+      --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
+      --extra-vars="@vars.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
@@ -225,7 +246,14 @@ if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
     set_network_vars || exit 1
 
-    ansible-playbook setup.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook setup.yml \
+      --extra-vars="devnet_name=${DEVNET_NAME}" \
+      --extra-vars="snarkos_network=${NETWORK}" \
+      --extra-vars="snarkos_network_int=${NETWORK_INT}" \
+      --extra-vars "test_network_url=${LB_URL}" \
+      --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
+      --extra-vars="@vars.yml"
+
     if [ "$(uname)" == "Darwin" ]; then
         say "Finished running setup"
     fi

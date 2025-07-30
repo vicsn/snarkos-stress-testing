@@ -49,6 +49,7 @@
           - libclang-dev
           - llvm-dev
           - pkg-config
+          - lld
           - cmake
 
     - name: Ensure Python boto3 is installed

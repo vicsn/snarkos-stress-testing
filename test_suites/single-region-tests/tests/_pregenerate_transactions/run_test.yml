@@ -1,0 +1,202 @@
+- name: Gather information about the network and configuration
+  hosts: localhost
+  gather_facts: false
+  remote_user: ubuntu
+  tasks:
+    - name: Fail early if 'test_network' is not in features
+      fail:
+        msg: "This playbook requires 'test_network' feature to be enabled."
+      when: "'test_network' not in (features | default('') | split(','))"
+
+    - name: Assert required variables are set
+      assert:
+        that:
+          - txs_target_consensus_version_height is defined
+          - txs_target_state_root is defined
+          - pregeneration_tx_count is defined
+          - pregeneration_bucket_path is defined
+          - pregeneration_tx_batch_size is defined
+        fail_msg: >
+          This playbook requires the following variables to be set:
+          txs_target_consensus_version_height, txs_target_state_root, pregeneration_tx_count, pregeneration_bucket_path, pregeneration_tx_batch_size
+
+- name: Select installation method and build if needed
+  hosts: localhost
+  gather_facts: true
+  any_errors_fatal: true
+  roles:
+    - check_and_setup_snarkos
+    #- role: snarkos_service
+    #  num_instances: "{{ groups['snarkos_validator'] | length }}"
+    #  validator_index: 0
+    #  validator_ip_address: "{{ hostvars[groups['snarkos_validator'][validator_index | int]]['public_ip_address'] }}"
+    #  own_ip_address: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+    #  client_ip_addresses: >-
+    #    {{
+    #      groups['snarkos_client']
+    #      | map('extract', hostvars)
+    #      | map(attribute='public_ip_address')
+    #      | select('ne', own_ip_address)
+    #      | map('regex_replace', '$', ':4130')
+    #      | join(',')
+    #    }}
+    #  node_id: "{{ (num_instances | int) + 100*(validator_index | int) + 10000*(tags['Dev'] | int) }}"
+    #  snarkos_command: >-
+    #    snarkos start --client --nocdn --nodisplay --rest 0.0.0.0:3030 --bft 0.0.0.0:5000 --node 0.0.0.0:4130 \
+    #      --verbosity {{ snarkos_verbosity }} --metrics --peers {{ validator_ip_address }}:4130,{{ client_ip_addresses }} \
+    #      --dev {{ node_id }} --dev-num-validators {{ num_instances }} --rest-rps {{ rest_rps }} \
+    #      --network {{ snarkos_network_int }}
+
+- name: Install and Configure snarkos on all tx-sender nodes
+  hosts: tx_sender_node
+  become: true
+  remote_user: ubuntu
+  vars:
+    snarkos_install_s3_release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
+    snarkos_install_s3_dest_name: "snarkos"
+  roles:
+    - snarkos_install_s3
+  tags: tx-sender
+
+#- name: Check if the tx_sender_node is available
+#  hosts: tx_sender_node
+#  become: true
+#  remote_user: ubuntu
+#  any_errors_fatal: true
+#  tasks:
+#    - name: Fetch the current block height
+#      ansible.builtin.uri:
+#        url: "http://localhost:3030/{{ snarkos_network }}/block/latest"
+#        method: GET
+#        return_content: true
+#      register: current_block
+#      until: current_block.json is defined
+#      retries: 10
+#      delay: 10
+
+- name: Pregenerate a transfer transactions
+  hosts: tx_sender_node
+  become: true
+  remote_user: ubuntu
+  become_user: ubuntu
+  tasks:
+    - name: Set standard release name as fact
+      set_fact:
+        release_name: "{{ hostvars['localhost'].standard_release_name }}"
+
+    - name: Read pregenerate_transactions_num_validators var (if set)
+      set_fact:
+        num_validators_value: "{{ pregenerate_transactions_num_validators | default('', true) }}"
+
+    - name: Ask the user if env var is not set
+      pause:
+        prompt: "How many validators do you expect in the target network?"
+      register: num_validators
+      when: num_validators_value == ""
+
+    - name: Set unified num_validators_fact from pause or env
+      set_fact:
+        num_validators_fact: "{{ (num_validators.user_input | default(num_validators_value)) | trim }}"
+
+    - name: Fail if input is not a number
+      fail:
+        msg: "The number of validators must be an integer, but got '{{ num_validators_fact }}'"
+      when: not (num_validators_fact is match('^[0-9]+$'))
+
+    - name: Set unified num_validators_fact from pause or env
+      set_fact:
+        transactions_file_id_prefix: "{{ snarkos_network }}-{{ num_validators_fact }}val"
+
+    - name: List existing pregenerated transaction zips for this network + validator count
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        mode: list
+        prefix: "{{ pregeneration_bucket_path }}/executions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_tx_count }}"
+      register: s3_zip_list
+      failed_when: false
+
+    - name: Reset zip list
+      set_fact:
+        matched_zip_files: []
+
+    - name: Collect .zip files
+      set_fact:
+        matched_zip_files: "{{ matched_zip_files + [item] }}"
+      loop: "{{ s3_zip_list.s3_keys }}"
+      when: item is search('\\.zip$')
+
+    - name: Set first matched zip (if any)
+      set_fact:
+        matched_zip_file: "{{ matched_zip_files[0] }}"
+      when: matched_zip_files | length > 0
+
+    - name: Found existing pregenerated zip(s) on S3
+      debug:
+        msg: |
+          Found existing pregenerated zip(s) on S3: {{ matched_zip_file }};
+
+          Current release name : {{ release_name }},
+          Number of transactions to pre-generate : {{ pregeneration_tx_count }}.
+      when: matched_zip_file is defined
+
+    - name: Found existing pregenerated zip on S3, do you want to overwrite it (yes/no)?
+      pause:
+        prompt: >-
+          Do you want to overwrite? (yes/no)
+      register: overwrite_prompt
+      when: matched_zip_file is defined
+
+    - name: Abort if user said no
+      fail:
+        msg: "User declined to overwrite {{ matched_zip_file }}. Aborting."
+      when:
+        - matched_zip_file is defined
+        - overwrite_prompt.user_input | lower != 'yes'
+
+    - name: Set snarkOS binary path based on installation method
+      set_fact:
+        snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
+
+    - name: Batch transaction indices into chunks
+      set_fact:
+        tx_batches: "{{ range(0, pregeneration_tx_count | int) | list | batch(pregeneration_tx_batch_size) }}"
+
+    - name: Generate and wait per batch
+      # noqa jinja[invalid]
+      include_tasks: generate_batch.yml
+      loop: "{{ tx_batches }}"
+      loop_control:
+        loop_var: batch
+        label: "batch {{ batch | join(', ') }}"
+      vars:
+        batch: "{{ batch }}"
+
+    - name: Rename generated transaction files
+      ansible.builtin.shell: |
+        mv /tmp/transfer_public_tx{{ item }}.txt /tmp/executions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-{{ item }}.txt
+      args:
+        executable: /bin/bash
+      loop: "{{ range(0, pregeneration_tx_count | int) | list }}"
+
+    - name: Zip all renamed transaction files
+      ansible.builtin.shell: |
+        cd /tmp && zip -q {{ zip_name }} executions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-*.txt
+      args:
+        executable: /bin/bash
+      vars:
+        zip_name: "executions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_tx_count }}.zip"
+
+    - name: Upload zipped transactions to S3
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        object: "{{ pregeneration_bucket_path }}/{{ zip_name }}"
+        src: "/tmp/{{ zip_name }}"
+        mode: put
+      vars:
+        zip_name: "executions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_tx_count }}.zip"
+
+    - name: Fetch pregeneration log
+      fetch:
+        src: "/home/ubuntu/transaction_pregeneration.log"
+        dest: "{{ base_workspace_folder }}/../log_files/transactions-pregeneration-{{ transactions_file_id_prefix }}.log"
+        flat: true

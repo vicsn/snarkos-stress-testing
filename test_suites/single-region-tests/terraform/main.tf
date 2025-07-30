@@ -8,6 +8,8 @@ terraform {
   }
 }
 
+resource "null_resource" "noop" {}
+
 # ------------------------------------------------
 # Generated key to be used for ssh access to the nodes
 
@@ -188,9 +190,11 @@ resource "aws_instance" "prometheus_server" {
 output "snarkos_network" {
   value = local.snarkos_network
   description = "The snarkos network name"
+  depends_on  = [null_resource.noop]
 }
 
 output "devnet_name" {
   value = var.devnet_name
   description = "The devnet_name name"
+  depends_on  = [null_resource.noop]
 }
