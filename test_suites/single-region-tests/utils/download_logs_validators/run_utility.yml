@@ -13,14 +13,6 @@
         dest: "/tmp/snarkos.log.gz"
         mode: "0644"
 
-    # - name: Determine how big the zipped file is.
-    #   command: du -sh /tmp/snarkos.log.gz
-    #   register: du_output
-
-    # - name: "Check logs size"
-    #   debug:
-    #     var: du_output
-
     - name: Fetch logs
       fetch:
         src: "/tmp/snarkos.log.gz"

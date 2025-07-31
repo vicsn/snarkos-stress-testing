@@ -36,12 +36,12 @@ download_and_upload_logs() {
   rm -rf $PARENT_DIR/log_files
 
   # Download client logs:
-  export SELECTED=_download_logs_clients
-  run_test
+  export SELECTED=download_logs_clients
+  run_utility
 
   # Download validator logs:
-  export SELECTED=_download_logs_validators
-  run_test
+  export SELECTED=download_logs_validators
+  run_utility
 
   echo "Uploading test logs to S3..."
 
@@ -180,6 +180,49 @@ run_test() {
     fi
 }
 
+run_utility() {
+    echo "${bold}$(date +"%T") - Running utility: $SELECTED${normal}"
+
+    # Run any pre-utility script
+    if [ -x "$PARENT_DIR/utils/$SELECTED/pre-utility.sh" ]; then
+        echo "Running pre-utility script..."
+        cd "$PARENT_DIR/utils/$SELECTED/"
+        "./pre-utility.sh"
+    fi
+
+    (cd "$PARENT_DIR/terraform" && terraform init -input=false)
+    set_network_vars || exit 1
+
+    # Run the utility
+    cd "$PARENT_DIR/playbooks"
+    ansible-playbook run_utility.yml \
+      --extra-vars="devnet_name=${DEVNET_NAME}" \
+      --extra-vars="snarkos_network=${NETWORK}" \
+      --extra-vars="snarkos_network_int=${NETWORK_INT}" \
+      --extra-vars="utility_name=$SELECTED" \
+      --extra-vars="test_network_url=${LB_URL}" \
+      --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
+      --extra-vars="@vars.yml"
+
+    # Run a check script if available
+    if [ -x "$PARENT_DIR/utils/$SELECTED/check.sh" ]; then
+        cd "$PARENT_DIR/utils/$SELECTED/"
+        ./check.sh $NETWORK
+    fi
+
+    # Run any post-utility script
+    if [ -x "$PARENT_DIR/utils/$SELECTED/post-utility.sh" ]; then
+        echo "Running post-utility script..."
+        cd "$PARENT_DIR/utils/$SELECTED/"
+        "./post-utility.sh"
+    fi
+
+    # Tell it like it is
+    if [ "$(uname)" == "Darwin" ]; then
+        say "Finished running utility $SELECTED"
+    fi
+}
+
 # Set up trap to call cleanup function on any error
 trap cleanup ERR
 
@@ -207,13 +250,15 @@ read -p "Do you want to provision machines? (h)eavy / (l)ight / (pr)erelease / (
 read -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
 # Ask if any tests should be run
 read -p "Do you want to select a test to run? (y/n): " RUN_TESTS
-
-# Ask if results and logs should be uploaded:
-read -p "Do you want to upload the test results and logs to S3? (y/n): " UPLOAD_LOGS
+# Ask if any tests should be run
+read -p "Do you want to select a utility to run? (y/n): " RUN_UTILITIES
 
 # Find and list all tests
 TESTS=($(find tests -maxdepth 1 -mindepth 1 -type d | while read f; do basename "$f"; done | sort))
 export TESTS
+
+UTILITIES=($(find utils -maxdepth 1 -mindepth 1 -type d | while read f; do basename "$f"; done | sort))
+export UTILITIES
 
 # Optionally select test to run
 if [ "$RUN_TESTS" == "y" ]; then
@@ -296,12 +341,27 @@ if [ "$RUN_TESTS" == "y" ]; then
     fi
 fi
 
-# Final catch-all log upload
-if [ "$UPLOAD_LOGS" == "y" ]; then
-    mkdir "$PARENT_DIR/log_files" || true
+# Optionally select test to run
+if [ "$RUN_UTILITIES" == "y" ]; then
+    # first select the test to run
+    source $PARENT_DIR/select_utility.sh
+fi
 
-    echo "Uploading logs (final pass)..."
-    download_and_upload_logs
+# Optionally run utilities
+if [ "$RUN_UTILITIES" == "y" ]; then
+    if [ "$SELECTED" == "upload_logs_to_s3" ]; then
+        mkdir "$PARENT_DIR/log_files" || true
+
+        echo "Uploading logs (final pass)..."
+
+        download_and_upload_logs
+
+        if [ "$(uname)" == "Darwin" ]; then
+            say "Finished running utility upload logs to s3"
+        fi
+    else
+        run_utility | tee -a "$PARENT_DIR/observability_runner.log"
+    fi
 fi
 
 # Wait for user input before destroying the infrastructure

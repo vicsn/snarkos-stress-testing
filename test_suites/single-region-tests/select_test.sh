@@ -26,17 +26,6 @@ function select_test() {
     ((index++))
   done
 
-  echo "" >&2
-  echo "Select utility to run:" >&2
-
-  for test in "${TESTS[@]}"; do
-    [[ "$test" == _* ]] || continue
-
-    echo "${index}) ${test}" >&2
-    MAPPED_TESTS+=("$test")
-    ((index++))
-  done
-
   NUM_OPTIONS=$((index - 1))
 
   # Prompt and validate

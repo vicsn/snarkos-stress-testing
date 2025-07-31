@@ -29,12 +29,12 @@ cleanup_on_error() {
   echo "ERR (rc: $rc)"
 
   # Download client logs:
-  export SELECTED=_download_logs_clients
-  run_test
+  export SELECTED=download_logs_clients
+  run_utility
 
   # Download validator logs:
-  export SELECTED=_download_logs_validators
-  run_test
+  export SELECTED=download_logs_validators
+  run_utility
 
   echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
   cleanup
@@ -134,6 +134,49 @@ run_test() {
         echo "Running post-test script..."
         cd "$PARENT_DIR/tests/$SELECTED/"
         "./post-test.sh"
+    fi
+}
+
+run_utility() {
+    echo "${bold}$(date +"%T") - Running utility: $SELECTED${normal}"
+
+    # Run any pre-utility script
+    if [ -x "$PARENT_DIR/utils/$SELECTED/pre-utility.sh" ]; then
+        echo "Running pre-utility script..."
+        cd "$PARENT_DIR/utils/$SELECTED/"
+        "./pre-utility.sh"
+    fi
+
+    (cd "$PARENT_DIR/terraform" && terraform init -input=false)
+    set_network_vars || exit 1
+
+    # Run the utility
+    cd "$PARENT_DIR/playbooks"
+    ansible-playbook run_utility.yml \
+      --extra-vars="devnet_name=${DEVNET_NAME}" \
+      --extra-vars="snarkos_network=${NETWORK}" \
+      --extra-vars="snarkos_network_int=${NETWORK_INT}" \
+      --extra-vars="utility_name=$SELECTED" \
+      --extra-vars="test_network_url=${LB_URL}" \
+      --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
+      --extra-vars="@vars.yml"
+
+    # Run a check script if available
+    if [ -x "$PARENT_DIR/utils/$SELECTED/check.sh" ]; then
+        cd "$PARENT_DIR/utils/$SELECTED/"
+        ./check.sh $NETWORK
+    fi
+
+    # Run any post-utility script
+    if [ -x "$PARENT_DIR/utils/$SELECTED/post-utility.sh" ]; then
+        echo "Running post-utility script..."
+        cd "$PARENT_DIR/utils/$SELECTED/"
+        "./post-utility.sh"
+    fi
+
+    # Tell it like it is
+    if [ "$(uname)" == "Darwin" ]; then
+        say "Finished running utility $SELECTED"
     fi
 }
 
@@ -363,14 +406,14 @@ if [ "$RUN_TESTS" == "y" ]; then
 
       # Download client logs:
       export SELECTED=_download_logs_clients
-      run_test
+      run_utility
 
       # Download validator logs:
       export SELECTED=_download_logs_validators
-      run_test
+      run_utility
 
       # Download prometheus snapshot:
       # export SELECTED=_download_prometheus_snapshot
-      # run_test
+      # run_utility
   done
 fi
