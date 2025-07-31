@@ -11,7 +11,7 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu
 SyslogIdentifier=talisker
 Environment="MIX_ENV=prod"
-Environment="ARDBEG_SECRET={{ ARDBEG_SECRET }}"
+Environment="DEVNET_NAME=prerelease-devnet"
 Environment="GITHUB_USER_TOKEN={{ github_token }}"
 Environment="RELEASES_FOR_TESTING_BUCKET={{ releases_bucket }}"
 Environment="TEST_RESULTS_AND_LOGS_BUCKET={{ results_bucket }}"
