@@ -64,7 +64,9 @@ set_network_vars() {
 
   # Seems that on Ubuntu 22 we have problems with the lookup, so we inject the value here.
   # On MacOS it works without this, so only in the auto-script:
+  {% raw %}
   sed -i "s|{{ lookup('env', 'DEVNET_NAME') }}|$DEVNET_NAME|" $PARENT_DIR/inventory/dynamic_inventory.aws_ec2.yml
+  {% endraw %}
 
   case "$NETWORK" in
     mainnet)
