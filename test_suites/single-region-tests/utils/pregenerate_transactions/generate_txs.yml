@@ -11,9 +11,9 @@
     echo "Generating transaction {{ index }} of {{ pregeneration_tx_count }}"
 
     {{ snarkos_bin_path }}/snarkos developer execute \
-      --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH \
+      --private-key {{ txs_accounts[0].private_key }} \
       --query '{"state_root": "{{ txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
-      credits.aleo transfer_public aleo1rhgdu77hgyqd3xjj8ucu3jj9r2krwz6mnzyd80gncr5fxcwlh5rsvzp9px 1000u64 \
+      credits.aleo transfer_public {{ txs_accounts[1].address }} 1000u64 \
       --network {{ snarkos_network_int }} \
       --store /tmp/transfer_public_tx{{ index }}.txt \
       --store-format string >> transaction_pregeneration.log

@@ -48,6 +48,10 @@
       debug:
         var: malicious_ip
 
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
     - name: Write log message before running tx-cannon
       become: true
       become_user: ubuntu
@@ -62,7 +66,7 @@
       shell: |
         cd /home/ubuntu
         /usr/bin/tx-cannon malice --double-spend --endpoint http://{{ malicious_ip }}:3030 \
-        --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon.log 2>&1
+        --private-key {{ txs_accounts[0].private_key }} -r 90001 >> tx-cannon.log 2>&1
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run
@@ -82,7 +86,7 @@
       shell: |
         cd /home/ubuntu
         /usr/bin/tx-cannon malice --double-spend --endpoint http://{{ test_network_url }}:3030 \
-        --private-key APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH -r 90001 >> tx-cannon2.log 2>&1
+        --private-key {{ txs_accounts[0].private_key }} -r 90001 >> tx-cannon2.log 2>&1
       args:
         executable: /bin/bash
       async: 3600  # Adjust based on expected duration of the tx-cannon run

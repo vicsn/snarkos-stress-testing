@@ -3,6 +3,10 @@
   gather_facts: false
   remote_user: ubuntu
   tasks:
+    - name: Confirm validator data loaded
+      debug:
+        msg: "{{ validator_data.accounts }}"
+
     - name: Fail early if 'test_network' is not in features
       fail:
         msg: "This playbook requires 'test_network' feature to be enabled."
@@ -12,13 +16,12 @@
       assert:
         that:
           - txs_target_consensus_version_height is defined
-          - txs_target_state_root is defined
           - pregeneration_tx_count is defined
           - pregeneration_bucket_path is defined
           - pregeneration_tx_batch_size is defined
         fail_msg: >
           This playbook requires the following variables to be set:
-          txs_target_consensus_version_height, txs_target_state_root, pregeneration_tx_count, pregeneration_bucket_path, pregeneration_tx_batch_size
+          txs_target_consensus_version_height, pregeneration_tx_count, pregeneration_bucket_path, pregeneration_tx_batch_size
 
 - name: Select installation method and build if needed
   hosts: localhost
@@ -156,6 +159,14 @@
     - name: Set snarkOS binary path based on installation method
       set_fact:
         snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
+
+    - name: Set txs_target_state_root based on num_validators_fact
+      set_fact:
+        txs_target_state_root: "{{ hostvars['localhost'].validator_data.state_roots[num_validators_fact | string] }}"
+
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
 
     - name: Batch transaction indices into chunks
       set_fact:

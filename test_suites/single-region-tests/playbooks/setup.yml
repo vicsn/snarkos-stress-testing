@@ -1,3 +1,10 @@
+- name: Load validator data
+  hosts: localhost
+  tasks:
+    - name: Load validator data from JSON
+      set_fact:
+        validator_data: "{{ lookup('file', playbook_dir + '/../validator_data/data.json') | from_json }}"
+
 - name: Wait for SSH to become available
   hosts: all
   remote_user: ubuntu

@@ -1,2 +1,8 @@
 - name: Run Utility
-  import_playbook: ../utils/{{ utility_name }}/run_utility.yml
+  hosts: localhost
+  tasks:
+    - name: Load validator data from JSON
+      set_fact:
+        validator_data: "{{ lookup('file', playbook_dir + '/../validator_data/data.json') | from_json }}"
+
+- import_playbook: ../utils/{{ utility_name }}/run_utility.yml

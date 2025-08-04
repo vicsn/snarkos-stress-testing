@@ -62,10 +62,6 @@ rest_rps: 1000000000
 
 # TX pre-generation variables:
 # txs_target_consensus_version_height: 22
-# 40 validators, testnet:
-# txs_target_state_root: sr1z5xdwjtm5caz603essyuu2jkdm3jczkflxqfj3egj29ajg0fv5qqnpqqa2
-# 5 validators, testnet:
-# txs_target_state_root: sr1pmfwxzm9r8ywud3mt6kdvaqdjz0d2s6sla3v4xa6jehhp7ky9y9s4wncjw
 # pregeneration_bucket_path: "pregenerated_transactions"
 # pregenerate_transactions_num_validators: 5
 # pregeneration_tx_count: 1000

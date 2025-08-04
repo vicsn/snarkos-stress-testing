@@ -152,10 +152,10 @@ variable "tx_cannon_services" {
 
     # Add more services as needed
     # tx-cannon malice -k APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH --redeploy --double-spend --duplicate-transitions --deployment-manifest tests/1_deploy_2_seconds/300k_constraints/programs_to_deploy/programs_2.txt --underreport-constraints 10 --repetitions 90000000000001
-    
+
     # the following require running add_deployments
     # tx-cannon batch-execute --test tests/ridiculous_finalize_hash/bhp_hash_ramp_up.toml
-    
+
     # tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_1.toml 
     # tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_2.toml
     # tx-cannon batch-execute --test tests/normal_network_traffic/normal_network_traffic_3.toml

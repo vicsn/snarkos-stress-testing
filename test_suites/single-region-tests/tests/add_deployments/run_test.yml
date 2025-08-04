@@ -40,13 +40,17 @@
   remote_user: ubuntu
   become_user: ubuntu
   tasks:
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
     - name: Deploy base programs
       ansible.builtin.shell:
         cmd: |
           tx-cannon batch-deploy \
           --manifest tests/normal_network_traffic/normal_network_traffic.txt \
           --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
-          -a APrivateKey1zkp8CZNn3yeCseEtxuVPbDCwSyhGW6yZKUYKfgXmcpoGPWH \
+          -a {{ txs_accounts[0].private_key }} \
           --concurrent-deployments 1 \
           --check-retries 5 \
           --network {{ snarkos_network }} >> /home/ubuntu/txcannon.log 2>&1
@@ -60,12 +64,16 @@
   remote_user: ubuntu
   become_user: ubuntu
   tasks:
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
     - name: Deploy nested programs
       ansible.builtin.shell:
         cmd: |
           tx-cannon batch-deploy --manifest {{ manifest }} \
             --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
-            -a APrivateKey1zkp2RWGDcde3efb89rjhME1VYA8QMxcxep5DShNBR6n8Yjh \
+            -a {{ txs_accounts[1].private_key }} \
             --concurrent-deployments 1 \
             --check-retries 20 \
             --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
@@ -83,12 +91,16 @@
   remote_user: ubuntu
   become_user: ubuntu
   tasks:
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
     - name: Deploy nested programs
       ansible.builtin.shell:
         cmd: |
           tx-cannon batch-deploy --manifest {{ manifest }} \
             --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
-            -a APrivateKey1zkpBjpEgLo4arVUkQmcLdKQMiAKGaHAQVVwmF8HQby8vdYs \
+            -a {{ txs_accounts[3].private_key }} \
             --concurrent-deployments 1 \
             --check-retries 20 \
             --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
@@ -106,12 +118,16 @@
   remote_user: ubuntu
   become_user: ubuntu
   tasks:
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
     - name: Deploy nested programs
       ansible.builtin.shell:
         cmd: |
           tx-cannon batch-deploy --manifest {{ manifest }} \
             --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
-            -a APrivateKey1zkp2GUmKbVsuc1NSj28pa1WTQuZaK5f1DQJAT6vPcHyWokG \
+            -a {{ txs_accounts[2].private_key }} \
             --concurrent-deployments 1 \
             --check-retries 20 \
             --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1
@@ -129,12 +145,16 @@
   remote_user: ubuntu
   become_user: ubuntu
   tasks:
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
     - name: Deploy nested programs
       ansible.builtin.shell:
         cmd: |
           tx-cannon batch-deploy --manifest {{ manifest }} \
             --endpoint http://{{ hostvars['localhost']['test_network_url'] }}:3030 \
-            -a APrivateKey1zkp3J6rRrDEDKAMMzSQmkBqd3vPbjp4XTyH7oMKFn7eVFwf \
+            -a {{ txs_accounts[4].private_key }} \
             --concurrent-deployments 1 \
             --check-retries 20 \
             --network {{ snarkos_network }} > /home/ubuntu/txcannon.log 2>&1

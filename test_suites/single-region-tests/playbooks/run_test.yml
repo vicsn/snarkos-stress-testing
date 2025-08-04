@@ -1,2 +1,8 @@
 - name: Run Test
-  import_playbook: ../tests/{{ test_name }}/run_test.yml
+  hosts: localhost
+  tasks:
+    - name: Load validator data from JSON
+      set_fact:
+        validator_data: "{{ lookup('file', playbook_dir + '/../validator_data/data.json') | from_json }}"
+
+- import_playbook: ../tests/{{ test_name }}/run_test.yml

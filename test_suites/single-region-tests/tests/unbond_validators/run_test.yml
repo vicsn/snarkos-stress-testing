@@ -21,11 +21,25 @@
   vars:
     file_path: "/home/ubuntu/validator_keys.txt"
   tasks:
-    - name: Copy validator keys
+    - name: Set txs_accounts
+      set_fact:
+        txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
+    - name: Convert txs_accounts dicts to array lines
+      set_fact:
+        address_lines: |
+          {% set out = [] %}
+          {% for item in txs_accounts %}
+          {% set _ = out.append('["' ~ item.private_key ~ '", "' ~ item.address ~ '"]') %}
+          {% endfor %}
+          {{ out }}
+
+    - name: Write address pairs to file
       copy:
-        src: validator_keys.txt
         dest: "{{ file_path }}"
+        content: "{{ address_lines | join('\n') }}"
         mode: '0644'
+
     - name: Timestamp before tx-cannon unbond-nodes
       debug:
         msg: "{{ now() }}"
@@ -62,7 +76,9 @@
         sudo bash -c "/usr/bin/snarkos developer execute credits.aleo unbond_public {{ item[1] }} \
                       {{ committee_data.members[item[1]][0] }}u64 --private-key {{ item[0] }} \
                       --query 'http://{{ test_network_url }}:3030' \
+                      --network {{ snarkos_network_int }} \
                       --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
+
       args:
         executable: /bin/bash
       loop: "{{ selected_nodes.stdout_lines | map('from_json') | list }}"
@@ -74,17 +90,19 @@
     - name: Set valid withdrawal addresses
       set_fact:
         valid_withdrawal_addresses:
-          - "aleo1ashyu96tjwe63u0gtnnv8z5lhapdu4l5pjsl2kha7fv7hvz2eqxs5dz0rg"
-          - "aleo12ux3gdauck0v60westgcpqj7v8rrcr3v346e4jtq04q7kkt22czsh808v2"
-          - "aleo1p9sg8gapg22p3j42tang7c8kqzp4lhe6mg77gx32yys2a5y7pq9sxh6wrd"
-          - "aleo1l4z0j5cn5s6u6tpuqcj6anh30uaxkdfzatt9seap0atjcqk6nq9qnm9eqf"
-          - "aleo1s3ws5tra87fjycnjrwsjcrnw2qxr8jfqqdugnf0xzqqw29q9m5pqem2u4t"
+          - txs_accounts[1].address
+          - txs_accounts[2].address
+          - txs_accounts[3].address
+          - txs_accounts[4].address
+          - txs_accounts[5].address
 
     - name: Claim unbond
       ansible.builtin.shell: >-
         sudo bash -c "/usr/bin/snarkos developer execute credits.aleo claim_unbond_public {{ item[1] }} \
                       --private-key {{ item[0] }} --query 'http://{{ test_network_url }}:3030' \
+                      --network {{ snarkos_network_int }} \
                       --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
+
       args:
         executable: /bin/bash
       loop: "{{ selected_nodes.stdout_lines | map('from_json') | list }}"
@@ -102,6 +120,7 @@
         sudo bash -c "/usr/bin/snarkos developer execute credits.aleo bond_validator \
                       {{ valid_withdrawal_addresses[idx] }} 50000000000000u64 5u8 --private-key {{ item[0] }} \
                       --query 'http://{{ test_network_url }}:3030' \
+                      --network {{ snarkos_network_int }} \
                       --broadcast 'http://{{ test_network_url }}:3030/{{ snarkos_network }}/transaction/broadcast'"
       args:
         executable: /bin/bash

@@ -69,8 +69,8 @@ download_and_upload_logs() {
 
 # Function to clean up resources using Terraform
 cleanup() {
-    cd "$SCRIPT_DIR/.."
-    source "$SCRIPT_DIR/destroy_infra.sh"
+    cd "$SCRIPT_DIR"
+    source destroy_infra.sh
 }
 
 set_network_vars() {
