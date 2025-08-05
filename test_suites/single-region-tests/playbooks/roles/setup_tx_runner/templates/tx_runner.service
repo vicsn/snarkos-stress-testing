@@ -1,0 +1,23 @@
+[Unit]
+Description=SnarkOS TX Runner
+After=network.target
+
+[Service]
+ExecStart=/home/ubuntu/venv/bin/python3 /home/ubuntu/tx_runner.py
+
+Restart=always
+RestartSec=3
+
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+
+Environment=PYTHONUNBUFFERED=1
+
+StandardOutput=append:/home/ubuntu/tx_runner.log
+StandardError=append:/home/ubuntu/tx_runner.err.log
+
+MemoryMax=4096M
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

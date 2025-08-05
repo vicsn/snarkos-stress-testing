@@ -33,6 +33,7 @@ filters:
     - "snarkos-client"
     - "tx-cannon-node"
     - "tx-sender-node"
+    - "tx-runner"
 
 compose:
   ansible_host: public_ip_address

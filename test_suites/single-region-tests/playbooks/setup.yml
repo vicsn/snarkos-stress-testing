@@ -25,7 +25,9 @@
 # snarkOS installation
 
 - name: Install snarkOS
-  hosts: snarkos*
+  hosts:
+    - snarkos*
+    - tx_runner
   become: true
   remote_user: ubuntu
   any_errors_fatal: true
@@ -249,6 +251,19 @@
   roles:
     - snarkos_service
   tags: snarkos_client
+
+# ------------------------------------------------
+# TX Runner
+
+- name: Set up the TX Runner
+  hosts: tx_runner
+  become: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  pre_tasks:
+  roles:
+    - setup_tx_runner
+  tags: tx_runner
 
 # ------------------------------------------------
 # Optionall restart validators if creating a flamegraph to avoid measuring genesis block creation

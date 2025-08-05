@@ -1,0 +1,89 @@
+---
+- name: Install python3-venv (required for virtualenv)
+  apt:
+    name: python3-venv
+    state: present
+    update_cache: true
+
+- name: Copy requirements.txt
+  template:
+    src: requirements.txt
+    dest: /home/ubuntu/requirements.txt
+
+- name: Ensure virtualenv is installed
+  ansible.builtin.pip:
+    name: virtualenv
+    executable: pip3
+
+- name: Create virtualenv
+  ansible.builtin.command:
+    cmd: sudo -u ubuntu python3 -m venv /home/ubuntu/venv
+    creates: /home/ubuntu/venv
+
+- name: Install dependencies into virtualenv
+  ansible.builtin.pip:
+    requirements: /home/ubuntu/requirements.txt
+    virtualenv: /home/ubuntu/venv
+
+- name: Set snarkOS binary path based on installation method
+  set_fact:
+    snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
+
+- name: Upload the TX runner script
+  template:
+    dest: "/home/ubuntu/tx_runner.py"
+    src: "tx_runner.py"
+    mode: '0644'
+
+- name: Upload the TX runner tasks
+  template:
+    dest: "/home/ubuntu/tasks.json"
+    src: "tasks.json"
+    mode: '0644'
+
+- name: Ensure correct permissions
+  file:
+    path: "/home/ubuntu/{{ item }}"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+  loop:
+    - tx_runner.py
+    - tasks.json
+
+- name: Deploy the TX runner systemd service file
+  template:
+    src: tx_runner.service
+    dest: /etc/systemd/system/tx_runner.service
+    mode: '0644'
+
+- name: Touch and chown tx_runner logs
+  file:
+    path: "/home/ubuntu/tx_runner{{ item }}"
+    state: touch
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+  loop:
+    - .log
+    - .err.log
+
+- name: Reload systemd to read new TX runner service file
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: Restart TX runner service
+  systemd:
+    name: tx_runner
+    state: restarted
+
+- name: Wait for tx_runner API to be reachable
+  uri:
+    url: http://localhost:3030/status
+    method: GET
+    status_code: 200
+    return_content: yes
+  register: tx_runner_status
+  retries: 10
+  delay: 2

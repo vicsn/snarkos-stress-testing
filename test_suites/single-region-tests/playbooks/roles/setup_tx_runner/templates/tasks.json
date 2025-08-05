@@ -1,0 +1,4 @@
+[
+  {"command": ["snarkos", "-V"]},
+  {"command": ["program-probe", "--endpoint", "http://{{ test_network_url }}:3030", "--network", "{{ snarkos_network }}", "--wait", "500"]}
+]
