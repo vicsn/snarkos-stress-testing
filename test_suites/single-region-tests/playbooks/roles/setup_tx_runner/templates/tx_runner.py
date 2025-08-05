@@ -3,10 +3,7 @@ import asyncio
 import json
 import logging
 import subprocess
-import uvicorn
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from random import shuffle
 from typing import List
 
@@ -26,24 +23,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("tx_runner")
 
 task_queue = asyncio.Queue()
-app = FastAPI()
 
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
-
-class Task(BaseModel):
-    command: List[str]
-
-
-@app.post("/task")
-async def enqueue_task(task: Task):
-    logger.info(f"Received new task: {task.command}")
-    await task_queue.put(task.command)
-
-    return {"status": "queued"}
-
-@app.get("/status")
-async def queue_status():
-    return {"queue_size": task_queue.qsize()}
 
 async def run_task(command: List[str]):
     async with semaphore:
@@ -184,11 +165,7 @@ async def main():
     load_initial_tasks()
 
     asyncio.create_task(task_worker())
-
-    config = uvicorn.Config(app, host="0.0.0.0", port=3030, log_level="info")
-    server = uvicorn.Server(config)
-
-    await server.serve()
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":

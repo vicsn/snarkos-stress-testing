@@ -32,6 +32,10 @@ cleanup_on_error() {
   export SELECTED=download_logs_clients
   run_utility
 
+  # Download prover logs:
+  export SELECTED=download_logs_provers
+  run_utility
+
   # Download validator logs:
   export SELECTED=download_logs_validators
   run_utility
@@ -416,6 +420,10 @@ if [ "$RUN_TESTS" == "y" ]; then
 
       # Download client logs:
       export SELECTED=download_logs_clients
+      run_utility
+
+      # Download prover logs:
+      export SELECTED=download_logs_provers
       run_utility
 
       # Download validator logs:

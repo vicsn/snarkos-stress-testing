@@ -114,6 +114,33 @@ resource "aws_instance" "snarkos_client" {
   }
 }
 
+# ------------------------------------------------
+# snarkOS provers
+
+resource "aws_instance" "snarkos_prover" {
+  count         = var.prover_instance_count
+  ami           = module.stress_base_ami.ami_id
+  instance_type = var.prover_instance_type
+  key_name      = aws_key_pair.generated_key.key_name
+  iam_instance_profile = aws_iam_instance_profile.snarkos_ec2_instance_profile.name
+
+  security_groups = [module.sg.security_group_name]
+
+  ebs_block_device {
+    device_name = "/dev/sda1"
+    volume_size = 1000
+    volume_type = "gp3"
+  }
+
+  tags = {
+    Name = "${var.owner}-${var.devnet_name}-snarkos-prover-${count.index}",
+    Role = "snarkos-prover",
+    Dev = count.index,
+    Owner = "${var.owner}"
+    Devnet = var.devnet_name
+  }
+}
+
 # Load Balancer for snarkOS clients
 data "aws_availability_zones" "available" {
   state = "available"

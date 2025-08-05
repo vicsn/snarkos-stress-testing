@@ -31,6 +31,7 @@ filters:
     - "snarkos-validator"
     - "prometheus-server"
     - "snarkos-client"
+    - "snarkos-prover"
     - "tx-cannon-node"
     - "tx-sender-node"
     - "tx-runner"

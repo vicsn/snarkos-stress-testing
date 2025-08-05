@@ -39,6 +39,10 @@ download_and_upload_logs() {
   export SELECTED=download_logs_clients
   run_utility
 
+  # Download prover logs:
+  export SELECTED=download_logs_provers
+  run_utility
+
   # Download validator logs:
   export SELECTED=download_logs_validators
   run_utility

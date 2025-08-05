@@ -1,0 +1,39 @@
+- name: Gather facts from all provers
+  setup:
+
+- name: Determine the number of validators
+  set_fact:
+    num_instances: "{{ groups['snarkos_validator'] | length }}"
+  run_once: true
+
+- name: Assign prover to validator index
+  set_fact:
+    validator_id: "{{ tags['Dev'] }}"
+
+- name: Set validator address
+  set_fact:
+    validator_ips: >-
+      {{
+        groups['snarkos_validator']
+        | map('extract', hostvars)
+        | map(attribute='public_ip_address')
+        | map('regex_replace', '^(.*)$', '\1:4130')
+        | list
+        | reject("equalto","")
+        | join(',')
+      }}
+
+- name: Set instance-specific facts
+  set_fact:
+    node_id: "{{ tags['Dev'] }}"
+
+- name: Set snarkos command with peers
+  set_fact:
+    snarkos_command: >-
+      snarkos start --metrics --nodisplay  --prover \
+        --node 0.0.0.0:4130 \
+        --verbosity {{ snarkos_verbosity }} \
+        --dev {{ node_id }} \
+        --dev-num-validators {{ num_instances }} --no-dev-txs \
+        --peers {{ validator_ips }} \
+        --network {{ snarkos_network_int }}

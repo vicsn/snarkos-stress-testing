@@ -18,6 +18,11 @@ variable "client_instance_type" {
   default     = "m7i.4xlarge"
 }
 
+variable "prover_instance_type" {
+  description = "Instance type for snarkOS provers"
+  default     = "m7i.2xlarge"
+}
+
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
   default     = 40 # minimum 5 for prerelease tests
@@ -26,6 +31,11 @@ variable "validator_instance_count" {
 variable "client_instance_count" {
   description = "Number of snarkOS clients per validator"
   default     = 2
+}
+
+variable "prover_instance_count" {
+  description = "Number of snarkOS provers"
+  default     = 1 # lower or equal to the number of validators
 }
 
 variable "RELEASE_BUCKET" {

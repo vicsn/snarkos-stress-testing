@@ -36,6 +36,11 @@
           | map(attribute='public_ip_address')
           | map('regex_replace', '^(.*)$', '\1:4130')
           | list
+        + groups['snarkos_prover']
+          | map('extract', hostvars)
+          | map(attribute='public_ip_address')
+          | map('regex_replace', '^(.*)$', '\1:4130')
+          | list
         )
         | reject("equalto","")
         | join(',')

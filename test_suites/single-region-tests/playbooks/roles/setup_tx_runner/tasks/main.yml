@@ -77,13 +77,3 @@
   systemd:
     name: tx_runner
     state: restarted
-
-- name: Wait for tx_runner API to be reachable
-  uri:
-    url: http://localhost:3030/status
-    method: GET
-    status_code: 200
-    return_content: yes
-  register: tx_runner_status
-  retries: 10
-  delay: 2

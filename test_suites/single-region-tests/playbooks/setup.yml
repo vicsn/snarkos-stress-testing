@@ -253,6 +253,22 @@
   tags: snarkos_client
 
 # ------------------------------------------------
+# snarkOS provers
+
+- name: Set up and start snarkOS network for provers
+  hosts: snarkos_prover
+  become: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  strategy: free
+  pre_tasks:
+    - name: Set Prover facts
+      include_tasks: set_prover_facts.yml
+  roles:
+    - snarkos_service
+  tags: snarkos
+
+# ------------------------------------------------
 # TX Runner
 
 - name: Set up the TX Runner

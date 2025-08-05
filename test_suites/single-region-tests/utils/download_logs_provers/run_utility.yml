@@ -1,0 +1,20 @@
+- name: Fetch logs from provers
+  hosts: snarkos_prover
+  become: true
+  remote_user: ubuntu
+  strategy: free
+  pre_tasks:
+    - name: Set prover facts
+      include_tasks: ../../playbooks/set_prover_facts.yml
+  tasks:
+    - name: Zip logs
+      archive:
+        path: "/tmp/snarkos.log"
+        dest: "/tmp/snarkos.log.gz"
+        mode: "0644"
+
+    - name: Fetch logs
+      fetch:
+        src: "/tmp/snarkos.log.gz"
+        dest: "../../log_files/prover-{{ node_id }}.log.gz"
+        flat: true
