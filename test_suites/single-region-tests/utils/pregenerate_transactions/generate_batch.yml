@@ -1,9 +1,22 @@
-- name: pregenerate_transactions | generate_batch | Launch batch {{ batch }}
-  include_tasks: generate_txs.yml
+- name: pregenerate_transactions | generate_batch | Set up job accumulator
+  set_fact:
+    current_batch_result_jobs: { results: [] }
+
+- name: pregenerate_transactions | generate_batch | Include generate_execution_txs.yml (if execution batch)
+  include_tasks: generate_execution_txs.yml
+  when: batch_type == "execution"
   vars:
     current_batch: "{{ batch }}"
+    result_job_accumulator: current_batch_result_jobs
 
-- name: pregenerate_transactions | generate_batch | Wait for batch {{ batch }}
+- name: pregenerate_transactions | generate_batch | Include generate_deployment_txs.yml (if deployment batch)
+  include_tasks: generate_deployment_txs.yml
+  when: batch_type == "deployment"
+  vars:
+    current_batch: "{{ batch }}"
+    result_job_accumulator: current_batch_result_jobs
+
+- name: pregenerate_transactions | generate_batch | Wait for batch {{ batch_type ~ ' [' ~ (batch | join(', ')) ~ ']' }}
   async_status:
     jid: "{{ job.ansible_job_id }}"
   register: current_batch_wait_results

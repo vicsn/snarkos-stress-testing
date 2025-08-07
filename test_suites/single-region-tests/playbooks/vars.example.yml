@@ -62,10 +62,11 @@ rest_rps: 1000000000
 
 # TX pre-generation variables:
 # txs_target_consensus_version_height: 22
+# pregeneration_execution_tx_count: 40
+# pregeneration_deployment_tx_count: 20
 # pregeneration_bucket_path: "pregenerated_transactions"
 # pregenerate_transactions_num_validators: 5
-# pregeneration_tx_count: 1000
-# pregeneration_tx_batch_size: 10
+# pregeneration_tx_batch_size: 5
 
 # Ansible vars
 # ansible_python_interpreter: /usr/bin/python3.10

@@ -1,0 +1,68 @@
+- name: pregenerate_transactions | generate_deployment_txs | Print which transaction we are generating
+  debug:
+    msg: "Generating deployment transaction {{ index }} of {{ pregeneration_deployment_tx_count }}"
+  loop: "{{ current_batch }}"
+  loop_control:
+    loop_var: index
+    label: "tx {{ index }}"
+
+- name: pregenerate_transactions | generate_deployment_txs | Create folder for credits{{ index }}
+  file:
+    path: "credits{{ index }}"
+    state: directory
+    mode: '0755'
+  loop: "{{ current_batch }}"
+  loop_control:
+    loop_var: index
+
+- name: pregenerate_transactions | generate_deployment_txs | Write patched program_data to main.aleo
+  copy:
+    content: "{{ hostvars['localhost'].program_data | replace('credits.aleo', 'credits' ~ index ~ '.aleo') }}"
+    dest: "credits{{ index }}/main.aleo"
+    mode: '0644'
+  loop: "{{ current_batch }}"
+  loop_control:
+    loop_var: index
+
+- name: pregenerate_transactions | generate_deployment_txs | Write program.json manifest
+  copy:
+    content: |
+      {
+        "program": "credits{{ index }}.aleo",
+        "version": "0.0.0",
+        "description": "",
+        "license": "MIT"
+      }
+    dest: "credits{{ index }}/program.json"
+    mode: '0644'
+  loop: "{{ current_batch }}"
+  loop_control:
+    loop_var: index
+
+- name: pregenerate_transactions | generate_deployment_txs | Start async jobs for transaction batch {{ current_batch }}
+  ansible.builtin.shell: |
+    echo "Generating deployment transaction {{ index }} of {{ pregeneration_deployment_tx_count }}"
+
+    {{ snarkos_bin_path }}/snarkos developer deploy \
+      --private-key {{ txs_accounts[index % (num_validators_fact | int)].private_key }} \
+      --query '{"state_root": "{{ txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
+      --priority-fee 1 \
+      --network {{ snarkos_network_int }} \
+      --store /tmp/deployment_tx{{ index }}.txt \
+      --store-format string \
+      --path credits{{ index }} \
+      credits{{ index }}.aleo >> transaction_pregeneration.log
+  args:
+    executable: /bin/bash
+  async: 300
+  poll: 0
+  loop: "{{ current_batch }}"
+  loop_control:
+    loop_var: index
+    label: "tx {{ index }}"
+  register: batch_async_jobs
+
+- name: pregenerate_transactions | generate_deployment_txs | Accumulate async job results
+  set_fact:
+    current_batch_result_jobs:
+      results: "{{ batch_async_jobs.results }}"

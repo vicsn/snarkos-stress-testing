@@ -1,6 +1,6 @@
 - name: pregenerate_transactions | generate_execution_txs | Print which transaction we are generating
   debug:
-    msg: "Generating execution transaction {{ index }} of {{ (pregeneration_execution_tx_count | int) // 2 }}"
+    msg: "Generating transaction {{ index }} of {{ (pregeneration_execution_tx_count | int) // 2 }}"
   loop: "{{ current_batch }}"
   loop_control:
     loop_var: index
@@ -8,7 +8,7 @@
 
 - name: pregenerate_transactions | generate_execution_txs | Start async jobs for transaction batch {{ current_batch }}
   ansible.builtin.shell: |
-    echo "Generating execution transaction {{ index }} of {{ (pregeneration_execution_tx_count | int) // 2 }}"
+    echo "Generating transaction {{ index }} of {{ (pregeneration_execution_tx_count | int) // 2 }}"
 
     {{ snarkos_bin_path }}/snarkos developer execute \
       --private-key {{ txs_accounts[0].private_key }} \

@@ -12,7 +12,7 @@ import zipfile
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def download_transaction_files_from_s3(bucket_name, prefix, destination_folder, network, num_validators, pregeneration_tx_count):
+def download_transaction_files_from_s3(bucket_name, prefix, destination_folder, network, num_validators, pregeneration_execution_tx_count, pregeneration_deployment_tx_count):
     s3 = boto3.client("s3")
     os.makedirs(destination_folder, exist_ok=True)
 
@@ -20,9 +20,9 @@ def download_transaction_files_from_s3(bucket_name, prefix, destination_folder, 
     for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
         for obj in page.get("Contents", []):
             key = obj["Key"]
-            if not key.startswith(f"{prefix}/executions-{network}-{num_validators}val"):
+            if not key.startswith(f"{prefix}/transactions-{network}-{num_validators}val"):
                 continue
-            if not key.endswith(f"{pregeneration_tx_count}.zip"):
+            if not key.endswith(f"{pregeneration_execution_tx_count}-{pregeneration_deployment_tx_count}.zip"):
                 continue
 
             filename = os.path.basename(key)
@@ -139,10 +139,16 @@ def block_scanner(ip_address, network, expected_tx_count, tx_ids_sent, tx_ids_lo
 
                 time.sleep(poll_interval)
 
+            except requests.exceptions.RequestException as e:
+                print(f"Warning: temporary error in block scanner: {e}")
+                log.write(f"\nWarning: temporary error during block scanning: {e}\n")
+                log.flush()
+                time.sleep(poll_interval)
+                continue
             except Exception as e:
-                print(f"Error in block scanner: {e}")
-                log.write(f"\nException occurred during block scanning: {e}\n")
-                log_unconfirmed_summary("exception")
+                print(f"Fatal error in block scanner: {e}")
+                log.write(f"\nFatal error during block scanning: {e}\n")
+                log_unconfirmed_summary("fatal_exception")
                 return
 
 
@@ -154,7 +160,8 @@ def send_transactions(transactions_path, ip_address, network, tx_ids_sent, tx_id
 
     with open(transactions_path, "r") as f:
         for i, tx in enumerate(f.readlines()):
-            if i % 5 == 0:
+            # On every 20 transactions send wait a bit before sending the next batch to not flood
+            if i % 20 == 0:
                 time.sleep(1)
 
             cmd = f"curl http://{ip_address}:3030/{network}/transaction/broadcast -X POST -H \"Content-Type: application/json\" -d '{tx}'"
@@ -182,16 +189,66 @@ def send_transactions(transactions_path, ip_address, network, tx_ids_sent, tx_id
 
     return results
 
+def send_deployment_transactions(deploy_paths, ip_addresses, network, tx_ids_sent, tx_ids_lock):
+    print(f"Sending {len(deploy_paths)} deployment transactions (1 per second)")
+
+    num_validators = len(ip_addresses)
+    for i, path in enumerate(deploy_paths):
+        ip_address = ip_addresses[i % num_validators].strip()
+
+        try:
+            with open(path, "r") as f:
+                tx = f.read().strip()
+
+            cmd = f"curl http://{ip_address}:3030/{network}/transaction/broadcast -X POST -H \"Content-Type: application/json\" -d '{tx}'"
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output = result.stdout.decode().strip()
+            error = result.stderr.decode().strip()
+
+            tx_id = output.strip().strip('"')
+            print(f"[Deploy] TX sent: {tx_id} to {ip_address}")
+
+            with tx_ids_lock:
+                if tx_id.startswith("at1"):
+                    tx_ids_sent.add(tx_id)
+                else:
+                    tx_ids_sent.add(f"unparsed::{i}")
+                    print(f"[Deploy] Unrecognized TX output: {output}")
+        except Exception as e:
+            with tx_ids_lock:
+                tx_ids_sent.add(f"error::{i}")
+            print(f"[Deploy] Exception for deployment TX {i}: {e}")
+
+        # After each deployment transaction wait 1 sec, so we don't have the problem that one block receives multiple
+        # deployment txs from the same account.
+        time.sleep(1)
+
+def prepare_transactions(txs_folder, tx_files, base_folder):
+    tx_paths = []
+    txs = []
+    for file in tx_files:
+        tx_path = os.path.join(txs_folder, file)
+        with open(tx_path, "r") as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                individual_tx_path = os.path.join(base_folder, f"{file.replace('.txt', '')}_tx_{i}.txt")
+                with open(individual_tx_path, "w") as out_f:
+                    out_f.write(line)
+                tx_paths.append(individual_tx_path)
+                txs.append(line)
+    return tx_paths, txs
+
 
 def main():
     # Error if no argument was passed.
-    if len(sys.argv) < 5:
+    if len(sys.argv) < 6:
         print("Please provide the network type as 1st argument, the S3 bucket to load transactions from as 2nd and the path in it as 3rd.")
         exit()
     network = sys.argv[1]
     s3_bucket = sys.argv[2]
     s3_prefix = sys.argv[3]
-    pregeneration_tx_count = sys.argv[4]
+    pregeneration_execution_tx_count = sys.argv[4]
+    pregeneration_deployment_tx_count = sys.argv[5]
 
     ip_addresses_path = os.path.join(os.getcwd(), "..", "..", "ip_addresses.txt")
     if not os.path.exists(ip_addresses_path):
@@ -202,32 +259,30 @@ def main():
     num_validators = len(ip_addresses)
 
     txs_folder = os.path.join(os.getcwd(), "..", "..", "transaction_files")
-    download_transaction_files_from_s3(s3_bucket, s3_prefix, txs_folder, network, num_validators, pregeneration_tx_count)
+    download_transaction_files_from_s3(s3_bucket, s3_prefix, txs_folder, network, num_validators, pregeneration_execution_tx_count, pregeneration_deployment_tx_count)
 
     txs_folder = os.path.join(os.getcwd(), "..", "..", "transaction_files")
-    pattern_deploys = re.compile(rf"^deploys-{network}-\d+val-\d+\.txt$")
+    pattern_deploys = re.compile(rf"^deploys-{network}-\d+val-\d+-\d+\.txt$")
     pattern_executions = re.compile(rf"^executions-{network}-\d+val-\d+-\d+\.txt$")
-    tx_files = [
-        f for f in os.listdir(txs_folder)
-        if pattern_deploys.match(f) or pattern_executions.match(f)
-    ]
-    tx_files.sort()
-    num_pregenerated_txs_files = len(tx_files)
 
-    txs = []
-    for file in tx_files:
-        tx_path = os.path.join(txs_folder, file)
-        with open(tx_path, "r") as f:
-            txs.extend(f.readlines())
+    deploy_files = [
+        f for f in os.listdir(txs_folder)
+        if pattern_deploys.match(f)
+    ]
+    exec_files = [
+        f for f in os.listdir(txs_folder)
+        if pattern_executions.match(f)
+    ]
+    deploy_files.sort()
+    exec_files.sort()
 
     transactions_split_folder_path = os.path.join(os.getcwd(), "transactions_to_send")
     os.makedirs(transactions_split_folder_path, exist_ok=True)
 
-    number_of_programs = len(txs)
-    programs_per_validator = number_of_programs // num_validators
-    assert programs_per_validator > 0, "Not enough programs to split among validators"
+    deploy_paths, deploy_txs = prepare_transactions(txs_folder, deploy_files, transactions_split_folder_path)
+    exec_paths, exec_txs = prepare_transactions(txs_folder, exec_files, transactions_split_folder_path)
 
-    expected_tx_count = len(txs)
+    expected_tx_count = len(deploy_txs) + len(exec_txs)
     tx_ids_sent = set()
     tx_ids_lock = threading.Lock()
 
@@ -238,13 +293,6 @@ def main():
     except Exception as e:
         print(f"Failed to fetch latest block height, defaulting to 1: {e}")
         latest_height = 1
-
-    transaction_paths = []
-    for i, tx in enumerate(txs):
-        transaction_path = os.path.join(transactions_split_folder_path, f"transactions_{i}.txt")
-        with open(transaction_path, "w") as f:
-            f.write(tx)
-        transaction_paths.append(transaction_path)
 
     start = time.time()
 
@@ -264,33 +312,38 @@ def main():
     )
     scanner_thread.start()
 
-    print(f"Num txs to send: {len(transaction_paths)}")
-    with ThreadPoolExecutor(max_workers=num_validators) as executor:
-        futures = {
-            executor.submit(
+    deploy_thread = threading.Thread(
+        target=send_deployment_transactions,
+        args=(deploy_paths, ip_addresses, network, tx_ids_sent, tx_ids_lock),
+    )
+    deploy_thread.start()
+
+    print(f"Sending {len(exec_paths)} execution transactions")
+    with ThreadPoolExecutor(max_workers=num_validators) as exec_pool:
+        exec_futures = {
+            exec_pool.submit(
                 send_transactions,
-                transaction_paths[i],
+                exec_paths[i],
                 ip_addresses[i % num_validators].strip(),
                 network,
                 tx_ids_sent,
                 tx_ids_lock
-            ): i
-            for i in range(len(transaction_paths))
+            ): i for i in range(len(exec_paths))
         }
-        for future in as_completed(futures):
-            i = futures[future]
+        for future in as_completed(exec_futures):
+            i = exec_futures[future]
             try:
                 _ = future.result()
             except Exception as exc:
-                print(f'Generated an exception: {exc}')
+                print(f"[Execution] Exception: {exc}")
             else:
-                print(f'Validator {i % num_validators} - {ip_addresses[i % num_validators].strip()} completed')
+                print(f"[Execution] Validator {i % num_validators} completed")
+
+    deploy_thread.join()
+    scanner_thread.join()
 
     end = time.time()
-
     print(f"Time elapsed: {end - start} seconds")
-
-    scanner_thread.join()
 
     if os.path.isdir(txs_folder):
         shutil.rmtree(txs_folder)
