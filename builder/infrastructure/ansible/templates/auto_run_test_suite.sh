@@ -40,6 +40,10 @@ cleanup_on_error() {
   export SELECTED=download_logs_validators
   run_utility
 
+  # Download tx_runner logs:
+  export SELECTED=download_logs_tx_runner
+  run_utility
+
   echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
   cleanup
 
@@ -428,6 +432,10 @@ if [ "$RUN_TESTS" == "y" ]; then
 
       # Download validator logs:
       export SELECTED=download_logs_validators
+      run_utility
+
+      # Download tx_runner logs:
+      export SELECTED=download_logs_tx_runner
       run_utility
   done
 fi

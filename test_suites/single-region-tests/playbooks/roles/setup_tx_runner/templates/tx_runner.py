@@ -3,11 +3,12 @@ import asyncio
 import json
 import logging
 import subprocess
+import sys
 
 from random import shuffle
 from typing import List
 
-ALLOWED_COMMANDS = {"snarkos", "program-probe"}
+ALLOWED_COMMANDS = {"snarkos", "program-probe", "batch-deploy"}
 
 TASK_FILE = "/home/ubuntu/tasks.json"
 MAX_CONCURRENT_TASKS = 5
@@ -17,9 +18,14 @@ PROGRAM_CALLER_IDLE_DURATION = 1
 
 SNARKOS_BIN_PATH="{{ snarkos_bin_path }}/snarkos"
 
+batch_deploy_process = None
 program_probe_running = False
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+    format="%(levelname)s:%(name)s:%(message)s"
+)
 logger = logging.getLogger("tx_runner")
 
 task_queue = asyncio.Queue()
@@ -62,6 +68,14 @@ async def task_worker():
                 program_probe_running = True
                 logger.info(f"Starting program-probe with args: {command[1:]}")
                 asyncio.create_task(program_probe_task(command[1:]))
+
+        elif command[0] == "batch-deploy":
+            global batch_deploy_process
+            if batch_deploy_process and batch_deploy_process.returncode is None:
+                logger.info("batch-deploy is already running, skipping duplicate")
+            else:
+                logger.info(f"Starting batch-deploy with args: {command[1:]}")
+                asyncio.create_task(monitor_batch_deploy(command[1:]))
 
         task_queue.task_done()
 
@@ -159,6 +173,41 @@ async def program_probe(endpoint: str, network: str, randomize: bool = False, wa
                 logger.error(f"Program probe error: {e}")
 
             await asyncio.sleep(BLOCK_SCAN_INTERVAL)
+
+async def stream_output(stream, logfile):
+    with open(logfile, "ab") as f:
+        while True:
+            line = await stream.readline()
+            if not line:
+                break
+            f.write(line)
+            f.flush()
+
+async def monitor_batch_deploy(args: List[str]):
+    global batch_deploy_process
+    while True:
+        try:
+            cmd = ["/home/ubuntu/venv/bin/python3", "/home/ubuntu/batch_deploy.py"] + args
+            logger.info(f"Launching batch-deploy: {' '.join(cmd)}")
+
+            batch_deploy_process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            # Stream logs live
+            await asyncio.gather(
+                stream_output(batch_deploy_process.stdout, "tx_runner_deployments.log"),
+                stream_output(batch_deploy_process.stderr, "tx_runner_deployments.err.log"),
+            )
+
+            logger.warning(f"batch-deploy exited with code {batch_deploy_process.returncode}. Restarting...")
+
+        except Exception as e:
+            logger.error(f"batch-deploy crashed: {e}")
+
+        await asyncio.sleep(2)
 
 
 async def main():

@@ -41,6 +41,12 @@
     src: "tasks.json"
     mode: '0644'
 
+- name: Upload the batch deploy script
+  template:
+    dest: "/home/ubuntu/batch_deploy.py"
+    src: "batch_deploy.py"
+    mode: '0644'
+
 - name: Ensure correct permissions
   file:
     path: "/home/ubuntu/{{ item }}"
@@ -48,13 +54,49 @@
     group: ubuntu
     mode: '0644'
   loop:
-    - tx_runner.py
     - tasks.json
+    - batch_deploy.py
+    - tx_runner.py
 
-- name: Deploy the TX runner systemd service file
+- name: Push programs and data folders to remote runner
+  block:
+    - name: Copy programs folder
+      ansible.builtin.synchronize:
+        src: ../programs/
+        dest: /home/ubuntu/programs/
+        mode: push
+        recursive: yes
+
+    - name: Copy validator data folder
+      ansible.builtin.synchronize:
+        src: ../validator_data/
+        dest: /home/ubuntu/validator_data/
+        mode: push
+        recursive: yes
+  delegate_to: localhost
+  become: false
+
+- name: Set permissions on copied folders
+  ansible.builtin.file:
+    path: "{{ item }}"
+    recurse: yes
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+  loop:
+    - /home/ubuntu/programs/
+    - /home/ubuntu/validator_data/
+
+- name: Install supervisord
+  apt:
+    name: supervisor
+    state: present
+    update_cache: true
+
+- name: Deploy supervisor config for tx_runner
   template:
-    src: tx_runner.service
-    dest: /etc/systemd/system/tx_runner.service
+    src: tx_runner.conf
+    dest: /etc/supervisor/conf.d/tx_runner.conf
     mode: '0644'
 
 - name: Touch and chown tx_runner logs
@@ -68,12 +110,11 @@
     - .log
     - .err.log
 
-- name: Reload systemd to read new TX runner service file
-  systemd:
-    daemon_reload: true
-  become: true
+- name: Reread supervisor config
+  command: supervisorctl reread
 
-- name: Restart TX runner service
-  systemd:
-    name: tx_runner
-    state: restarted
+- name: Update supervisor config
+  command: supervisorctl update
+
+- name: Restart tx_runner via supervisor
+  command: supervisorctl restart tx_runner

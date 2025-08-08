@@ -1,0 +1,16 @@
+- name: Fetch logs from the tx runner node
+  hosts: tx_runner
+  become: true
+  remote_user: ubuntu
+  tasks:
+    - name: Zip logs
+      archive:
+        path: "/home/ubuntu/tx_runner*.log"
+        dest: "/tmp/tx_runner.logs.gz"
+        mode: "0644"
+
+    - name: Fetch logs
+      fetch:
+        src: "/tmp/tx_runner.logs.gz"
+        dest: "../../log_files/tx_runner.logs.gz"
+        flat: true

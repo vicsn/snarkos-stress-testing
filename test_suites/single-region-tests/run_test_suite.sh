@@ -47,6 +47,10 @@ download_and_upload_logs() {
   export SELECTED=download_logs_validators
   run_utility
 
+  # Download tx_runner logs:
+  export SELECTED=download_logs_tx_runner
+  run_utility
+
   echo "Uploading test logs to S3..."
 
   if test -d $PARENT_DIR/log_files; then
