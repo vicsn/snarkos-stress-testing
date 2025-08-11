@@ -35,27 +35,23 @@ def download_transaction_files_from_s3(bucket_name, prefix, destination_folder, 
                 zip_ref.extractall(destination_folder)
                 os.remove(dest_path)
 
-# === inside block_scanner ===
-
-def block_scanner(ip_address, network, expected_tx_count, tx_ids_sent, tx_ids_lock, start_height=1, poll_interval=2, max_idle_blocks=20, log_path="confirmed_txs.log"):
+def block_scanner(ip_address, network, expected_tx_count, tx_ids_sent, tx_ids_lock,
+                  start_height=1, poll_interval=2, max_idle_blocks=20,
+                  log_path="confirmed_txs.log", start_event=None):
     checked_height = start_height
-    seen_tx_ids = set()
     matched_tx_ids = set()
-    idle_blocks = 0
+    blocks_since_last_expected = 0  # consecutive blocks without confirming an expected TX
 
-    def log_unconfirmed_summary(reason):
+    def log_unconfirmed_summary(reason, log):
         with tx_ids_lock:
             remaining = tx_ids_sent - matched_tx_ids
-
         num_missing = len(remaining)
         percent_missing = (num_missing / expected_tx_count) * 100 if expected_tx_count > 0 else 0
 
         log.write(f"\n\n=== Block scanning terminated: {reason} ===\n")
         log.write(f"Unconfirmed TXs ({num_missing}/{expected_tx_count}, {percent_missing:.2f}%):\n")
-
         for tx_id in sorted(remaining):
             log.write(f"  {tx_id}\n")
-
         log.write("==========================================\n\n")
         log.flush()
 
@@ -73,14 +69,12 @@ def block_scanner(ip_address, network, expected_tx_count, tx_ids_sent, tx_ids_lo
                     continue
 
                 latest_height = int(latest_resp.text.strip())
-                new_block_with_transactions_processed = False
 
                 if checked_height > latest_height:
                     msg = f"No new blocks yet. Still at height {latest_height}"
                     print(msg)
                     log.write(msg + "\n")
                     log.flush()
-
                     time.sleep(poll_interval)
                     continue
 
@@ -96,46 +90,51 @@ def block_scanner(ip_address, network, expected_tx_count, tx_ids_sent, tx_ids_lo
                     block_height = block_data.get("header", {}).get("metadata", {}).get("height", checked_height)
                     transactions = block_data.get("transactions", [])
 
-                    if transactions:
-                        new_block_with_transactions_processed = True
-
                     log_line = f"Block {block_height} with {len(transactions)} transaction(s)"
                     print(log_line)
                     log.write(log_line + "\n")
                     log.flush()
 
                     new_tx_ids = {tx["transaction"]["id"] for tx in transactions}
-                    seen_tx_ids.update(new_tx_ids)
 
+                    # Did this block confirm any expected TXs?
+                    matched_this_block = False
                     with tx_ids_lock:
                         newly_matched = new_tx_ids.intersection(tx_ids_sent) - matched_tx_ids
+                    if newly_matched:
+                        matched_this_block = True
                         for tx_id in newly_matched:
                             msg = f"TX {tx_id} confirmed in block {block_height}"
                             print(msg)
                             log.write(msg + "\n")
-                            log.flush()
+                        log.flush()
                         matched_tx_ids.update(newly_matched)
+
+                    # Update the consecutive-blocks-without-expected counter.
+                    with tx_ids_lock:
+                        have_expected = len(tx_ids_sent) > 0
+                    should_count = (start_event.is_set() if start_event else have_expected)
+
+                    if should_count:
+                        if matched_this_block:
+                            blocks_since_last_expected = 0
+                        else:
+                            blocks_since_last_expected += 1
 
                     checked_height += 1
 
-                if new_block_with_transactions_processed:
-                    idle_blocks = 0
-                else:
-                    idle_blocks += 1
+                    # Early-exit checks after processing this block
+                    if len(matched_tx_ids) >= expected_tx_count:
+                        print("All expected transactions confirmed.")
+                        log.write("\nAll expected transactions confirmed.\n")
+                        log.flush()
+                        return
 
-                if len(matched_tx_ids) >= expected_tx_count:
-                    print("All expected transactions confirmed.")
-                    log.write("\nAll expected transactions confirmed.\n")
-                    log.flush()
-                    return
-
-                if idle_blocks >= max_idle_blocks:
-                    with tx_ids_lock:
-                        remaining = tx_ids_sent - matched_tx_ids
-                    print(f"Stopped scanning after {max_idle_blocks} idle blocks. Unconfirmed TXs: {remaining}")
-                    log.write(f"\nStopped scanning after {max_idle_blocks} idle blocks.\n")
-                    log_unconfirmed_summary("max_idle_blocks reached")
-                    return
+                    if have_expected and blocks_since_last_expected >= max_idle_blocks:
+                        print(f"Stopped scanning after {max_idle_blocks} consecutive blocks without confirming an expected TX.")
+                        log.write(f"\nStopped after {max_idle_blocks} blocks without expected confirmations.\n")
+                        log_unconfirmed_summary("no_expected_confirmations_for_N_blocks", log)
+                        return
 
                 time.sleep(poll_interval)
 
@@ -148,80 +147,143 @@ def block_scanner(ip_address, network, expected_tx_count, tx_ids_sent, tx_ids_lo
             except Exception as e:
                 print(f"Fatal error in block scanner: {e}")
                 log.write(f"\nFatal error during block scanning: {e}\n")
-                log_unconfirmed_summary("fatal_exception")
+                log_unconfirmed_summary("fatal_exception", log)
                 return
 
-
-# Function to send transactions to a validator without surpassing the rate limit.
-def send_transactions(transactions_path, ip_address, network, tx_ids_sent, tx_ids_lock):
+def send_transactions(transactions_path, ip_address, network, tx_ids_sent, tx_ids_lock, start_event=None):
     print(f"[Validator @ {ip_address}] Starting transaction broadcast from {transactions_path}")
-
     results = []
+    event_set = False
 
     with open(transactions_path, "r") as f:
         for i, tx in enumerate(f.readlines()):
-            # On every 20 transactions send wait a bit before sending the next batch to not flood
-            if i % 20 == 0:
+            if i and i % 20 == 0:
                 time.sleep(1)
+
+            if start_event and not event_set:
+                start_event.set()
+                event_set = True
 
             cmd = f"curl http://{ip_address}:3030/{network}/transaction/broadcast -X POST -H \"Content-Type: application/json\" -d '{tx}'"
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = result.stdout.decode().strip()
             error = result.stderr.decode().strip()
 
-            try:
-                tx_id = output.strip().strip('"')
-                print(f"TX sent : {tx_id}")
-
-                with tx_ids_lock:
-                    if tx_id.startswith("at1"):
-                        tx_ids_sent.add(tx_id)
-                    else:
-                        # Mark it with a dummy label so it's counted but distinguishable
-                        tx_ids_sent.add(f"unparsed::{i}")
-                        print(f"Unrecognized TX output: {output}")
-            except Exception as e:
-                with tx_ids_lock:
-                    tx_ids_sent.add(f"error::{i}")
-                print(f"Exception parsing TX ID from: {output} — {e}")
+            echoed_id = output.strip().strip('"')
+            if echoed_id.startswith("at1"):
+                exp_id = extract_tx_id_from_payload(tx)
+                if echoed_id != exp_id:
+                    print(f"[Exec] Warning: echoed id {echoed_id} != expected {exp_id}")
+                else:
+                    print(f"[Exec] TX sent : {echoed_id}")
+            else:
+                print(f"[Exec] Unrecognized TX output: {output} (stderr: {error})")
 
             results.append(f"Executed {cmd}\nOutput: {output}\nError: {error}")
 
     return results
 
-def send_deployment_transactions(deploy_paths, ip_addresses, network, tx_ids_sent, tx_ids_lock):
-    print(f"Sending {len(deploy_paths)} deployment transactions (1 per second)")
+def send_deployment_transactions(deploy_paths, expected_deploy_ids, ip_addresses, network,
+                                 blocks_before_retry=10, max_retries=5, poll_interval=2, start_event=None):
+    print(f"Sending {len(deploy_paths)} deployment transactions with retries "
+          f"(retry after {blocks_before_retry} blocks, max {max_retries} retries)")
 
     num_validators = len(ip_addresses)
+    first_ip = ip_addresses[0].strip()
+
+    # Build per-TX state
+    states = []
     for i, path in enumerate(deploy_paths):
-        ip_address = ip_addresses[i % num_validators].strip()
+        with open(path, "r") as f:
+            payload = f.read().strip()
+        states.append({
+            "idx": i,
+            "path": path,
+            "payload": payload,
+            "txid": expected_deploy_ids[i],  # fixed, deterministic
+            "last_sent_height": None,
+            "last_checked_height": None,
+            "retries": 0,
+            "confirmed": False,
+            "ip_index": i % num_validators,
+        })
+
+    def broadcast(state):
+        ip = ip_addresses[state["ip_index"]].strip()
+        cmd = (
+            f"curl http://{ip}:3030/{network}/transaction/broadcast "
+            f"-X POST -H \"Content-Type: application/json\" -d '{state['payload']}'"
+        )
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output = result.stdout.decode().strip()
+        err = result.stderr.decode().strip()
+
+        # Server usually echoes the same id; log mismatch if any (but ID stays fixed).
+        echoed = output.strip().strip('"')
+        if echoed.startswith("at1") and echoed != state["txid"]:
+            print(f"[Deploy] Warning: echoed id {echoed} != expected {state['txid']} (idx {state['idx']})")
+
+        print(f"[Deploy] TX {state['txid']} sent to {ip}")
 
         try:
-            with open(path, "r") as f:
-                tx = f.read().strip()
-
-            cmd = f"curl http://{ip_address}:3030/{network}/transaction/broadcast -X POST -H \"Content-Type: application/json\" -d '{tx}'"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            output = result.stdout.decode().strip()
-            error = result.stderr.decode().strip()
-
-            tx_id = output.strip().strip('"')
-            print(f"[Deploy] TX sent: {tx_id} to {ip_address}")
-
-            with tx_ids_lock:
-                if tx_id.startswith("at1"):
-                    tx_ids_sent.add(tx_id)
-                else:
-                    tx_ids_sent.add(f"unparsed::{i}")
-                    print(f"[Deploy] Unrecognized TX output: {output}")
+            state["last_sent_height"] = get_latest_height(first_ip, network)
         except Exception as e:
-            with tx_ids_lock:
-                tx_ids_sent.add(f"error::{i}")
-            print(f"[Deploy] Exception for deployment TX {i}: {e}")
+            print(f"[Deploy] Warning: cannot fetch latest height after send: {e}")
+            state["last_sent_height"] = state["last_sent_height"] or 1
+        state["last_checked_height"] = state["last_sent_height"]
 
-        # After each deployment transaction wait 1 sec, so we don't have the problem that one block receives multiple
-        # deployment txs from the same account.
-        time.sleep(1)
+        # round-robin next attempt
+        state["ip_index"] = (state["ip_index"] + 1) % num_validators
+
+    if start_event and not start_event.is_set():
+        start_event.set()
+
+    for st in states:
+        broadcast(st)
+        time.sleep(2)
+
+    # Manage retries until all confirmed or exhausted
+    while True:
+        try:
+            latest = get_latest_height(first_ip, network)
+        except Exception as e:
+            print(f"[Deploy] Warning: failed to get latest height: {e}")
+            time.sleep(poll_interval)
+            continue
+
+        pending = 0
+        for st in states:
+            if st["confirmed"]:
+                continue
+
+            start_h = (st["last_checked_height"] or 0) + 1
+            seen = tx_seen_in_range(first_ip, network, st["txid"], start_h, latest)
+            st["last_checked_height"] = latest
+
+            if seen:
+                st["confirmed"] = True
+                print(f"[Deploy] Confirmed {st['txid']} (idx {st['idx']})")
+                continue
+
+            # Not seen; retry if enough blocks passed since last send
+            if st["last_sent_height"] is not None and latest - st["last_sent_height"] >= blocks_before_retry:
+                if st["retries"] < max_retries:
+                    st["retries"] += 1
+                    print(f"[Deploy] Retry {st['retries']}/{max_retries} for {st['txid']} "
+                          f"(no detection in {blocks_before_retry} blocks since {st['last_sent_height']})")
+                    broadcast(st)
+                    time.sleep(2)
+                else:
+                    print(f"[Deploy] Gave up after {max_retries} retries for {st['txid']} (idx {st['idx']})")
+
+            if not st["confirmed"] and st["retries"] < max_retries:
+                pending += 1
+
+        if pending == 0:
+            print("[Deploy] All deployment TXs are either confirmed or exhausted retries.")
+            break
+
+        time.sleep(poll_interval)
 
 def prepare_transactions(txs_folder, tx_files, base_folder):
     tx_paths = []
@@ -238,6 +300,41 @@ def prepare_transactions(txs_folder, tx_files, base_folder):
                 txs.append(line)
     return tx_paths, txs
 
+def extract_tx_id_from_payload(s: str) -> str:
+    obj = json.loads(s)
+    txid = obj.get("id")
+    if not (isinstance(txid, str) and txid.startswith("at1")):
+        raise ValueError(f"Bad or missing tx id: {txid!r}")
+    return txid
+
+def collect_expected_ids(paths):
+    ids = []
+    for p in paths:
+        with open(p, "r") as f:
+            payload = f.read().strip()   # each file contains one TX JSON
+        ids.append(extract_tx_id_from_payload(payload))
+    return ids
+
+def get_latest_height(ip_address, network, timeout=3):
+    url = f"http://{ip_address}:3030/{network}/block/height/latest"
+    r = requests.get(url, timeout=timeout)
+    r.raise_for_status()
+    return int(r.text.strip())
+
+def tx_seen_in_range(ip_address, network, tx_id, start_h, end_h, timeout=5):
+    if start_h is None or end_h is None or end_h < start_h:
+        return False
+    start_h = max(1, start_h)
+    for h in range(start_h, end_h + 1):
+        url = f"http://{ip_address}:3030/{network}/block/{h}"
+        resp = requests.get(url, timeout=timeout)
+        if resp.status_code != 200:
+            continue
+        block = resp.json()
+        ids = {tx["transaction"]["id"] for tx in block.get("transactions", [])}
+        if tx_id in ids:
+            return True
+    return False
 
 def main():
     # Error if no argument was passed.
@@ -283,8 +380,15 @@ def main():
     exec_paths, exec_txs = prepare_transactions(txs_folder, exec_files, transactions_split_folder_path)
 
     expected_tx_count = len(deploy_txs) + len(exec_txs)
+    expected_deploy_ids = collect_expected_ids(deploy_paths)
+    expected_exec_ids   = collect_expected_ids(exec_paths)
+
     tx_ids_sent = set()
     tx_ids_lock = threading.Lock()
+
+    with tx_ids_lock:
+        tx_ids_sent.update(expected_deploy_ids)
+        tx_ids_sent.update(expected_exec_ids)
 
     try:
         latest_url = f"http://{ip_addresses[0].strip()}:3030/{network}/block/height/latest"
@@ -298,23 +402,19 @@ def main():
 
     print("Starting block scanner in background...")
 
+    broadcast_started = threading.Event()
+
     scanner_thread = threading.Thread(
         target=block_scanner,
-        args=(
-            ip_addresses[0].strip(),
-            network,
-            expected_tx_count,
-            tx_ids_sent,
-            tx_ids_lock,
-            latest_height,
-        ),
-        kwargs={"max_idle_blocks": 20},
+        args=(ip_addresses[0].strip(), network, expected_tx_count, tx_ids_sent, tx_ids_lock, latest_height),
+        kwargs={"max_idle_blocks": 20, "log_path": "confirmed_txs.log", "start_event": broadcast_started},
     )
     scanner_thread.start()
 
     deploy_thread = threading.Thread(
         target=send_deployment_transactions,
-        args=(deploy_paths, ip_addresses, network, tx_ids_sent, tx_ids_lock),
+        args=(deploy_paths, expected_deploy_ids, ip_addresses, network),
+        kwargs={"blocks_before_retry": 10, "max_retries": 5, "poll_interval": 2, "start_event": broadcast_started},
     )
     deploy_thread.start()
 
@@ -327,7 +427,8 @@ def main():
                 ip_addresses[i % num_validators].strip(),
                 network,
                 tx_ids_sent,
-                tx_ids_lock
+                tx_ids_lock,
+                broadcast_started,  # <-- pass event
             ): i for i in range(len(exec_paths))
         }
         for future in as_completed(exec_futures):
@@ -347,6 +448,9 @@ def main():
 
     if os.path.isdir(txs_folder):
         shutil.rmtree(txs_folder)
+
+    if os.path.isdir(transactions_split_folder_path):
+        shutil.rmtree(transactions_split_folder_path, ignore_errors=True)
 
     print("Block scanning finished.")
 
