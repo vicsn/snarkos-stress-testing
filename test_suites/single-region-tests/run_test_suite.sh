@@ -122,14 +122,7 @@ init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
     terraform init
 
-    # Store the currently loaded tx-cannon services
-    replace_args="" 
-    terraform state list | grep 'aws_ecs_service.tx_cannon_services' | \
-        while read instance; do
-            replace_args+=" -replace=$instance"
-        done
-    # Always replace the tx-cannon ECS cluster, because they have a state root cached.
-    terraform apply $replace_args -var="owner=$OWNER"
+    terraform apply -var="owner=$OWNER"
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
     LB_URL=$(cat $PARENT_DIR/lb_url.txt)
