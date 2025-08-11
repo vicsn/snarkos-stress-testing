@@ -47,6 +47,12 @@
     src: "batch_deploy.py"
     mode: '0644'
 
+- name: Upload the batch transfer script
+  template:
+    dest: "/home/ubuntu/batch_transfer.py"
+    src: "batch_transfer.py"
+    mode: '0644'
+
 - name: Ensure correct permissions
   file:
     path: "/home/ubuntu/{{ item }}"
@@ -56,6 +62,7 @@
   loop:
     - tasks.json
     - batch_deploy.py
+    - batch_transfer.py
     - tx_runner.py
 
 - name: Push programs and data folders to remote runner

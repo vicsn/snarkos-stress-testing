@@ -29,7 +29,6 @@ def load_private_keys(senders_count):
 
     return [acc["private_key"] for acc in accounts[:senders_count]]
 
-
 def deploy_program(private_key, network, program_name, query_url, broadcast_url):
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
     base_program = os.path.splitext(program_name)[0]
@@ -117,7 +116,6 @@ def deploy_program(private_key, network, program_name, query_url, broadcast_url)
         except Exception as e:
             log(f"[{timestamp}] Failed to clean up {deployment_path}: {e}")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Batch deploy Aleo programs using snarkos")
 
@@ -127,7 +125,7 @@ def main():
     parser.add_argument("--concurrent-deployments", type=int, default=None, help="Max concurrent deployments")
     parser.add_argument("--network", type=int, required=True, help="Network: 0 = mainnet, 1 = testnet, 2 = canary")
     parser.add_argument("--endpoint", type=str, required=True, help="Base endpoint for query and broadcast")
-    parser.add_argument("--wait", type=int, default=1000, help="Wait time in milliseconds between deployment batches")
+    parser.add_argument("--wait", type=int, default=1000, help="Wait time in milliseconds between deployment launches")
 
     args = parser.parse_args()
 
@@ -147,11 +145,11 @@ def main():
     pk_iterator = cycle(private_keys)
 
     executor = ThreadPoolExecutor(max_workers=concurrent)
-    futures = []
-
     count = 0
+
     try:
         while args.redeploys == 0 or count < args.redeploys * args.senders:
+            futures = []
             for _ in range(concurrent):
                 pk = next(pk_iterator)
                 futures.append(executor.submit(
@@ -163,24 +161,23 @@ def main():
                     broadcast_url
                 ))
                 count += 1
+
                 if args.redeploys != 0 and count >= args.redeploys * args.senders:
                     break
+
+                if args.wait > 0:
+                    time.sleep(args.wait / 1000.0)
 
             for f in as_completed(futures):
                 try:
                     f.result()
                 except Exception as e:
                     log(f"Deployment task crashed: {e}")
-            futures.clear()
-
-            if args.wait > 0:
-                time.sleep(args.wait / 1000.0)
 
     except KeyboardInterrupt:
         log("Interrupted by user. Shutting down.")
     finally:
         executor.shutdown(wait=True)
-
 
 if __name__ == "__main__":
     main()

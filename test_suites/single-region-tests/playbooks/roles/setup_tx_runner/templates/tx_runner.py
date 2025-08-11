@@ -8,7 +8,7 @@ import sys
 from random import shuffle
 from typing import List
 
-ALLOWED_COMMANDS = {"snarkos", "program-probe", "batch-deploy"}
+ALLOWED_COMMANDS = {"snarkos", "program-probe", "batch-deploy", "batch-transfer"}
 
 TASK_FILE = "/home/ubuntu/tasks.json"
 MAX_CONCURRENT_TASKS = 5
@@ -76,6 +76,10 @@ async def task_worker():
             else:
                 logger.info(f"Starting batch-deploy with args: {command[1:]}")
                 asyncio.create_task(monitor_batch_deploy(command[1:]))
+
+        elif command[0] == "batch-transfer":
+            logger.info(f"Starting batch-transfer with args: {command[1:]}")
+            asyncio.create_task(monitor_batch_transfer(command[1:]))
 
         task_queue.task_done()
 
@@ -156,7 +160,6 @@ async def program_probe(endpoint: str, network: str, randomize: bool = False, wa
 
                     last_height = current_height + 1
 
-                # Now call each discovered program
                 prog_list = list(discovered_programs)
                 if randomize:
                     shuffle(prog_list)
@@ -196,7 +199,6 @@ async def monitor_batch_deploy(args: List[str]):
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            # Stream logs live
             await asyncio.gather(
                 stream_output(batch_deploy_process.stdout, "tx_runner_deployments.log"),
                 stream_output(batch_deploy_process.stderr, "tx_runner_deployments.err.log"),
@@ -209,13 +211,34 @@ async def monitor_batch_deploy(args: List[str]):
 
         await asyncio.sleep(2)
 
+async def monitor_batch_transfer(args: List[str]):
+    while True:
+        try:
+            cmd = ["/home/ubuntu/venv/bin/python3", "/home/ubuntu/batch_transfer.py"] + args
+            logger.info(f"Launching batch-transfer: {' '.join(cmd)}")
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            await asyncio.gather(
+                stream_output(process.stdout, "tx_runner_transfers.log"),
+                stream_output(process.stderr, "tx_runner_transfers.err.log"),
+            )
+
+            logger.warning(f"batch-transfer exited with code {process.returncode}. Restarting...")
+
+        except Exception as e:
+            logger.error(f"batch-transfer crashed: {e}")
+
+        await asyncio.sleep(2)
 
 async def main():
     load_initial_tasks()
-
     asyncio.create_task(task_worker())
     await asyncio.Event().wait()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

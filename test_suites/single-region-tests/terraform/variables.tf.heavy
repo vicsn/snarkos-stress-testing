@@ -23,6 +23,11 @@ variable "prover_instance_type" {
   default     = "m7i.2xlarge"
 }
 
+variable "tx_runner_instance_type" {
+  description = "Instance type for the TX Runner node. The TX runner is heavy on CPU as it triggers highly concurrent snarkos tasks, so it is good for it to be C-type (compute optimized)"
+  default     = "c7i.8xlarge"
+}
+
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
   default     = 5 # minimum 5 for prerelease tests
