@@ -183,6 +183,7 @@
         msg: "{{ snapshot_urls_content.content | b64decode }}"
       run_once: true
 
+
 # ------------------------------------------------
 # snarkOS clients
 
@@ -193,7 +194,11 @@
   pre_tasks:
     - name: Set snapshot URL based on client index
       set_fact:
-        snapshot_url: "{{ (hostvars['localhost'].snapshot_urls_content.content | b64decode).split('\n')[groups['snarkos_client'].index(inventory_hostname)] if groups['snarkos_client'].index(inventory_hostname) > 0 else '' }}"
+        snapshot_url: >-
+          {%- set lines = (hostvars['localhost'].snapshot_urls_content.content | b64decode | regex_replace('\r', '')).split('\n') -%}
+          {%- set idx = groups['snarkos_client'].index(inventory_hostname) -%}
+          {{ (idx > 0 and idx < (lines | length) and (lines[idx] | trim) != '') | ternary(lines[idx] | trim, '') }}
+
 
     - name: Display assigned snapshot URL
       debug:
@@ -221,3 +226,85 @@
       register: download_job
 
   tags: snarkos_client
+
+# ------------------------------------------------
+# Build network_info.json from what each client was assigned
+- name: Generate network_info.json from assigned snapshot URLs
+  hosts: localhost
+  gather_facts: false
+  tags: network_info
+  tasks:
+    - name: Read snapshot URLs file (independent of earlier slurp)
+      slurp:
+        src: "{{ playbook_dir }}/snapshot_urls.txt"
+      register: snapshot_urls_content_final
+      run_once: true
+
+    - name: Split snapshot URLs into lines (normalize CRLF)
+      set_fact:
+        snapshot_lines: >-
+          {{
+            (snapshot_urls_content_final.content | b64decode | regex_replace('\r',''))
+            .split('\n')
+          }}
+
+    - name: Collect client list from inventory group
+      set_fact:
+        clients_list: "{{ groups['snarkos_client'] | default([]) }}"
+
+    - name: Assert we have clients
+      assert:
+        that:
+          - clients_list | length > 0
+        fail_msg: "No hosts in group 'snarkos_client'. Check inventory or --limit."
+
+    - name: Build list of {height, ip} pairs from per-host snapshot_url
+      set_fact:
+        pairs: >-
+          {{
+            (pairs | default([]))
+            + [ {
+                  'key':
+                    (
+                      (
+                        (url | regex_findall('checkpoint_(\\d+)') | first)
+                        | default((url | regex_findall('(?:mainnet|testnet|canary)-(\\d+)\\.(?:tar(?:\\.gz)?|zip)') | first), true)
+                      )
+                      | default(((idx > 0) | ternary((idx * 1000000) | string, '0')), true)
+                    ),
+                  'value': { 'url': (hostvars[item]['ansible_host'] | default(item)) }
+                } ]
+          }}
+      vars:
+        url: "{{ hostvars[item].snapshot_url | default('') }}"
+      loop: "{{ clients_list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item }}"
+
+    - name: Debug pairs
+      debug:
+        var: pairs
+      when: pairs is defined
+      run_once: true
+
+    - name: Construct {height -> client_ip} map from pairs
+      set_fact:
+        network_info: "{{ pairs | items2dict(key_name='key', value_name='value') }}"
+
+    - name: Remove old network_info.json (force rewrite)
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/network_info.json"
+        state: absent
+
+    - name: Write network_info.json
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/network_info.json"
+        content: "{{ network_info | to_nice_json }}"
+        mode: '0644'
+
+    - name: Ensure we have one entry per client
+      assert:
+        that:
+          - (network_info | length) == (groups['snarkos_client'] | length)
+        fail_msg: "network_info has {{ network_info | length }} entries; expected {{ groups['snarkos_client'] | length }}."

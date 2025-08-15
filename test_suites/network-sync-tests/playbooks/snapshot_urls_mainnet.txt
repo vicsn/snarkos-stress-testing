@@ -1,22 +1,6 @@
 
-https://ledger.aleo.network/mainnet/snapshot/mainnet-3539220.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-3688591.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-3832529.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-3953975.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-4107613.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5122732.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-4387403.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-4539137.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-4676378.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-4823146.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-4952281.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5097065.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5258618.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5373583.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5506112.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5647735.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5797102.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-5943862.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-6111215.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-6200142.tar
-https://ledger.aleo.network/mainnet/snapshot/mainnet-6397555.tar
+s3://aleo-snapshots/mainnet/checkpoint_1000000.zip
+s3://aleo-snapshots/mainnet/checkpoint_2000000.zip
+s3://aleo-snapshots/mainnet/checkpoint_3000000.zip
+s3://aleo-snapshots/mainnet/checkpoint_4000000.zip
+s3://aleo-snapshots/mainnet/checkpoint_5000000.zip

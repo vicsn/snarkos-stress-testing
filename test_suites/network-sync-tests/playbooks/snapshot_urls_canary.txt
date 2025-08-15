@@ -1,0 +1,5 @@
+
+s3://aleo-snapshots/canary/checkpoint_1000000.zip
+s3://aleo-snapshots/canary/checkpoint_2000000.zip
+s3://aleo-snapshots/canary/checkpoint_3000000.zip
+s3://aleo-snapshots/canary/checkpoint_4000000.zip

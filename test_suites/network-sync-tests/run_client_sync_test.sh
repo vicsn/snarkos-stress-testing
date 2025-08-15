@@ -11,6 +11,30 @@ export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
 
+# --- CLI options ---
+# --network {canary|testnet|mainnet} to skip prompt
+# --apply / -y to auto-approve terraform apply
+# --destroy to immediately terraform destroy and exit
+NETWORK=""
+TF_APPLY_ARGS=""
+DESTROY_ONLY=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --network)
+      NETWORK="$2"; shift 2;;
+    --apply|-y)
+      TF_APPLY_ARGS="-auto-approve"; shift;;
+    --destroy)
+      DESTROY_ONLY=1; shift;;
+    -h|--help)
+      echo "Usage: $0 [--network canary|testnet|mainnet] [--apply|-y] [--destroy]"; exit 0;;
+
+    *)
+      echo "Unknown option: $1"; exit 2;;
+  esac
+done
+
 # Function to get highest height from snapshot URLs
 get_highest_snapshot_height() {
     local snapshot_file="$1"
@@ -18,14 +42,14 @@ get_highest_snapshot_height() {
 
     # Read the file line by line, ensuring the last line is processed
     while IFS= read -r line || [ -n "$line" ]; do
-        if [[ $line =~ mainnet-([0-9]+)\.tar ]] || [[ $line =~ testnet-([0-9]+)\.tar ]]; then
+        if [[ $line =~ mainnet-([0-9]+)\.tar ]] || [[ $line =~ testnet-([0-9]+)\.tar ]] || [[ $line =~ canary-([0-9]+)\.tar ]]; then
             local height="${BASH_REMATCH[1]}"
             if [ "$height" -gt "$highest_height" ]; then
                 highest_height=$height
             fi
         fi
 
-        if [[ $line =~ testnet\/checkpoint_([0-9]+)\.zip ]] || [[ $line =~ mainnet\/checkpoint_([0-9]+)\.zip ]]; then
+        if [[ $line =~ testnet\/checkpoint_([0-9]+)\.zip ]] || [[ $line =~ mainnet\/checkpoint_([0-9]+)\.zip ]] || [[ $line =~ canary\/checkpoint_([0-9]+)\.zip ]]; then
             local height="${BASH_REMATCH[1]}"
             if [ "$height" -gt "$highest_height" ]; then
                 highest_height=$height
@@ -57,28 +81,30 @@ check_snapshot_freshness() {
     # to ~200k for mainnet and up to ~300k for testnet. Here, we use 1.5x these thresholds for
     # triggering the warnings, a somewhat arbitrary value.
     local threshold=300000  # Default for mainnet
-    
+
     if [ "$network" == "testnet" ]; then
         threshold=450000
     fi
-    
+
     local height_diff=$((current_height - snapshot_height))
-    
+
     if [ "$height_diff" -gt "$threshold" ]; then
         echo "WARNING: The snapshots are significantly outdated!"
         echo "Current ${network} height: ${current_height}"
         echo "Latest snapshot height: ${snapshot_height}"
         echo "Difference: ${height_diff} blocks"
         echo "Threshold: ${threshold} blocks"
-        
-        while true; do
-            read -p "Do you want to continue anyway? (y/n) " response
-            case "$response" in
-                [Yy]* ) return 0;;
-                [Nn]* ) return 1;;
-                * ) echo "Please answer y or n.";;
-            esac
-        done
+
+        if [[ -z "${TF_APPLY_ARGS}" ]]; then
+          while true; do
+              read -p "Do you want to continue anyway? (y/n) " response
+              case "$response" in
+                  [Yy]* ) return 0;;
+                  [Nn]* ) return 1;;
+                  * ) echo "Please answer y or n.";;
+              esac
+          done
+        fi
     fi
     return 0
 }
@@ -89,6 +115,13 @@ destroy_infrastructure() {
     cd "$PARENT_DIR/terraform"
     terraform destroy -auto-approve -parallelism=50
 }
+
+# If --destroy is passed, do it immediately and exit.
+if [[ "${DESTROY_ONLY}" -eq 1 ]]; then
+    echo "Destroy-only mode requested (--destroy)."
+    destroy_infrastructure
+    exit 0
+fi
 
 # Function to clean up resources using Terraform
 cleanup() {
@@ -109,7 +142,7 @@ set_devnet_vars() {
 init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
     terraform init -backend-config="bucket=${TFSTATE_BUCKET}"
-    terraform apply
+    terraform apply ${TF_APPLY_ARGS}
 
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
@@ -118,7 +151,11 @@ init_and_apply_terraform() {
 
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook ips.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars "test_network_url=${LB_URL} --extra-vars="snarkos_network=${NETWORK}" snarkos_network_int=${SNARKOS_NETWORK_INT}" --extra-vars="@vars.yml"
+    ansible-playbook ips.yml \
+      --extra-vars "devnet_name=${DEVNET_NAME}" \
+      --extra-vars "test_network_url=${LB_URL}" \
+      --extra-vars "snarkos_network=${NETWORK} snarkos_network_int=${SNARKOS_NETWORK_INT}" \
+      --extra-vars "@vars.yml"
 
     if [ "$(uname)" == "Darwin" ]; then
         say "Finished running Terraform"
@@ -146,35 +183,65 @@ else
     echo "SSH key already exists. Skipping generation..."
 fi
 
-# Ask the user which network they want to run or if they want to skip
-while true; do
-    read -p "Do you want to run the network for testnet (t), mainnet (m), or skip and destroy (s)? " NETWORK_TYPE
-    if [ "$NETWORK_TYPE" == "t" ] || [ "$NETWORK_TYPE" == "m" ] || [ "$NETWORK_TYPE" == "s" ]; then
-        break
-    else
-        echo "Invalid option. Please enter 't' for testnet, 'm' for mainnet, or 's' to skip and destroy."
-    fi
-done
+# Determine network (from --network or interactive)
+if [[ -z "$NETWORK" ]]; then
+  # Ask the user which network they want to run or if they want to skip
+  while true; do
+      read -p "Do you want to run the network for canary(c), testnet (t), mainnet (m), or skip and destroy (s)? " NETWORK_TYPE
+      if [[ "$NETWORK_TYPE" == "c" || "$NETWORK_TYPE" == "t" || "$NETWORK_TYPE" == "m" || "$NETWORK_TYPE" == "s" ]]; then
+          break
+      else
+          echo "Invalid option. Please enter 't' for testnet, 'm' for mainnet, or 's' to skip and destroy."
+      fi
+  done
 
-# Check if the user wants to skip
-if [ "$NETWORK_TYPE" == "s" ]; then
-    echo "Skipping network setup and proceeding to infrastructure destruction..."
-    read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-    destroy_infrastructure
-    exit 0
-fi
+  # Check if the user wants to skip
+  if [ "$NETWORK_TYPE" == "s" ]; then
+      echo "Skipping network setup and proceeding to infrastructure destruction..."
+      read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+      destroy_infrastructure
+      exit 0
+  fi
 
-# Set the snarkos_network_int value based on user selection
-if [ "$NETWORK_TYPE" == "t" ]; then
-    SNARKOS_NETWORK_INT=1
-    cp "$PARENT_DIR/playbooks/snapshot_urls_testnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
-    echo "Using testnet snapshot URLs."
-    NETWORK="testnet"
+  # Set the snarkos_network_int value based on user selection
+  if [ "$NETWORK_TYPE" == "t" ]; then
+      SNARKOS_NETWORK_INT=1
+      cp "$PARENT_DIR/playbooks/snapshot_urls_testnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
+      echo "Using testnet snapshot URLs."
+      NETWORK="testnet"
+  elif [ "$NETWORK_TYPE" == "m" ]; then
+      SNARKOS_NETWORK_INT=0
+      cp "$PARENT_DIR/playbooks/snapshot_urls_mainnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
+      echo "Using mainnet snapshot URLs."
+      NETWORK="mainnet"
+  else
+      SNARKOS_NETWORK_INT=2
+      cp "$PARENT_DIR/playbooks/snapshot_urls_canary.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
+      echo "Using canary snapshot URLs."
+      NETWORK="canary"
+  fi
 else
-    SNARKOS_NETWORK_INT=0
-    cp "$PARENT_DIR/playbooks/snapshot_urls_mainnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
-    echo "Using mainnet snapshot URLs."
-    NETWORK="mainnet"
+  case "$NETWORK" in
+    testnet)
+      SNARKOS_NETWORK_INT=1
+      cp "$PARENT_DIR/playbooks/snapshot_urls_testnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
+      echo "Using testnet snapshot URLs."
+      ;;
+    mainnet)
+      SNARKOS_NETWORK_INT=0
+      cp "$PARENT_DIR/playbooks/snapshot_urls_mainnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
+      echo "Using mainnet snapshot URLs."
+      ;;
+    canary)
+      SNARKOS_NETWORK_INT=2
+      cp "$PARENT_DIR/playbooks/snapshot_urls_canary.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
+      echo "Using canary snapshot URLs."
+      ;;
+    *)
+      echo "Invalid --network value: '$NETWORK'. Use one of: canary, testnet, mainnet."
+      exit 2
+      ;;
+  esac
 fi
 
 # Get highest snapshot height
@@ -230,8 +297,10 @@ if [ "$(uname)" == "Darwin" ]; then
     say "Finished running setup"
 fi
 
-# Wait for user input before destroying the infrastructure
-read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+if [[ -z "${TF_APPLY_ARGS}" ]]; then
+  # Wait for user input before destroying the infrastructure
+  read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
-# Call destroy_infrastructure function directly instead of cleanup
-destroy_infrastructure
+  # Call destroy_infrastructure function directly instead of cleanup
+  destroy_infrastructure
+fi

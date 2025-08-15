@@ -32,6 +32,22 @@ log "Created: $DOWNLOAD_DIR and $EXTRACT_DIR"
 
 if [[ -z "${SNAPSHOT_URL:-}" ]]; then
   log "No snapshot URL provided; exiting."
+
+  mkdir -p "${STORAGE_DIR}/ledger-0"
+
+  log "Restarting snarkOS service..."
+  systemctl restart snarkos || true
+  sleep 5
+  log "snarkOS service status after restart:"
+  systemctl status snarkos | tee -a "$LOG_FILE" || true
+
+  if systemctl is-active --quiet snarkos; then
+    log "snarkOS service is running successfully"
+  else
+    log "WARNING: snarkOS service failed to start, showing recent logs:"
+    journalctl -u snarkos --no-pager -n 50 | tee -a "$LOG_FILE" || true
+  fi
+
   exit 0
 fi
 

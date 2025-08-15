@@ -74,3 +74,4 @@ builder/infrastructure/ansible/builder_inventory.yml
 
 # Related to the client sync test
 test_suites/network-sync-tests/playbooks/snapshot_urls.txt
+test_suites/network-sync-tests/playbooks/network_info.json
