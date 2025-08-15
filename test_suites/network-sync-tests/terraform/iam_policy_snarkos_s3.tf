@@ -13,7 +13,9 @@ resource "aws_iam_policy" "snarkos_s3_access" {
         ]
         Resource = [
           "arn:aws:s3:::${var.RELEASE_BUCKET}",
-          "arn:aws:s3:::${var.RELEASE_BUCKET}/*"
+          "arn:aws:s3:::${var.RELEASE_BUCKET}/*",
+          "arn:aws:s3:::aleo-snapshots",
+          "arn:aws:s3:::aleo-snapshots/*"
         ]
       }
     ]

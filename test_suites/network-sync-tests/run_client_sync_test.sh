@@ -7,15 +7,15 @@ bold=$(tput bold)
 normal=$(tput sgr0)
 
 TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
-export AWS_REGION="${TF_STATE_REGION:-us-east-2}"
-RELEASE_BUCKET="${RELEASE_BUCKET:release-bucket-2122415}"
+export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
+RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
 
 # Function to get highest height from snapshot URLs
 get_highest_snapshot_height() {
     local snapshot_file="$1"
     local highest_height=0
-    
+
     # Read the file line by line, ensuring the last line is processed
     while IFS= read -r line || [ -n "$line" ]; do
         if [[ $line =~ mainnet-([0-9]+)\.tar ]] || [[ $line =~ testnet-([0-9]+)\.tar ]]; then
@@ -24,8 +24,15 @@ get_highest_snapshot_height() {
                 highest_height=$height
             fi
         fi
+
+        if [[ $line =~ testnet\/checkpoint_([0-9]+)\.zip ]] || [[ $line =~ mainnet\/checkpoint_([0-9]+)\.zip ]]; then
+            local height="${BASH_REMATCH[1]}"
+            if [ "$height" -gt "$highest_height" ]; then
+                highest_height=$height
+            fi
+        fi
     done < "$snapshot_file"
-    
+
     echo "$highest_height"
 }
 
@@ -88,31 +95,31 @@ cleanup() {
     echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
 
     read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-    
+
     destroy_infrastructure
+}
+
+set_devnet_vars() {
+  export DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+
+  echo "devnet_name : $DEVNET_NAME"
 }
 
 # Function to init and apply Terraform
 init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
     terraform init -backend-config="bucket=${TFSTATE_BUCKET}"
+    terraform apply
 
-    # Store the currently loaded tx-cannon services
-    replace_args="" 
-    terraform state list | grep 'aws_ecs_service.tx_cannon_services' | \
-        while read instance; do
-            replace_args+=" -replace=$instance"
-        done
-    # Always replace the tx-cannon ECS cluster, because they have a state root cached.
-    terraform apply $replace_args
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
     LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+    set_devnet_vars || exit 1
+
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook ips.yml --extra-vars "test_network_url=${LB_URL} snarkos_network_int=${SNARKOS_NETWORK_INT}" --extra-vars="@vars.yml"
+    ansible-playbook ips.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars "test_network_url=${LB_URL} --extra-vars="snarkos_network=${NETWORK}" snarkos_network_int=${SNARKOS_NETWORK_INT}" --extra-vars="@vars.yml"
 
-    # Tell it like it is
     if [ "$(uname)" == "Darwin" ]; then
         say "Finished running Terraform"
     fi
@@ -193,9 +200,11 @@ cp "$PARENT_DIR/terraform/variables.tf.template" "$PARENT_DIR/terraform/variable
 if [[ "$(uname)" == "Darwin" ]]; then
     # macOS (BSD) sed requires an extension parameter with -i
     sed -i '' "s/NUMCLIENTS/$SNAPSHOT_COUNT/g" "$PARENT_DIR/terraform/variables.tf"
+    sed -i '' "s/NETWORK/$NETWORK/g" "$PARENT_DIR/terraform/variables.tf"
 else
     # Linux (GNU) sed
     sed -i "s/NUMCLIENTS/$SNAPSHOT_COUNT/g" "$PARENT_DIR/terraform/variables.tf"
+    sed -i "s/NETWORK/$NETWORK/g" "$PARENT_DIR/terraform/variables.tf"
 fi
 
 echo "Updated variables.tf with $SNAPSHOT_COUNT clients."
@@ -205,13 +214,18 @@ init_and_apply_terraform
 
 # Read the load balancer DNS name from lb_url.txt
 LB_URL=$(cat $PARENT_DIR/lb_url.txt)
-# Read the network from $PARENT_DIR/playbooks/vars.yml
-export NETWORK=$(grep "network:" $PARENT_DIR/playbooks/vars.yml | cut -d " " -f2)
 
-# Run setup for validators and clients
+set_devnet_vars || exit 1
+
 cd "$PARENT_DIR/playbooks"
-echo "Setting up validators and clients..."
-ansible-playbook setup.yml --extra-vars "test_network_url=${LB_URL} snarkos_network_int=${SNARKOS_NETWORK_INT}" --extra-vars="@vars.yml"
+
+ansible-playbook setup.yml \
+  --extra-vars="devnet_name=${DEVNET_NAME}" \
+  --extra-vars "test_network_url=${LB_URL} snarkos_network_int=${SNARKOS_NETWORK_INT}" \
+  --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
+  --extra-vars="snarkos_network=${NETWORK}" \
+  --extra-vars="@vars.yml"
+
 if [ "$(uname)" == "Darwin" ]; then
     say "Finished running setup"
 fi

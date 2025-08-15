@@ -5,4 +5,5 @@
         --rest 0.0.0.0:3030 --node 0.0.0.0:4130 \
         --verbosity {{ snarkos_verbosity }} --metrics \
         --rest-rps {{ rest_rps }} \
+        --storage /home/ubuntu/.aleo/storage/ledger-0 \
         --network {{ snarkos_network_int }}

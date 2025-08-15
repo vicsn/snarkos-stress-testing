@@ -2,89 +2,17 @@
   hosts: all
   remote_user: ubuntu
   gather_facts: false
+  any_errors_fatal: true
   tasks:
     - name: Wait for SSH to become ready
       ansible.builtin.wait_for_connection:
 
-- name: Check which installation method is used
+- name: Select installation method and build if needed
   hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Check if a local pre-built version should be used
-      ansible.builtin.set_fact:
-        use_local_pre_build: >-
-          {{
-            (snarkos_pre_build_location is defined and snarkos_pre_build_location | length > 0)
-          }}
-
-    - name: Check if S3 pre-built version should be used
-      ansible.builtin.set_fact:
-        use_s3_pre_build: >-
-          {{
-            (snarkos_pre_build_location is undefined) and
-            (s3_bucket is defined and s3_bucket | length > 0) and
-            (use_snarkos_pre_build_s3 is defined and use_snarkos_pre_build_s3|bool)
-          }}
-
-    - name: Check if local build should be used
-      ansible.builtin.set_fact:
-        use_local_build: >-
-          {{
-            (snarkos_pre_build_location is undefined) and
-            (use_snarkos_pre_build_s3 is undefined or not use_snarkos_pre_build_s3|bool) and
-            (snarkos_repo is defined and snarkos_repo | length > 0) and
-            (snarkos_git_commit_local_build is defined and snarkos_git_commit_local_build | length > 0)
-          }}
-
-    - name: Check if GitHub build should be used
-      ansible.builtin.set_fact:
-        use_github_build: >-
-          {{
-            (snarkos_pre_build_location is undefined) and
-            (use_snarkos_pre_build_s3 is undefined or not use_snarkos_pre_build_s3|bool) and
-            (snarkos_binary_tag is defined and snarkos_binary_tag | length > 0)
-          }}
-
-    - name: Check if remote build should be used
-      ansible.builtin.set_fact:
-        use_remote_build: >-
-          {{
-            (snarkos_pre_build_location is undefined) and
-            (use_snarkos_pre_build_s3 is undefined or not use_snarkos_pre_build_s3|bool) and
-            (snarkos_git_hash is defined and snarkos_git_hash | length > 0) and
-            (snarkos_repo is defined and snarkos_repo | length > 0)
-          }}
-
-    - name: Check malice download method
-      ansible.builtin.set_fact:
-        use_malicious_snarkos_pre_build: >-
-          {{
-            (use_malicious_snarkos_pre_build is defined) and (use_malicious_snarkos_pre_build|bool)
-          }}
-
-- name: Build and upload snarkOS to S3 if required
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Set git commit variable for standard build
-      set_fact:
-        snarkos_git_commit_to_build: "{{ snarkos_git_commit_local_build }}"
-      when: snarkos_git_commit_local_build is defined
-
-    - name: Set standard release name
-      set_fact:
-        standard_release_name: "{{ generate_release_name | replace('COMMIT_HASH', snarkos_git_commit_to_build) | trim }}"
-      when: snarkos_git_commit_local_build is defined
-
-    - name: Debug standard release name
-      debug:
-        msg: "Standard release name: '{{ standard_release_name }}'"
-      when: snarkos_git_commit_local_build is defined
-
-    - name: Build and upload standard snarkOS to S3
-      include_role:
-        name: snarkos_build_locally
-      when: hostvars['localhost'].use_local_build
+  gather_facts: true
+  any_errors_fatal: true
+  roles:
+    - check_and_setup_snarkos
 
 # ------------------------------------------------
 # snarkOS installation
@@ -93,6 +21,7 @@
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  strategy: free
   vars:
     s3_bucket: "{{ s3_bucket }}"
     snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
@@ -126,54 +55,86 @@
   tags: snarkos_install
 
 # ------------------------------------------------
-# zip
-- name: Install zip
+# Dependencies
+- name: Install dependencies
   hosts: snarkos*
   become: true
   remote_user: ubuntu
   tasks:
-    - name: Install zip
+    - name: Update apt cache (retry on transient lock/network issues)
       ansible.builtin.apt:
-        name: "{{ item }}"
-        state: present
         update_cache: true
-      with_items:
-        - zip
+      register: apt_update
+      until: apt_update is succeeded
+      retries: 10
+      delay: 6
+
+    - name: Install dependencies
+      ansible.builtin.apt:
+        name:
+          - zip
+          - unzip
+          - awscli
+          - tar
+        state: present
+      register: apt_result
+      until: apt_result is succeeded
       retries: 20
       delay: 30
-      until: apt_result is success
 
 # ------------------------------------------------
-# snarkOS Process Exporter
+# Observability setup
 
-- name: Install and Configure Process Exporter
+- name: Force-Run docker-compose up with process exporter # noqa: no-changed-when
   hosts: snarkos*
   become: true
   remote_user: ubuntu
-  roles:
-    - process_exporter_setup
+  any_errors_fatal: true
+  strategy: free
+  tasks:
+    - name: Rename docker-compose.yml if process-exporter version does not exist
+      ansible.builtin.command: mv /home/ubuntu/docker-compose.yml /home/ubuntu/docker-compose-process-exporter.yml
+      args:
+        removes: /home/ubuntu/docker-compose.yml  # only runs if this file exists
+        creates: /home/ubuntu/docker-compose-process-exporter.yml  # only runs if this doesn't exist
+    - name: Force-Run docker-compose up with process exporter, restart
+      any_errors_fatal: true
+      command:
+        cmd: docker-compose -f docker-compose-process-exporter.yml up -d --force-recreate
+        chdir: /home/ubuntu/
   tags: process_exporter
 
 # ------------------------------------------------
 # snarkOS Node Exporter
 
-- name: Install and Configure Node Exporter
+- name: Force-Run docker-compose up with node exporter # noqa: no-changed-when
   hosts: snarkos*
   become: true
   remote_user: ubuntu
-  roles:
-    - node_exporter_setup
+  any_errors_fatal: true
+  strategy: free
+  tasks:
+    - name: Force-Run docker-compose up with node exporter, restart
+      command:
+        cmd: docker-compose -f docker-compose-node-exporter.yml up -d --force-recreate
+        chdir: /home/ubuntu/
+      retries: 5
+      delay: 20
+      register: docker_compose_up_result
+      until: docker_compose_up_result.rc == 0
   tags: node_exporter
 
 # ------------------------------------------------
-# Logstash
+# Metricbeat, Filebeat, Logstash
 
-- name: Install and Configure Logstash
+- name: Install and Configure Metricbeat, Filebeat and Logstash
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
+  strategy: free
   pre_tasks:
-    - name: Add logging enrichment to Logstash
+    - name: Add logging enrichment to Metricbeat, Filebeat and Logstash
       include_tasks: logging_enrichment.yml
       vars:
         use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
@@ -182,52 +143,12 @@
         use_github_build: "{{ hostvars['localhost'].use_github_build }}"
         use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
         snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-
   roles:
     - logstash_setup
-  tags: logstash
-
-# ------------------------------------------------
-# Metricbeat
-
-- name: Install and Configure Metricbeat
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  pre_tasks:
-    - name: Add logging enrichment to Metricbeat
-      include_tasks: logging_enrichment.yml
-      vars:
-        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
-        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
-        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
-        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
-        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
-        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-  roles:
     - metricbeat_setup
-  tags: metricbeat
-
-# ------------------------------------------------
-# Filebeat
-
-- name: Install and Configure Filebeat
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  pre_tasks:
-    - name: Add logging enrichment to Filebeat
-      include_tasks: logging_enrichment.yml
-      vars:
-        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
-        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
-        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
-        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
-        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
-        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-  roles:
     - filebeat_setup
-  tags: filebeat
+  vars:
+    preinstalled: true
 
 # ------------------------------------------------
 # Prometheus for Grafana metrics
@@ -237,9 +158,11 @@
   become: true
   remote_user: ubuntu
   gather_facts: true
+  any_errors_fatal: true
   roles:
     - prometheus_setup_with_clients
-  tags: prometheus
+  vars:
+    test_runner_for_metrics_ip: "{{ test_runner_ip | default('localhost') }}"
 
 # ------------------------------------------------
 # snarkOS clients
@@ -279,8 +202,10 @@
     - name: Deploy download and restart script
       template:
         src: download_snapshot.sh.j2
-        dest: /tmp/download_snapshot.sh
+        dest: /home/ubuntu/download_snapshot.sh
         mode: '0755'
+        owner: ubuntu
+        group: ubuntu
 
     - name: Set client facts
       include_tasks: set_client_facts.yml
@@ -290,7 +215,7 @@
 
   post_tasks:
     - name: Execute download and restart script
-      shell: /tmp/download_snapshot.sh > /var/log/download_snapshot_$(date +%Y%m%d-%H%M%S).log 2>&1
+      shell: /home/ubuntu/download_snapshot.sh > /home/ubuntu/download_snapshot_$(date +%Y%m%d-%H%M%S).log 2>&1
       async: 18000  # 5 hours timeout
       poll: 0
       register: download_job

@@ -1,4 +1,3 @@
-
 terraform {
   backend "s3" {
     key            = "terraform/state/network-sync-tests/terraform.tfstate"
@@ -93,4 +92,41 @@ resource "aws_instance" "prometheus_server" {
     Role = "prometheus-server"
     Devnet = var.devnet_name
   }
+}
+
+resource "aws_elb" "snarkos_lb" {
+  name               = "${substr(local.sanitized_devnet_name, 0, 10)}-snarkos-lb"
+  security_groups    = [module.sg.security_group_id]
+  availability_zones = data.aws_availability_zones.available.names
+
+  listener {
+    instance_port     = 3030
+    instance_protocol = "http"
+    lb_port           = 3030
+    lb_protocol       = "http"
+  }
+
+  health_check {
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 3
+    interval            = 30
+    target              = "HTTP:3030/${var.snarkos_network}/block/height/latest"
+  }
+
+  instances = [for i in aws_instance.snarkos_client : i.id]
+
+  tags = {
+    Name   = "${var.devnet_name}-snarkos-lb"
+    Devnet = var.devnet_name
+  }
+}
+
+output "devnet_name" {
+  value = var.devnet_name
+  description = "The devnet_name name"
+}
+
+output "snarkos_lb_dns_name" {
+  value = aws_elb.snarkos_lb.dns_name
 }
