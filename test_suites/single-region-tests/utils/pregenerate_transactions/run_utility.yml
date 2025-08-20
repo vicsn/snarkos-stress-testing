@@ -16,13 +16,14 @@
       assert:
         that:
           - txs_target_consensus_version_height is defined
+          - txs_target_consensus_version is defined
           - pregeneration_execution_tx_count is defined
           - pregeneration_deployment_tx_count is defined
           - pregeneration_bucket_path is defined
           - pregeneration_tx_batch_size is defined
         fail_msg: >
           This playbook requires the following variables to be set:
-          txs_target_consensus_version_height, pregeneration_execution_tx_count, pregeneration_bucket_path, pregeneration_tx_batch_size, pregeneration_deployment_tx_count
+          txs_target_consensus_version_height, pregeneration_execution_tx_count, pregeneration_bucket_path, pregeneration_tx_batch_size, pregeneration_deployment_tx_count, txs_target_consensus_version
 
     - name: Load credits.aleo program
       set_fact:
@@ -82,7 +83,7 @@
 #      retries: 10
 #      delay: 10
 
-- name: Pregenerate a transfer transactions
+- name: Pregenerate all transactions
   hosts: tx_sender_node
   become: true
   remote_user: ubuntu
@@ -119,7 +120,7 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         mode: list
-        prefix: "{{ pregeneration_bucket_path }}/transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}"
+        prefix: "{{ pregeneration_bucket_path }}/transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}" # noqa yaml[line-length]
       register: s3_zip_list
       failed_when: false
 
@@ -170,9 +171,21 @@
       set_fact:
         txs_target_state_root: "{{ hostvars['localhost'].validator_data.state_roots[num_validators_fact | string] }}"
 
+    - name: Write base program once
+      copy:
+        content: "{{ hostvars['localhost'].program_data }}"
+        dest: /tmp/program_base.aleo
+        mode: '0644'
+
     - name: Set txs_accounts
       set_fact:
         txs_accounts: "{{ hostvars['localhost'].validator_data.accounts }}"
+
+    - name: Write PK list
+      copy:
+        content: "{{ (txs_accounts | map(attribute='private_key') | join('\n')) ~ '\n' }}"
+        dest: /tmp/keys.txt
+        mode: '0600'
 
     - name: Batch transaction indices into chunks
       set_fact:
@@ -222,7 +235,7 @@
       args:
         executable: /bin/bash
       vars:
-        zip_name: "transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}.zip"
+        zip_name: "transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}.zip" # noqa yaml[line-length]
 
     - name: Upload zipped transactions to S3
       aws_s3:
@@ -231,7 +244,7 @@
         src: "/tmp/{{ zip_name }}"
         mode: put
       vars:
-        zip_name: "transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}.zip"
+        zip_name: "transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}.zip" # noqa yaml[line-length]
 
     - name: Fetch pregeneration log
       fetch:

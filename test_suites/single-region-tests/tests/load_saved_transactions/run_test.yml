@@ -23,6 +23,8 @@
           - "{{ pregeneration_bucket_path }}"
           - "{{ pregeneration_execution_tx_count }}"
           - "{{ pregeneration_deployment_tx_count }}"
+          - "{{ txs_target_consensus_version }}"
+          - "{{ txs_target_consensus_version_height }}"
       register: out
 
     - name: Print the output

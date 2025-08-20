@@ -61,6 +61,7 @@ snarkos_verbosity: "1"
 rest_rps: 1000000000
 
 # TX pre-generation variables:
+# txs_target_consensus_version: 10
 # txs_target_consensus_version_height: 22
 # pregeneration_execution_tx_count: 40
 # pregeneration_deployment_tx_count: 20

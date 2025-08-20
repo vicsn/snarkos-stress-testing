@@ -1,41 +1,42 @@
-- name: pregenerate_transactions | generate_execution_txs | Print which transaction we are generating
-  debug:
-    msg: "Generating transaction {{ index }} of {{ (pregeneration_execution_tx_count | int) // 2 }}"
-  loop: "{{ current_batch }}"
-  loop_control:
-    loop_var: index
-    label: "tx {{ index }}"
-
-- name: pregenerate_transactions | generate_execution_txs | Start async jobs for transaction batch {{ current_batch }}
+- name: pregenerate_transactions | generate_execution_txs | Launch batch in parallel (single SSH)
   ansible.builtin.shell: |
-    echo "Generating transaction {{ index }} of {{ (pregeneration_execution_tx_count | int) // 2 }}"
+    set -euo pipefail
+    mkdir -p /tmp/pregen_logs
 
-    {{ snarkos_bin_path }}/snarkos developer execute \
-      --private-key {{ txs_accounts[0].private_key }} \
-      --query '{"state_root": "{{ txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
-      credits.aleo transfer_public {{ txs_accounts[1].address }} 100u64 \
-      --network {{ snarkos_network_int }} \
-      --store /tmp/transfer_public_tx{{ index }}.txt \
-      --store-format string >> transaction_pregeneration.log
+    run_tx() {
+      idx="$1"
+      echo "Generating execution transaction ${idx} of $(( ({{ pregeneration_execution_tx_count | int }}) / 2 ))" \
+        | tee -a "/tmp/pregen_logs/tx_${idx}.log"
+
+      "{{ snarkos_bin_path }}/snarkos" developer execute \
+        --private-key "{{ txs_accounts[0].private_key }}" \
+        --query '{"state_root": "{{ txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
+        credits.aleo transfer_public "{{ txs_accounts[1].address }}" 100u64 \
+        --network {{ snarkos_network_int }} \
+        --store "/tmp/transfer_public_tx${idx}.txt" \
+        --store-format string >>"/tmp/pregen_logs/tx_${idx}.log" 2>&1
+    }
+
+    pids=()
+    for idx in {{ current_batch | join(' ') }}; do
+      run_tx "$idx" &
+      pids+=("$!")
+    done
+
+    ec=0
+    for p in "${pids[@]}"; do
+      if ! wait "$p"; then ec=1; fi
+    done
+
+    # Merge at the end to avoid contention
+    cat /tmp/pregen_logs/tx_*.log >> transaction_pregeneration.log || true
+    exit $ec
   args:
     executable: /bin/bash
-  async: 300
-  poll: 0
-  loop: "{{ current_batch }}"
-  loop_control:
-    loop_var: index
-    label: "tx {{ index }}"
-  register: batch_async_jobs
+  register: batch_run
+  changed_when: true
 
-- name: pregenerate_transactions | generate_execution_txs | Fail if any async job result is missing job ID
-  fail:
-    msg: "Missing job ID in result: {{ item }}"
-  when: item.ansible_job_id is not defined
-  loop: "{{ batch_async_jobs.results }}"
-  loop_control:
-    label: "{{ item._ansible_item_label | default('unknown') }}"
-
-- name: pregenerate_transactions | generate_execution_txs | Accumulate async job results
+- name: pregenerate_transactions | generate_execution_txs | Accumulate results (indices only)
   set_fact:
     current_batch_result_jobs:
-      results: "{{ batch_async_jobs.results }}"
+      results: "{{ current_batch | map('int') | list }}"

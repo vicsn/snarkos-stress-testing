@@ -7,23 +7,35 @@
   when: batch_type == "execution"
   vars:
     current_batch: "{{ batch }}"
-    result_job_accumulator: current_batch_result_jobs
 
 - name: pregenerate_transactions | generate_batch | Include generate_deployment_txs.yml (if deployment batch)
   include_tasks: generate_deployment_txs.yml
   when: batch_type == "deployment"
   vars:
     current_batch: "{{ batch }}"
-    result_job_accumulator: current_batch_result_jobs
 
-- name: pregenerate_transactions | generate_batch | Wait for batch {{ batch_type ~ ' [' ~ (batch | join(', ')) ~ ']' }}
-  async_status:
-    jid: "{{ job.ansible_job_id }}"
-  register: current_batch_wait_results
-  until: current_batch_wait_results.finished
+# Wait for execution artifacts
+- name: pregenerate_transactions | generate_batch | Wait for all execution tx files to appear
+  ansible.builtin.stat:
+    path: "/tmp/transfer_public_tx{{ item }}.txt"
+  register: exec_tx_stat
+  until: exec_tx_stat.stat.exists
   retries: 100
   delay: 3
+  when: batch_type == "execution"
   loop: "{{ current_batch_result_jobs.results }}"
   loop_control:
-    loop_var: job
-    label: "tx {{ job._ansible_item_label | default(job.ansible_job_id) }}"
+    label: "tx {{ item }}"
+
+# Wait for deployment artifacts
+- name: pregenerate_transactions | generate_batch | Wait for all deployment tx files to appear
+  ansible.builtin.stat:
+    path: "/tmp/deployment_tx{{ item }}.txt"
+  register: dep_tx_stat
+  until: dep_tx_stat.stat.exists
+  retries: 100
+  delay: 3
+  when: batch_type == "deployment"
+  loop: "{{ current_batch_result_jobs.results }}"
+  loop_control:
+    label: "tx {{ item }}"
