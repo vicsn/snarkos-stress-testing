@@ -35,6 +35,12 @@
     src: "tx_runner.py"
     mode: '0644'
 
+- name: Upload the block scanner script
+  template:
+    dest: "/home/ubuntu/block_scanner.py"
+    src: "block_scanner.py"
+    mode: '0644'
+
 - name: Upload the TX runner tasks
   template:
     dest: "/home/ubuntu/tasks.json"
@@ -64,6 +70,7 @@
     - batch_deploy.py
     - batch_transfer.py
     - tx_runner.py
+    - block_scanner.py
 
 - name: Push programs and data folders to remote runner
   block:
@@ -106,6 +113,12 @@
     dest: /etc/supervisor/conf.d/tx_runner.conf
     mode: '0644'
 
+- name: Deploy supervisor config for block_scanner
+  template:
+    src: block_scanner.conf
+    dest: /etc/supervisor/conf.d/block_scanner.conf
+    mode: '0644'
+
 - name: Touch and chown tx_runner logs
   file:
     path: "/home/ubuntu/tx_runner{{ item }}"
@@ -116,6 +129,8 @@
   loop:
     - .log
     - .err.log
+    - _block_scanner.log
+    - _block_scanner.err.log
 
 - name: Reread supervisor config
   command: supervisorctl reread

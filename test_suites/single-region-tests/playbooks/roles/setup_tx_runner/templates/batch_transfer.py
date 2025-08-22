@@ -67,7 +67,7 @@ def main():
     parser = argparse.ArgumentParser(description="Batch transfer Aleo microcredits")
     parser.add_argument("--senders", type=int, default=1, help="Number of senders (private keys)")
     parser.add_argument("--receivers", type=int, default=1, help="Number of receivers")
-    parser.add_argument("--wait", type=int, default=1000, help="Wait time in milliseconds between transactions")
+    parser.add_argument("--wait", type=int, default=200, help="Wait time in milliseconds between transactions")
     parser.add_argument("--network", type=int, required=True, help="Network: 0 = mainnet, 1 = testnet, 2 = canary")
     parser.add_argument("--endpoint", type=str, required=True, help="Base endpoint for query and broadcast")
     parser.add_argument("--amount", type=int, default=100, help="Amount in microcredits")

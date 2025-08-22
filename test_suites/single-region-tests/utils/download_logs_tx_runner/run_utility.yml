@@ -3,6 +3,13 @@
   become: true
   remote_user: ubuntu
   tasks:
+    - name: Stop tx_runner via supervisor
+      command: supervisorctl stop tx_runner
+
+    - name: Wait for logs to catch up
+      ansible.builtin.pause:
+        seconds: 60
+
     - name: Zip logs
       archive:
         path: "/home/ubuntu/tx_runner*.log"
@@ -14,3 +21,6 @@
         src: "/tmp/tx_runner.logs.gz"
         dest: "../../log_files/tx_runner.logs.gz"
         flat: true
+
+    - name: Restart tx_runner via supervisor
+      command: supervisorctl restart tx_runner

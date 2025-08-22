@@ -1,7 +1,9 @@
+import os
 import aiohttp
 import asyncio
 import json
 import logging
+import requests
 import subprocess
 import sys
 
@@ -16,7 +18,19 @@ MAX_CONCURRENT_TASKS = 5
 BLOCK_SCAN_INTERVAL = 5
 PROGRAM_CALLER_IDLE_DURATION = 1
 
-SNARKOS_BIN_PATH="{{ snarkos_bin_path }}/snarkos"
+SNARKOS_BIN_PATH = "{{ snarkos_bin_path }}/snarkos"
+
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "5"))
+CONSENSUS_POLL_INTERVAL_SEC = 5
+
+LATEST_CONSENSUS_VERSION_ENV = os.getenv("LATEST_CONSENSUS_VERSION")
+if LATEST_CONSENSUS_VERSION_ENV is None:
+    log_error("ERROR: Missing required env: LATEST_CONSENSUS_VERSION")
+    sys.exit(2)
+LATEST_CONSENSUS_VERSION = int(LATEST_CONSENSUS_VERSION_ENV)
+
+IP_ADDRESS = os.getenv("BLOCK_SCANNER_IP")
+NETWORK = os.getenv("BLOCK_SCANNER_NETWORK")
 
 batch_deploy_process = None
 program_probe_running = False
@@ -29,8 +43,45 @@ logging.basicConfig(
 logger = logging.getLogger("tx_runner")
 
 task_queue = asyncio.Queue()
-
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
+
+# --- HTTP helpers ---
+def get_consensus_version(ip_address: str, network: str, timeout: float = REQUEST_TIMEOUT) -> int:
+    url = f"http://{ip_address}:3030/{network}/consensus_version"
+    r = requests.get(url, timeout=timeout)
+    r.raise_for_status()
+    return int(r.text.strip())
+
+async def wait_until_consensus_ready(
+    ip_address: str,
+    network: str,
+    min_version: int,
+    poll_interval_sec: int = CONSENSUS_POLL_INTERVAL_SEC,
+    request_timeout: float = REQUEST_TIMEOUT,
+):
+    """Poll /consensus_version until it reaches >= min_version."""
+    if not ip_address or not network:
+        logger.error("Missing BLOCK_SCANNER_IP or BLOCK_SCANNER_NETWORK env; cannot wait for consensus.")
+        sys.exit(2)
+
+    url = f"http://{ip_address}:3030/{network}/consensus_version"
+    logger.info(f"Waiting for consensus_version >= {min_version} at {url} ...")
+
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(url, timeout=request_timeout) as resp:
+                    text = await resp.text()
+                    version = int(text.strip())
+                    if version >= min_version:
+                        logger.info(f"Consensus version {version} reached (>= {min_version}), continuing.")
+                        return
+                    else:
+                        logger.info(f"Consensus version {version} < {min_version}; retrying in {poll_interval_sec}s...")
+            except Exception as e:
+                logger.warning(f"Consensus version check failed: {e}")
+
+            await asyncio.sleep(poll_interval_sec)
 
 async def run_task(command: List[str]):
     async with semaphore:
@@ -45,7 +96,6 @@ async def run_task(command: List[str]):
             logger.info(f"Finished: {' '.join(command)}\n{stdout.decode()}\n{stderr.decode()}")
         except Exception as e:
             logger.error(f"Task failed: {e}")
-
 
 async def task_worker():
     while True:
@@ -236,9 +286,17 @@ async def monitor_batch_transfer(args: List[str]):
         await asyncio.sleep(2)
 
 async def main():
+    # Wait for consensus version BEFORE starting workers/tasks
+    await wait_until_consensus_ready(
+        ip_address=IP_ADDRESS,
+        network=NETWORK,
+        min_version=LATEST_CONSENSUS_VERSION,
+    )
+
     load_initial_tasks()
     asyncio.create_task(task_worker())
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(main())
+

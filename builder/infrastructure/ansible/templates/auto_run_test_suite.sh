@@ -44,6 +44,10 @@ cleanup_on_error() {
   export SELECTED=download_logs_tx_runner
   run_utility
 
+  # Analyse logs:
+  export SELECTED=analyze_logs
+  run_utility
+
   echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
   cleanup
 
@@ -436,6 +440,10 @@ if [ "$RUN_TESTS" == "y" ]; then
 
       # Download tx_runner logs:
       export SELECTED=download_logs_tx_runner
+      run_utility
+
+      # Analyse logs:
+      export SELECTED=analyze_logs
       run_utility
   done
 fi

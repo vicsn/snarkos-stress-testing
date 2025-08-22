@@ -26,6 +26,8 @@
 - name: prerelease_1_halt_byzantine_majority | restart | Pause for 15 seconds
   pause:
     seconds: 15
+  run_once: true
+  delegate_to: localhost
 
 - name: prerelease_1_halt_byzantine_majority | restart | Restart snarkos service on selected validators
   delegate_to: "{{ item }}"
@@ -39,6 +41,8 @@
 - name: prerelease_1_halt_byzantine_majority | restart | Pause for 120 more seconds
   pause:
     seconds: 120
+  run_once: true
+  delegate_to: localhost
 
 - name: prerelease_1_halt_byzantine_majority | restart | Fetch the current block height
   ansible.builtin.uri:
