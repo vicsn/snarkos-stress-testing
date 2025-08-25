@@ -40,6 +40,7 @@
           - lsb-release
           - jq
           - python3-pip
+          - python3-venv
           - build-essential
           - curl
           - pkg-config
@@ -135,12 +136,6 @@
       file:
         path: "/home/ubuntu/talisker/bin/talisker"
         mode: '0755'
-
-    - name: Copy scripts used by Talisker
-      ansible.builtin.shell: |
-        cp -r /home/ubuntu/talisker-src/scripts /home/ubuntu/scripts
-      args:
-        executable: /bin/bash
 
     - name: Deploy the talisker systemd service file
       become: true

@@ -1,5 +1,5 @@
 [
   {"command": ["program-probe", "--endpoint", "http://{{ test_network_url }}:3030", "--network", "{{ snarkos_network }}", "--wait", "500"]},
-  {"command": ["batch-deploy", "--endpoint", "http://{{ test_network_url }}:3030", "--network", "{{ snarkos_network_int }}", "--wait", "500", "--senders", "3", "credits.aleo"]},
+  {"command": ["batch-deploy", "--endpoint", "http://{{ test_network_url }}:3030", "--network", "{{ snarkos_network_int }}", "--wait", "200", "--senders", "4", "credits.aleo"]},
   {"command": ["batch-transfer", "--endpoint", "http://{{ test_network_url }}:3030", "--network", "{{ snarkos_network_int }}", "--amount", "10"]}
 ]
