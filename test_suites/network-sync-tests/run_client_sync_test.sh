@@ -127,7 +127,9 @@ fi
 cleanup() {
     echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
 
-    read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+    if [[ -z "${TF_APPLY_ARGS}" ]]; then
+      read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+    fi
 
     destroy_infrastructure
 }

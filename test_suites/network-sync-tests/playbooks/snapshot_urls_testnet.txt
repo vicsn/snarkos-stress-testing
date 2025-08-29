@@ -4,3 +4,6 @@ s3://aleo-snapshots/testnet/checkpoint_2000000.zip
 s3://aleo-snapshots/testnet/checkpoint_3000000.zip
 s3://aleo-snapshots/testnet/checkpoint_4000000.zip
 s3://aleo-snapshots/testnet/checkpoint_5000000.zip
+s3://aleo-snapshots/testnet/checkpoint_6000000.zip
+s3://aleo-snapshots/testnet/checkpoint_7000000.zip
+s3://aleo-snapshots/testnet/checkpoint_8000000.zip

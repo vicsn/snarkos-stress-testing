@@ -177,6 +177,13 @@
         mode: '0600'
       become: true
 
+    - name: Set up sync network testing ansible vars
+      template:
+        src: sync_network_test_ansible_vars.yml
+        dest: /home/ubuntu/stress_testing/test_suites/network-sync-tests/playbooks/vars.talisker.yml
+        mode: '0600'
+      become: true
+
     - name: Set up the auto-run script
       template:
         src: auto_run_test_suite.sh

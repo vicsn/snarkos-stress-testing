@@ -21,9 +21,11 @@ STALL_FAIL_SECS=600
 SUCCESS_DELTA=1000000
 RUN_ONCE=0
 VERBOSE=0
+NETWORK=testnet
 
-while getopts ":f:i:t:w:S:D:Ovh" opt; do
+while getopts ":n:f:i:t:w:S:D:Ovh" opt; do
   case "$opt" in
+    n) NETWORK="$OPTARG" ;;
     f) JSON_FILE="$OPTARG" ;;
     i) INTERVAL_MIN="$OPTARG" ;;
     t) CURL_TIMEOUT="$OPTARG" ;;
@@ -32,7 +34,7 @@ while getopts ":f:i:t:w:S:D:Ovh" opt; do
     D) SUCCESS_DELTA="$OPTARG" ;;
     O) RUN_ONCE=1 ;;
     v) VERBOSE=1 ;;
-    h) echo "Usage: $0 [-f JSON_FILE] [-i MINUTES] [-t TIMEOUT] [-w SECONDS] [-S SECONDS] [-D DELTA] [-O] [-v]"; exit 0 ;;
+    h) echo "Usage: $0 [-n NETWORK] [-f JSON_FILE] [-i MINUTES] [-t TIMEOUT] [-w SECONDS] [-S SECONDS] [-D DELTA] [-O] [-v]"; exit 0 ;;
     \?) echo "Invalid option: -$OPTARG" >&2; exit 2 ;;
     :)  echo "Option -$OPTARG requires an argument." >&2; exit 2 ;;
   esac
@@ -178,7 +180,7 @@ one_iteration() {
     # Probe endpoint (log BEFORE hitting it so you see activity immediately)
     local endpoint="" current_raw="" current="" have_current=0
     if [[ -n "$url" ]]; then
-      endpoint="http://${url}:3030/mainnet/block/latest"
+      endpoint="http://${url}:3030/${NETWORK}/block/latest"
       log "[height=$h] Checking: $endpoint (timeout=${CURL_TIMEOUT}s, connect=${CONNECT_TIMEOUT}s)"
       if resp="$(
            curl -sS --fail \
