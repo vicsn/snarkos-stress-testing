@@ -57,7 +57,7 @@ txcannon_envs: ""
 txcannon_features: "test_network"
 
 # Application vars
-snarkos_verbosity: "1"
+snarkos_verbosity: "6"
 rest_rps: 1000000000
 
 # TX pre-generation variables:

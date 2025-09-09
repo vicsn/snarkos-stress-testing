@@ -24,7 +24,7 @@ use_prebuild_tx_cannon: true
 use_malicious_snarkos_pre_build: true
 
 # Application vars
-snarkos_verbosity: "1"
+snarkos_verbosity: "6"
 rest_rps: 1000000000
 
 test_runner_ip: {{ builder_ip }}
