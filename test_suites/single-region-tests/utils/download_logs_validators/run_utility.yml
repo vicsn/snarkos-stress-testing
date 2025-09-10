@@ -16,5 +16,5 @@
     - name: Fetch logs
       fetch:
         src: "/tmp/snarkos.log.gz"
-        dest: "../../log_files/val-{{ node_id }}.log.gz"
+        dest: "../../log_files/val-{{ node_id }}-{{ ansible_host }}.log.gz"
         flat: true
