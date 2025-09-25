@@ -140,7 +140,7 @@
         featureflags: >-
           {{
             "" if (features is not defined or features | length == 0)
-            else "--features {{ features }}"
+            else "--features " ~ features
           }}
 
     - name: Check if the folders are too old (including the cache)
@@ -206,7 +206,7 @@
         - ansible_system == 'Darwin'
 
     - name: Build the Rust project (Linux)
-      shell: source "$HOME/.cargo/env" && cargo build --release {{ featureflags }}
+      shell: source "$HOME/.cargo/env" && cargo build --release --locked {{ featureflags }}
       args:
         chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
         executable: /bin/bash

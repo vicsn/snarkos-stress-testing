@@ -30,13 +30,13 @@
     validator_client_ips: >-
       {{ (
         [formatted_validator_routers] 
-        + groups['snarkos_client']
+        + groups.get('snarkos_client', [])
           | map('extract', hostvars)
           | selectattr('tags.Validator', 'equalto', node_id | string)
           | map(attribute='public_ip_address')
           | map('regex_replace', '^(.*)$', '\1:4130')
           | list
-        + groups['snarkos_prover']
+        + groups.get('snarkos_prover', [])
           | map('extract', hostvars)
           | map(attribute='public_ip_address')
           | map('regex_replace', '^(.*)$', '\1:4130')

@@ -18,3 +18,9 @@
         src: "/tmp/snarkos.log.gz"
         dest: "../../log_files/prover-{{ node_id }}-{{ ansible_host }}.log.gz"
         flat: true
+
+    - name: Fetch logs for analysis
+      fetch:
+        src: "/tmp/snarkos.log.gz"
+        dest: "../../log_files/prover-{{ node_id }}.log.gz"
+        flat: true

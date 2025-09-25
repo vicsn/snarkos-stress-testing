@@ -15,13 +15,15 @@
     msg: "Validators to stop: {{ validators_to_stop }}"
 
 - name: prerelease_1_halt_byzantine_majority | restart | Stop snarkos service on selected validators
-  delegate_to: "{{ item }}"
+  delegate_to: "{{ validator_to_stop }}"
   become: true
   remote_user: ubuntu
   ansible.builtin.systemd:
     name: snarkos
     state: stopped
   loop: "{{ validators_to_stop }}"
+  loop_control:
+    loop_var: validator_to_stop
 
 - name: prerelease_1_halt_byzantine_majority | restart | Pause for 15 seconds
   pause:
@@ -30,13 +32,15 @@
   delegate_to: localhost
 
 - name: prerelease_1_halt_byzantine_majority | restart | Restart snarkos service on selected validators
-  delegate_to: "{{ item }}"
+  delegate_to: "{{ validator_to_stop }}"
   become: true
   remote_user: ubuntu
   ansible.builtin.systemd:
     name: snarkos
     state: restarted
   loop: "{{ validators_to_stop }}"
+  loop_control:
+    loop_var: validator_to_stop
 
 - name: prerelease_1_halt_byzantine_majority | restart | Pause for 120 more seconds
   pause:

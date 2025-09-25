@@ -4,11 +4,11 @@
     - name: Print groups var
       debug:
         var: groups
-    - name: store client ips
+    - name: Store client IPs
       copy:
-        content: "{{ groups['snarkos_client'] | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"
+        content: "{{ groups.get('snarkos_client', []) | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"
         dest: ../client_ip_addresses.txt
-    - name: store validator ips
+    - name: Store validator IPs
       copy:
-        content: "{{ groups['snarkos_validator'] | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"
+        content: "{{ groups.get('snarkos_validator', []) | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"
         dest: ../ip_addresses.txt

@@ -2,6 +2,7 @@
   hosts: snarkos_validator
   remote_user: ubuntu
   become: true
+  # Restart 30% of all validators at a time.
   serial: "30%"
   pre_tasks:
     - name: Set Validators facts
@@ -21,12 +22,39 @@
     - name: Remove existing ledgers on validators
       ansible.builtin.shell:
         cmd: "rm -rf /home/ubuntu/.ledger-*"
+
   post_tasks:
+    - name: Build ordered host list (inventory order)
+      set_fact:
+        all_hosts: "{{ groups['snarkos_validator'] | list }}"
+
+    - name: Index of current host (ensure int)
+      set_fact:
+        current_index: "{{ (all_hosts | list).index(inventory_hostname) | int }}"
+
+    - name: Rotate list to start after current (range+extract; fully int-cast)
+      set_fact:
+        rotated_after_current: >-
+          {{
+            (range((current_index | int) + 1, (all_hosts | length | int)) | map('extract', all_hosts) | list)
+            +
+            (range(0, (current_index | int)) | map('extract', all_hosts) | list)
+          }}
+
+    - name: Hosts not in the current batch (the other ~70%)
+      set_fact:
+        non_batch_hosts: "{{ rotated_after_current | difference(ansible_play_batch | default([])) | list }}"
+
+    - name: Choose the next host outside the batch
+      set_fact:
+        next_host: "{{ non_batch_hosts | first | default('none') }}"
+
     - name: Check if the node is synced.
       include_tasks: ../../playbooks/is_synced.yml
+      when: next_host != 'none'
       vars:
         node_to_check: localhost
-        node_to_compare: "{{ test_network_url }}"
+        node_to_compare: "{{ next_host }}"
 
   roles:
     - snarkos_service

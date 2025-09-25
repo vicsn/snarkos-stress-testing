@@ -3,4 +3,4 @@
   tasks:
     - name: Include restart tasks
       include_tasks: restart.yml
-      loop: "{{ range(1, 4) }}"
+      loop: "{{ range(1, 4) | list }}"
