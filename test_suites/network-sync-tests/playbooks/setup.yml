@@ -76,6 +76,7 @@
           - unzip
           - awscli
           - tar
+          - zstd
         state: present
       register: apt_result
       until: apt_result is succeeded

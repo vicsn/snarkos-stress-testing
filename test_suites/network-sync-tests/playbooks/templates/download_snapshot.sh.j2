@@ -87,19 +87,72 @@ log "Extracting snapshot archive..."
 
 extract_ok=false
 
-if echo "$FILE_DESC" | grep -qi 'zip archive'; then
-  log "Detected ZIP archive, using: unzip"
-  if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2>&1 | tee -a "$LOG_FILE"; then extract_ok=true; fi
-elif echo "$FILE_DESC" | grep -qi 'gzip compressed data'; then
-  log "Detected gzipped tar archive, using: tar -xzf"
-  if tar -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2>&1 | tee -a "$LOG_FILE"; then extract_ok=true; fi
-elif echo "$FILE_DESC" | grep -qi 'tar archive'; then
-  log "Detected tar archive, using: tar -xf"
-  if tar -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2>&1 | tee -a "$LOG_FILE"; then extract_ok=true; fi
-else
-  log "ERROR: Unsupported archive type: $FILE_DESC"
-  exit 1
-fi
+# Lowercased filename (portable, works on macOS too)
+fname_lc="$(printf '%s' "$DEST_FILE" | tr '[:upper:]' '[:lower:]')"
+
+extract_tar_zst() {
+  if tar --help 2>&1 | grep -q -- '--zstd'; then
+    tar --zstd -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+  elif command -v zstd >/dev/null 2>&1; then
+    zstd -dc "$DEST_FILE" | tar -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+  elif command -v unzstd >/dev/null 2>&1; then
+    unzstd -c "$DEST_FILE" | tar -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+  else
+    log "ERROR: zstd not installed and tar lacks --zstd"; return 1
+  fi
+}
+
+case "$fname_lc" in
+  *.zip)
+    log "Detected ZIP archive (by extension), using: unzip"
+    if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    ;;
+  *.tar.gz|*.tgz)
+    log "Detected gzipped tar (by extension), using: tar -xzf"
+    if tar -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    ;;
+  *.tar.xz)
+    log "Detected xz tar (by extension), using: tar -xJf"
+    if tar -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    ;;
+  *.tar.bz2|*.tbz|*.tbz2)
+    log "Detected bzip2 tar (by extension), using: tar -xjf"
+    if tar -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    ;;
+  *.tar.zst)
+    log "Detected zstd tar (by extension), using: tar --zstd OR zstd -dc | tar -xf -"
+    if extract_tar_zst; then extract_ok=true; fi
+    ;;
+  *.tar)
+    log "Detected plain tar (by extension), using: tar -xf"
+    if tar -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    ;;
+  *)
+    # Fallback using `file` description
+    FILE_DESC="$(file -b "$DEST_FILE")"
+    if echo "$FILE_DESC" | grep -qi 'zip archive'; then
+      log "Detected ZIP archive (by file), using: unzip"
+      if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    elif echo "$FILE_DESC" | grep -qi 'gzip compressed data'; then
+      log "Detected gzipped tar (by file), using: tar -xzf"
+      if tar -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    elif echo "$FILE_DESC" | grep -qi 'xz compressed data'; then
+      log "Detected xz tar (by file), using: tar -xJf"
+      if tar -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    elif echo "$FILE_DESC" | grep -qi 'bzip2 compressed data'; then
+      log "Detected bzip2 tar (by file), using: tar -xjf"
+      if tar -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    elif echo "$FILE_DESC" | grep -qi 'zstandard compressed data'; then
+      log "Detected zstd-compressed tar (by file), attempting zstd extraction"
+      if extract_tar_zst; then extract_ok=true; fi
+    elif echo "$FILE_DESC" | grep -qi 'tar archive'; then
+      log "Detected tar archive (by file), using: tar -xf"
+      if tar -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    else
+      log "ERROR: Unsupported archive type: $FILE_DESC"
+    fi
+    ;;
+esac
 
 if ! $extract_ok; then
   log "ERROR: Extraction failed."

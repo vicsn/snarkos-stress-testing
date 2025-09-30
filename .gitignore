@@ -78,3 +78,4 @@ test_suites/network-sync-tests/playbooks/network_info.json
 
 # Related to scripts
 **/*/.builder_ip
+**/.upload_state

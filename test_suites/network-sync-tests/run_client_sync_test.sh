@@ -41,19 +41,22 @@ get_highest_snapshot_height() {
     local highest_height=0
 
     # Read the file line by line, ensuring the last line is processed
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [[ $line =~ mainnet-([0-9]+)\.tar ]] || [[ $line =~ testnet-([0-9]+)\.tar ]] || [[ $line =~ canary-([0-9]+)\.tar ]]; then
-            local height="${BASH_REMATCH[1]}"
-            if [ "$height" -gt "$highest_height" ]; then
-                highest_height=$height
-            fi
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # skip comments / blank lines
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        # Match <network>-<height>.tar[.zst|.gz|.xz]
+        if [[ $line =~ (mainnet|main|testnet|canary)-([0-9]+)\.tar(\.(zst|gz|xz))? ]]; then
+            height="${BASH_REMATCH[2]}"
+        # Match <network>/checkpoint_<height>.zip
+        elif [[ $line =~ (mainnet|main|testnet|canary)/checkpoint_([0-9]+)\.zip ]]; then
+            height="${BASH_REMATCH[2]}"
+        else
+            continue
         fi
 
-        if [[ $line =~ testnet\/checkpoint_([0-9]+)\.zip ]] || [[ $line =~ mainnet\/checkpoint_([0-9]+)\.zip ]] || [[ $line =~ canary\/checkpoint_([0-9]+)\.zip ]]; then
-            local height="${BASH_REMATCH[1]}"
-            if [ "$height" -gt "$highest_height" ]; then
-                highest_height=$height
-            fi
+        if (( height > highest_height )); then
+            highest_height=$height
         fi
     done < "$snapshot_file"
 
