@@ -27,15 +27,9 @@
 
 - name: Collect client IPs for the current validator
   set_fact:
-    validator_client_ips: >-
+    peers_arg: >-
       {{ (
         [formatted_validator_routers] 
-        + groups.get('snarkos_client', [])
-          | map('extract', hostvars)
-          | selectattr('tags.Validator', 'equalto', node_id | string)
-          | map(attribute='public_ip_address')
-          | map('regex_replace', '^(.*)$', '\1:4130')
-          | list
         + groups.get('snarkos_prover', [])
           | map('extract', hostvars)
           | map(attribute='public_ip_address')
@@ -56,5 +50,6 @@
         --dev {{ node_id }} \
         --dev-num-validators {{ num_instances }} --no-dev-txs \
         --rest-rps {{ rest_rps }} \
-        --peers={{ validator_client_ips }} \
+        --allow-external-peers \
+        --peers={{ peers_arg }} \
         --network {{ snarkos_network_int }}

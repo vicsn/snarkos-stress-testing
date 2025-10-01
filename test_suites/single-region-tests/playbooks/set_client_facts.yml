@@ -40,25 +40,6 @@
   set_fact:
     own_address: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
 
-- name: Collect client addresses, filtering out own_address
-  set_fact:
-    client_addresses: >-
-      {{
-        groups['snarkos_client']
-        | map('extract', hostvars)
-        | map(attribute='public_ip_address')
-        | select('ne', own_address)
-        | shuffle
-      }}
-
-- name: slice 7 from client_addresses
-  set_fact:
-    client_addresses: "{{ client_addresses[:7] }}"
-
-- name: Append port :4130 to client addresses
-  set_fact:
-    client_addresses: "{{ client_addresses | join(',') | regex_replace('([^,]+)', '\\1:4130') }}"
-
 - name: Set node_id based on instance tag
   set_fact:
     node_id: "{{ (num_instances | int) + 100*(validator_id | int) + 10000*(tags['Dev'] | int) }}"
@@ -69,12 +50,70 @@
       - (num_instances | int) < 100
     fail_msg: "The client node_id indexing assumes less than 100 validators."
 
+# Map each client host to its tags.Validator (string)
+- name: Build client→validator map
+  set_fact:
+    client_to_validator: >-
+      {{
+        dict(
+          groups['snarkos_client']
+          | zip(
+              groups['snarkos_client']
+              | map('extract', hostvars)
+              | map(attribute='tags')
+              | map(attribute='Validator')
+              | map('string')
+            )
+        )
+      }}
+
+# Hosts (names) in *this* validator's client group sorted
+- name: Derive this validator's client group (hostnames)
+  set_fact:
+    this_group_hosts: >-
+      {{
+        client_to_validator
+        | dict2items
+        | selectattr('value', 'equalto', validator_id | string)
+        | map(attribute='key')
+        | list
+        | sort
+      }}
+
+# Leader client = first hostname in the group
+- name: Pick leader client for this validator group
+  set_fact:
+    leader_host: "{{ this_group_hosts | first }}"
+    leader_ip: "{{ hostvars[this_group_hosts | first]['public_ip_address'] if this_group_hosts | length > 0 else None }}"
+
+- name: Set peer IPs per-group (leader vs others)
+  set_fact:
+    peer_ips: "{{ [validator_ip] if inventory_hostname == leader_host else [leader_ip] }}"
+
+- name: Assert peer IPs are defined
+  assert:
+    that:
+      - peer_ips is sequence
+      - peer_ips | length > 0
+      - (peer_ips | select('string') | list | length) == (peer_ips | length)
+    fail_msg: "peer_ips not a list of strings: {{ peer_ips | to_nice_json }}"
+
+- name: Render peers string with port suffix
+  set_fact:
+    peers_arg: "{{ peer_ips | map('regex_replace', '^(.*)$', '\\1:4130') | join(',') }}"
+
+- debug:
+    msg:
+      - "peer_ips type: {{ peer_ips | type_debug }}"
+      - "peer_ips val:  {{ peer_ips }}"
+
 - name: Set snarkos command with the assigned validator
   set_fact:
     snarkos_command: >-
       snarkos start --client --nocdn --nodisplay \
         --rest 0.0.0.0:3030 --node 0.0.0.0:4130 \
         --verbosity {{ snarkos_verbosity }} --metrics \
-        --peers {{ validator_ip }}:4130,{{ client_addresses }} \
+        --allow-external-peers \
+        --peers {{ peers_arg }} \
         --dev {{ node_id }} --dev-num-validators {{ num_instances }} \
         --rest-rps {{ rest_rps }}  --network {{ snarkos_network_int }}

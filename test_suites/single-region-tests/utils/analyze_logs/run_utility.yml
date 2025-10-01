@@ -18,6 +18,7 @@
         argv:
           - "{{ playbook_dir }}/.venv/bin/python"
           - analyze_logs.py
+          #- --include-client-connectivity # Uncomment to include client connectivity times. Commented by default to not break Talisker's parsing
       register: out
 
     - name: Print the output

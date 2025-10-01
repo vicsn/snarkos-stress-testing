@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+
 import os
 import sys
 import re
 import gzip
 import tarfile
 import json
+import argparse
+from datetime import datetime
 from typing import Dict, Set, Tuple, Optional
 
 PROVER_ARCHIVE = "../../log_files/prover-0.log.gz"
@@ -92,6 +95,17 @@ RE_LANDED_TX = re.compile(
     re.IGNORECASE,
 )
 
+# Client connectivity regexes
+RE_NO_CONNECTED = re.compile(
+    r"^(?P<ts>\d{4}-\d{2}-\d{2}T[^ ]+Z)\s+DEBUG\s+No connected peers\b"
+)
+RE_CONNECTED_TO = re.compile(
+    r"^(?P<ts>\d{4}-\d{2}-\d{2}T[^ ]+Z)\s+DEBUG\s+Connected to\s+(?P<n>\d+)\s+peers\b.*"
+)
+RE_IPV4_IN_NAME = re.compile(
+    r"(?:^|[^0-9])(?P<ip>(?:\d{1,3}\.){3}\d{1,3})(?:[^0-9]|$)"
+)
+
 # ---------------------------
 # Parsing
 # ---------------------------
@@ -162,6 +176,57 @@ def parse_txrunner_members(
     )
 
 # ---------------------------
+# Client connectivity parsing
+# ---------------------------
+
+def _parse_iso_utc(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+def parse_client_connectivity(text: str) -> Dict[str, float]:
+    start_ts: Optional[datetime] = None
+    max_peers: int = -1
+    results: Dict[str, float] = {}
+
+    for line in text.splitlines():
+        m0 = RE_NO_CONNECTED.match(line)
+        if m0:
+            start_ts = _parse_iso_utc(m0.group("ts"))
+            max_peers = -1
+            results = {}
+            continue
+
+        m1 = RE_CONNECTED_TO.match(line)
+        if m1 and start_ts is not None:
+            n = int(m1.group("n"))
+            if n > max_peers:
+                t = _parse_iso_utc(m1.group("ts"))
+                delta = (t - start_ts).total_seconds()
+                results[f"{n}_peers"] = delta
+                max_peers = n
+
+    return results
+
+def find_client_logs(base_dir: str) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+
+    for name in os.listdir(base_dir):
+        if not (name.startswith("client-") and name.endswith(".log.gz")):
+            continue
+
+        ip_match = RE_IPV4_IN_NAME.search(name)
+        if not ip_match:
+            continue
+
+        ip = ip_match.group("ip")
+        full = os.path.join(base_dir, name)
+        prev = mapping.get(ip)
+
+        if prev is None or name > os.path.basename(prev):
+            mapping[ip] = full
+
+    return mapping
+
+# ---------------------------
 # Main
 # ---------------------------
 
@@ -169,6 +234,11 @@ def calculate_percent(n: int, d: int) -> float:
     return (n / d * 100.0) if d > 0 else 0.0
 
 def main():
+    ap = argparse.ArgumentParser(description="Analyze prover/tx_runner logs.")
+    ap.add_argument("--include-client-connectivity", action="store_true",
+                    help="Include client connectivity timings extracted from client-*.log.gz")
+    args = ap.parse_args()
+
     if not os.path.exists(PROVER_ARCHIVE) or not os.path.exists(TXRUNNER_ARCHIVE):
         print("ERROR: One or more source archives are missing.", file=sys.stderr)
         print(f"Expected paths : {PROVER_ARCHIVE} and {TXRUNNER_ARCHIVE}", file=sys.stderr)
@@ -230,6 +300,26 @@ def main():
         "deployment_percentage": calculate_percent(landed_deploy_count, len(sent_deploy_txs)),
     }
 
+    # Optional: client connectivity
+    if args.include_client_connectivity:
+        log_dir = os.path.dirname(os.path.abspath(OUTPUT_JSON))  # ../../log_files/
+
+        if not os.path.isdir(log_dir):
+            log_dir = os.path.dirname(os.path.abspath(PROVER_ARCHIVE))
+        client_files = find_client_logs(log_dir)
+        client_conn: Dict[str, Dict[str, float]] = {}
+
+        for ip, path in client_files.items():
+            try:
+                text = read_text_from_possible_tar_gz(path, None)
+            except Exception as e:
+                print(f"WARNING: Skipping {path}: {e}", file=sys.stderr)
+                continue
+            res = parse_client_connectivity(text)
+            client_conn[ip] = res  # include even if empty, for visibility
+
+        data["clients_connectivity"] = client_conn
+
     os.makedirs(os.path.dirname(OUTPUT_JSON), exist_ok=True)
     with open(OUTPUT_JSON, "w") as f:
         json.dump(data, f, indent=2)
@@ -256,4 +346,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
