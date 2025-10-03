@@ -103,3 +103,42 @@ And there may also be stuff you want to keep the same, e.g. the Terraform S3 buc
 
 The transaction cannons use hardcoded private keys, made possible by snarkos
 nodes using the fixed `DEVELOPMENT_MODE_RNG_SEED`.
+
+## Log files and analysis
+
+With local runs the log files are downloaded in `log_files`.
+With remote runs the log files are zipped and uploaded to S3 (in slack the location is pointed out).
+
+Example logs zip : https://us-west-2.console.aws.amazon.com/s3/object/provable-logs-results?region=us-west-2&bucketType=general&prefix=dbd34c34d70e859d93dfac56600ee18ef8f64a22/20251003T000120Z/prerelease_1_halt_byzantine_majority_ERROR/logs_ERROR.zip
+You can download and unzip the log files from a auto-run in `log_files` too to use the utilities on them.
+
+The log files are gzipped, so this action will make them in plain text format:
+
+```
+gunzip log_files/*.log.gz
+```
+
+For getting the errors out of them this can be done:
+
+```
+grep -Hn ERROR log_files/* > tmp.errors.txt
+```
+
+Additionally the stat analyser can be ran on them by running:
+```
+./run_test_suite.sh
+```
+
+Selecting `n` for terraform, `n` for setup, `n` for tests and `y` for utilities, then `0`.
+This will run the log analyser and the stats will be generated in `log_files/landing_stats.json`.
+
+For a local run the logs can be downloaded by selecting the following utiltieis:
+
+```
+3) download_logs_clients
+4) download_logs_provers
+5) download_logs_tx_runner
+6) download_logs_validators
+```
+
+Or all downloaded and then uploaded to S3 by selecting `12`.
