@@ -30,12 +30,12 @@ variable "tx_runner_instance_type" {
 
 variable "validator_instance_count" {
   description = "Number of snarkOS validators"
-  default     = 5 # minimum 5 for prerelease tests
+  default     = 40 # minimum 5 for prerelease tests
 }
 
 variable "client_instance_count" {
   description = "Number of snarkOS clients per validator"
-  default     = 1 # More would surpass vCPU limit
+  default     = 0 # More would surpass vCPU limit
 }
 
 variable "prover_instance_count" {
@@ -52,7 +52,7 @@ variable "RELEASE_BUCKET" {
 # Clients
 
 locals {
-  snarkos_network = "mainnet" # Note: some tx-cannons below only work for mainnet. The heavy network may be larger than the max mainnet validator set size, though.
+  snarkos_network = "testnet" # Note: only canary/testnet can have a large validator set - make sure this is aligned with vars.yml
 
   client_instance_config = [
     { type = var.client_instance_type, count = var.client_instance_count, validator = 0 },

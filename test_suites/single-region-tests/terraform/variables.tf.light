@@ -35,7 +35,7 @@ variable "validator_instance_count" {
 
 variable "client_instance_count" {
   description = "Number of snarkOS clients per validator"
-  default     = 2
+  default     = 0
 }
 
 variable "prover_instance_count" {
@@ -52,7 +52,7 @@ variable "RELEASE_BUCKET" {
 # Clients
 
 locals {
-  snarkos_network = "testnet"
+  snarkos_network = "testnet" # Note: only canary/testnet can have a large validator set - make sure this is aligned with vars.yml
 
   client_instance_config = [
     { type = var.client_instance_type, count = var.client_instance_count, validator = 0 },
