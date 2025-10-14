@@ -29,17 +29,18 @@
   set_fact:
     peers_arg: >-
       {{ (
-        [formatted_validator_routers] 
-        + groups.get('snarkos_prover', [])
+        groups.get('snarkos_prover', [])
           | map('extract', hostvars)
           | map(attribute='public_ip_address')
           | map('regex_replace', '^(.*)$', '\1:4130')
           | list
         )
-        | reject("equalto","")
         | join(',')
       }}
 
+# The 34.12.32.12:9 ip is set to peers, because this is a workaround so that
+# the node doesn't attempt to connect to itself as a peer,
+# as 127.0.0.1 is the default dev peer right now if there are no --peers.
 - name: Set snarkos command with peers and validators
   set_fact:
     snarkos_command: >-
@@ -51,5 +52,20 @@
         --dev-num-validators {{ num_instances }} --no-dev-txs \
         --rest-rps {{ rest_rps }} \
         --allow-external-peers \
-        --peers={{ peers_arg }} \
+        --peers 34.12.32.12:9 \
         --network {{ snarkos_network_int }}
+
+- name: Select global bootstrap clients (hostnames)
+  set_fact:
+    bootstrap_client_ips: "{{ hostvars['localhost'].bootstrap_client_ips }}"
+
+- name: Build bootstrap_peers_arg with port suffix
+  set_fact:
+    bootstrap_peers_arg: "{{ bootstrap_client_ips | map('regex_replace', '^(.*)$', '\\1:4130') | join(',') }}"
+
+- name: Build extra environment map for the validator service
+  set_fact:
+    snarkos_env_extra: >-
+      {{
+        {'TEST_BOOTSTRAP_PEERS': bootstrap_peers_arg}
+      }}

@@ -7,6 +7,8 @@
     - `brew install hashicorp/tap/terraform`
 - [Install Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html#installing-and-upgrading-ansible-with-pip)
     - `brew install ansible`
+- [Install sccache](https://github.com/mozilla/sccache)
+    - `brew install sccache`
 - [Install AWS CLI](https://aws.amazon.com/cli/)
     - `brew install awscli`
 - Make sure you have access to github.com/ProvableHQ/snarkos-staging

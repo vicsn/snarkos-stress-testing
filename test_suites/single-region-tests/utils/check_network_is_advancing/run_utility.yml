@@ -1,0 +1,26 @@
+- name: Check if the network is advancing
+  hosts: snarkos_validator:snarkos_client
+  become: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  strategy: free
+  tasks:
+    - name: Fetch the current block height
+      ansible.builtin.uri:
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
+        method: GET
+        return_content: true
+      register: current_block
+      until: current_block.json is defined
+      retries: 10
+      delay: 10
+
+    - name: Wait for the network to progress by one block
+      ansible.builtin.uri:
+        url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
+        method: GET
+        return_content: true
+      register: next_block
+      until: next_block.json['header']['metadata']['height'] | int > current_block.json['header']['metadata']['height'] | int
+      retries: 10
+      delay: 10

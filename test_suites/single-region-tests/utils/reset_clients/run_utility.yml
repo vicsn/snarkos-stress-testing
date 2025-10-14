@@ -1,3 +1,9 @@
+- name: Set bootstrap clients related facts
+  hosts: localhost
+  any_errors_fatal: true
+  roles:
+    - choose_bootstrap_client
+
 - name: Reset clients
   hosts: snarkos_client
   remote_user: ubuntu

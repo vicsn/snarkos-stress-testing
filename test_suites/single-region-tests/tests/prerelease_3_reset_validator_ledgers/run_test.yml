@@ -1,3 +1,9 @@
+- name: Set bootstrap clients related facts
+  hosts: localhost
+  any_errors_fatal: true
+  roles:
+    - choose_bootstrap_client
+
 - name: Reset validators
   hosts: snarkos_validator
   remote_user: ubuntu
@@ -20,10 +26,25 @@
       ignore_errors: yes # in case we never deployed malice
 
     - name: Remove existing ledgers on validators
-      ansible.builtin.shell:
-        cmd: "rm -rf /home/ubuntu/.ledger-*"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        shopt -s nullglob dotglob
+        for d in /home/ubuntu/.ledger-*; do
+          [ -d "$d" ] || continue
+          find "$d" -mindepth 1 -maxdepth 1 \
+            ! -name 'cached_router_peers' \
+            ! -name 'cached_gateway_peers' \
+            -exec rm -rf {} +
+        done
+      args:
+        executable: /bin/bash
 
   post_tasks:
+    - name: Wait for the network to advance one block before this host’s sync check
+      include_tasks: ../../playbooks/wait_network_advance.yml
+      vars:
+        node_to_check: "localhost"
+
     - name: Build ordered host list (inventory order)
       set_fact:
         all_hosts: "{{ groups['snarkos_validator'] | list }}"

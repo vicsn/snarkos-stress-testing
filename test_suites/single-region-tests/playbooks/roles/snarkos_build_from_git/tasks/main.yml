@@ -1,92 +1,233 @@
----
-- name: Clone or update snarkOS
-  git:
-    repo: "https://{{ github_token }}@github.com/{{ snarkos_repo | regex_replace('^https?://github\\.com/', '') }}"
-    dest: "/home/ubuntu/snarkOS"
-    version: "{{ snarkos_git_hash }}"
-    clone: true
-    update: true
-    force: true
+- name: Build snarkos directly from github
+  block:
+    - name: Parse envs into a dictionary using dict filter
+      set_fact:
+        envs_dict: "{{ dict(envs | default('') | split(' ') | map('split', '=', 1)) }}"
+      when: envs is defined and envs | length > 0
 
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 3600
+    - name: Set release name
+      set_fact:
+        releasename: "{{ generate_release_name | replace('COMMIT_HASH', snarkos_git_hash) | trim }}"
 
-- name: Install Ubuntu dependencies
-  ansible.builtin.apt:
-    name:
-      - build-essential
-      - curl
-      - lld
-      - clang
-      - gcc
-      - libssl-dev
-      - llvm
-      - make
-      - pkg-config
-      - tmux
-      - xz-utils
-      - ufw
-    state: present
-  register: apt_result
-  retries: 5
-  delay: 60
-  until: apt_result is success
+    - name: Debug generated release name
+      debug:
+        msg: "Release name: '{{ releasename }}'"
 
-- name: Install Rust programming language
-  ansible.builtin.shell:
-    cmd: >-
-      set -o pipefail && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  args:
-    executable: /bin/bash
-    creates: "$HOME/.cargo/bin/rustup"
+    - name: Check if the binary for the git hash exists in S3 bucket
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        mode: list
+        prefix: "{{ releasename }}"
+      register: s3_ls_output
+      failed_when: false
 
-- name: Initialize envs_dict
-  set_fact:
-    envs_dict: {}
+    - name: Set fact if object exists
+      set_fact:
+        s3_binary_exists: "{{ releasename in (s3_ls_output.s3_keys | default([])) }}"
 
-- name: Parse envs into a dictionary using dict filter
-  set_fact:
-    envs_dict: "{{ dict(envs | default('') | split(' ') | map('split', '=', 1)) }}"
-  when: envs is defined and envs != ""
+    - name: Construct authenticated repo URL if GitHub token is set
+      set_fact:
+        effective_snarkos_repo: >-
+          {{
+            snarkos_repo | regex_replace('https://', 'https://' ~ github_token ~ '@')
+            if github_token is defined and github_token != '' and github_token != 'your_github_token_here'
+            else snarkos_repo
+          }}
 
-- name: Debug envs_dict
-  debug:
-    var: envs_dict
-  when: envs is defined and envs != ""
+    - name: Clone or update snarkOS
+      become_user: ubuntu
+      git:
+        repo: "{{ effective_snarkos_repo }}"
+        dest: "/home/ubuntu/snarkOS"
+        version: "{{ snarkos_git_hash }}"
+        depth: 1
+        clone: true
+        update: true
+        force: true
 
-- name: Set features flag
-  set_fact:
-    featureflags: >-
-      {{
-        "" if (features is not defined or features | length == 0)
-        else "--features " ~ features
-      }}
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: not s3_binary_exists
 
-- name: Enable locktick build features in Cargo.tml
-  shell: |
-    tmp="$(mktemp)"
-    sed 's/^# debug = "line-tables-only"/debug = "line-tables-only"/' Cargo.toml > "$tmp"
-    mv "$tmp" Cargo.toml
-    sed 's/^# strip = "none"/strip = "none"/' Cargo.toml > "$tmp"
-    mv "$tmp" Cargo.toml
-  args:
-    executable: /bin/bash
-    chdir: /home/ubuntu/snarkOS
-  when: features is defined and 'locktick' in features
+    - name: Install Ubuntu dependencies
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - curl
+          - lld
+          - clang
+          - gcc
+          - libssl-dev
+          - llvm
+          - make
+          - pkg-config
+          - tmux
+          - xz-utils
+          - ufw
+          - wget
+        state: present
+      register: apt_result
+      retries: 5
+      delay: 60
+      until: apt_result is success
+      when: not s3_binary_exists
 
-- name: Source cargo env and install snarkOS with git CLI
-  ansible.builtin.shell:
-    cmd: "source $HOME/.cargo/env && cargo install --locked --path . {{ featureflags }}"
-  args:
-    executable: /bin/bash
-    chdir: /home/ubuntu/snarkOS
-  environment: >-
-    {{
-      {
-        'HOME': ansible_env.HOME,
-        'CARGO_NET_GIT_FETCH_WITH_CLI': 'true'
-      } | combine(envs_dict | default({}))
-    }}
-  become: true
+    - name: Install Rust programming language
+      become_user: ubuntu
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      args:
+        executable: /bin/bash
+        creates: "/home/ubuntu/.cargo/bin/rustup"
+      when: not s3_binary_exists
+
+    - name: Install sccache
+      become_user: ubuntu
+      ansible.builtin.shell: |
+        wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
+        tar -xf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
+        sudo install -m 0755 sccache-*/sccache /usr/local/bin/sccache
+      args:
+        executable: /bin/bash
+      when: not s3_binary_exists
+
+    - name: Initialize envs_dict
+      set_fact:
+        envs_dict: {}
+      when: not s3_binary_exists
+
+    - name: Parse envs into a dictionary using dict filter
+      set_fact:
+        envs_dict: "{{ dict(envs | default('') | split(' ') | map('split', '=', 1)) }}"
+      when:
+        - envs is defined and envs != ""
+        - not s3_binary_exists
+
+    - name: Debug envs_dict
+      debug:
+        var: envs_dict
+      when:
+        - envs is defined and envs != ""
+        - not s3_binary_exists
+
+    - name: Set features flag
+      set_fact:
+        featureflags: >-
+          {{
+            "" if (features is not defined or features | length == 0)
+            else "--features " ~ features
+          }}
+      when: not s3_binary_exists
+
+    - name: Enable locktick build features in Cargo.toml
+      become_user: ubuntu
+      shell: |
+        tmp="$(mktemp)"
+        sed 's/^# debug = "line-tables-only"/debug = "line-tables-only"/' Cargo.toml > "$tmp"
+        mv "$tmp" Cargo.toml
+        sed 's/^# strip = "none"/strip = "none"/' Cargo.toml > "$tmp"
+        mv "$tmp" Cargo.toml
+      args:
+        executable: /bin/bash
+        chdir: /home/ubuntu/snarkOS
+      when:
+        - features is defined and 'locktick' in features
+        - not s3_binary_exists
+
+    - name: Source cargo env and install snarkOS with git CLI
+      become_user: ubuntu
+      ansible.builtin.shell: source /home/ubuntu/.cargo/env && cargo install --locked --path . {{ featureflags }}
+      args:
+        executable: /bin/bash
+        chdir: /home/ubuntu/snarkOS
+      environment: >-
+        {{
+          {
+            'HOME': '/home/ubuntu',
+            'CARGO_NET_GIT_FETCH_WITH_CLI': 'true',
+            'RUSTC_WRAPPER': '/usr/local/bin/sccache',
+            'SCCACHE_BUCKET': 'snarkos-compiler-cache',
+            'SCCACHE_REGION': 'us-west-2',
+            'SCCACHE_S3_USE_SSL': 'true',
+            'SCCACHE_S3_KEY_PREFIX': 'linux_rust/'
+          } | combine(envs_dict | default({}))
+        }}
+      async: 7200
+      poll: 0
+      register: cargo_job
+      throttle: 8     # limit concurrent compiles when you scale u
+      when: not s3_binary_exists
+
+    - name: Wait for build
+      become_user: ubuntu
+      async_status:
+        jid: "{{ cargo_job.ansible_job_id }}"
+      register: cargo_done
+      until: cargo_done.finished
+      retries: 720
+      delay: 10
+      when: not s3_binary_exists
+
+    - name: Check if the binary for the git hash exists in S3 bucket (post)
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        mode: list
+        prefix: "{{ releasename }}"
+      register: s3_ls_output
+      failed_when: false
+
+    - name: Set fact if object exists (post)
+      set_fact:
+        s3_binary_exists: "{{ releasename in (s3_ls_output.s3_keys | default([])) }}"
+
+    - name: Upload the built snarkos binary to S3
+      become_user: ubuntu
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        object: "{{ releasename | trim }}"
+        src: "/home/ubuntu/snarkOS/target/release/snarkos"
+        mode: put
+      when:
+        - not s3_binary_exists
+      register: s3_upload_output
+
+    - name: Debug message after upload
+      debug:
+        msg: "Uploaded snarkos binary to S3."
+      when:
+        - not s3_binary_exists
+        - s3_upload_output.changed
+
+    - name: Ensure cargo bin dir exists
+      ansible.builtin.file:
+        path: /home/ubuntu/.cargo/bin
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Download snarkos binary from S3
+      become_user: ubuntu
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        object: "{{ releasename | trim }}"
+        dest: "/home/ubuntu/.cargo/bin/snarkos"
+        mode: get
+      when: s3_binary_exists
+
+    - name: Ensure the binary is executable
+      become_user: ubuntu
+      file:
+        path: "/home/ubuntu/.cargo/bin/snarkos"
+        mode: '0755'
+
+    - name: Copy the snarkos build to /usr/bin/snarkos to make it the same as in other builds
+      ansible.builtin.shell: |
+        cp /home/ubuntu/.cargo/bin/snarkos /usr/bin/snarkos
+        chmod 755 /usr/bin/snarkos
+        chown ubuntu:ubuntu  /usr/bin/snarkos
+      args:
+        executable: /bin/bash

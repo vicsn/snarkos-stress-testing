@@ -6,5 +6,9 @@ User=root
 {{ malicemode | default('') }}
 WorkingDirectory=/home/ubuntu
 ExecStart={{ snarkos_bin_path }}/{{ snarkos_command }}
+{% set peers = snarkos_env_extra.TEST_BOOTSTRAP_PEERS | default('') | trim %}
+{% if peers %}
+Environment="TEST_BOOTSTRAP_PEERS={{ peers }}"
+{% endif %}
 Restart=no
 LimitNOFILE=65535

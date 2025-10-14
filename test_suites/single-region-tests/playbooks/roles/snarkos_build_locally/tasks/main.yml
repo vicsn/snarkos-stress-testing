@@ -58,6 +58,51 @@
         force: true
       when: not s3_binary_exists
 
+    - name: Ensure .cargo folder exists (macOS)
+      ansible.builtin.file:
+        path: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/.cargo"
+        state: directory
+        mode: '0755'
+      when:
+        - not s3_binary_exists
+        - ansible_system == 'Darwin'
+
+    - name: Ensure .cargo/config.toml exists (macOS)
+      ansible.builtin.file:
+        path: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/.cargo/config.toml"
+        state: touch
+        mode: '0644'
+      when:
+        - not s3_binary_exists
+        - ansible_system == 'Darwin'
+
+    - name: Replace entire [target.x86_64-unknown-linux-gnu] section (macOS)
+      ansible.builtin.replace:
+        path: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/.cargo/config.toml"
+        # Match the whole section up to the next section header or EOF
+        regexp: '(?ms)^\[target\.x86_64-unknown-linux-gnu\][\s\S]*?(?=^\[|\Z)'
+        replace: |
+          [target.x86_64-unknown-linux-gnu]
+          linker = "x86_64-unknown-linux-gnu-gcc"
+        backup: yes
+      register: cargo_cfg_replaced
+      when:
+        - not s3_binary_exists
+        - ansible_system == 'Darwin'
+
+    - name: Append section if it did not exist (macOS)
+      ansible.builtin.blockinfile:
+        path: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/.cargo/config.toml"
+        block: |
+          [target.x86_64-unknown-linux-gnu]
+          linker = "x86_64-unknown-linux-gnu-gcc"
+        marker: "# {mark} managed by Ansible (cargo-target-linker)"
+        insertafter: EOF
+      when:
+        - not s3_binary_exists
+        - ansible_system == 'Darwin'
+        - not cargo_cfg_replaced.changed
+
     - name: Override Rust version (macOS only)
       shell: cd {{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }} && rustup override set nightly-aarch64-apple-darwin
       when:
@@ -143,10 +188,12 @@
             else "--features " ~ features
           }}
 
+    # We can delete the folder right after the run, but it is worth to not do that for some debugging, so we set  1d cleanup on old folders.
+    # That way we can debug issues with a snarkos that was compiled in a buggy way and also old checkouts won't be hanging on the next run.
     - name: Check if the folders are too old (including the cache)
       ansible.builtin.find:
         paths: "{{ base_workspace_folder }}/{{ clone_dir_base }}"
-        age: 30d
+        age: 1d
         age_stamp: mtime
         file_type: directory
       register: old_dirs
@@ -181,6 +228,29 @@
       when:
         - not s3_binary_exists
 
+    - name: Compute absolute sccache dir inside workspace
+      set_fact:
+        sccache_dir_abs: "{{ base_workspace_folder }}/{{ clone_dir_base }}/shared/sccache"
+      when:
+        - not s3_binary_exists
+        - ansible_system == 'Darwin'
+
+    - name: Ensure sccache dir exists and is writable
+      file:
+        path: "{{ sccache_dir_abs }}"
+        state: directory
+        mode: "0775"
+        recurse: true
+      when:
+        - not s3_binary_exists
+        - ansible_system == 'Darwin'
+
+    - name: Restart sccache daemon to pick up env
+      shell: sccache --stop || true
+      when:
+        - not s3_binary_exists
+        - ansible_system == 'Darwin'
+
     - name: Build the Rust project with OpenSSL (macOS)
       command: cargo build --release --target x86_64-unknown-linux-gnu {{ featureflags }} --config rustflags=\"\"
       args:
@@ -191,8 +261,10 @@
             'OPENSSL_INCLUDE_DIR': openssl_install_prefix + '/include',
             'OPENSSL_LIB_DIR': openssl_install_prefix + '/lib64',
             'OPENSSL_STATIC': '1',
-            'CARGO_TARGET_DIR': '../shared',
-            'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER': 'x86_64-unknown-linux-gnu-gcc'
+            'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER': 'x86_64-unknown-linux-gnu-gcc',
+            'RUSTC_WRAPPER': 'sccache',
+            'SCCACHE_DIR': sccache_dir_abs,
+            'SCCACHE_CACHE_SIZE': '5G'
           }
           | combine(
               consensus_version_heights_env is defined and (consensus_version_heights_env | length > 0)
@@ -213,7 +285,11 @@
       environment: >-
         {{
           {
-            'CARGO_TARGET_DIR': '../shared'
+            'RUSTC_WRAPPER': '/usr/local/bin/sccache',
+            'SCCACHE_BUCKET': 'snarkos-compiler-cache',
+            'SCCACHE_REGION': 'us-west-2',
+            'SCCACHE_S3_USE_SSL': 'true',
+            'SCCACHE_S3_KEY_PREFIX': 'linux_rust/'
           }
           | combine(
               consensus_version_heights_env is defined and (consensus_version_heights_env | length > 0)
@@ -238,7 +314,7 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ releasename | trim }}"
-        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/shared/x86_64-unknown-linux-gnu/release/snarkos"
+        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/target/x86_64-unknown-linux-gnu/release/snarkos"
         mode: put
         profile: "{{ s3_profile }}"
       when:
@@ -250,7 +326,7 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ releasename | trim }}"
-        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/shared/release/snarkos"
+        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/target/release/snarkos"
         mode: put
         profile: "{{ s3_profile }}"
       when:

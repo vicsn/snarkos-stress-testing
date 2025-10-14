@@ -6,43 +6,14 @@
     num_instances: "{{ groups['snarkos_validator'] | length }}"
   run_once: true
 
-- name: Assign client to validator index
-  set_fact:
-    validator_id: "{{ tags['Validator'] }}"
-
-- name: Debug validator IP by Dev tag
-  debug:
-    msg: >-
-      {{
-        groups['snarkos_validator']
-        | map('extract', hostvars)
-        | selectattr('tags.Dev', 'equalto', validator_id | string)
-        | map(attribute='public_ip_address')
-        | first
-      }}
-
-- name: Debug validator_id
-  debug:
-    msg: "Vid: '{{ validator_id }}'"
-
-- name: Set validator address
-  set_fact:
-    validator_ip: >-
-      {{
-        groups['snarkos_validator']
-        | map('extract', hostvars)
-        | selectattr('tags.Dev', 'equalto', validator_id | string)
-        | map(attribute='public_ip_address')
-        | first
-      }}
-
 - name: Set own address
   set_fact:
     own_address: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
 
 - name: Set node_id based on instance tag
   set_fact:
-    node_id: "{{ (num_instances | int) + 100*(validator_id | int) + 10000*(tags['Dev'] | int) }}"
+    node_id: "{{ (groups['snarkos_validator'] | length | int) + (tags['Dev'] | int) + 1 }}"
+
 
 - name: Assert that num_instances is lower than 100
   assert:
@@ -50,47 +21,26 @@
       - (num_instances | int) < 100
     fail_msg: "The client node_id indexing assumes less than 100 validators."
 
-# Map each client host to its tags.Validator (string)
-- name: Build client→validator map
+- name: Select global bootstrap clients (hostnames)
   set_fact:
-    client_to_validator: >-
+    bootstrap_clients: "{{ hostvars['localhost'].bootstrap_clients }}"
+    bootstrap_client_ips: "{{ hostvars['localhost'].bootstrap_client_ips }}"
+
+- name: Mark whether this host is a bootstrap client
+  set_fact:
+    is_bootstrap_client: "{{ inventory_hostname in bootstrap_clients }}"
+
+# Peering rule:
+# - For all clients    -> TEST_BOOTSTRAP_PEERS = ALL bootstrap clients' IPs 
+- name: Set peer IPs based on global role
+  set_fact:
+    peer_ips: >-
       {{
-        dict(
-          groups['snarkos_client']
-          | zip(
-              groups['snarkos_client']
-              | map('extract', hostvars)
-              | map(attribute='tags')
-              | map(attribute='Validator')
-              | map('string')
-            )
-        )
+        (bootstrap_client_ips | list | unique | sort)
       }}
 
-# Hosts (names) in *this* validator's client group sorted
-- name: Derive this validator's client group (hostnames)
-  set_fact:
-    this_group_hosts: >-
-      {{
-        client_to_validator
-        | dict2items
-        | selectattr('value', 'equalto', validator_id | string)
-        | map(attribute='key')
-        | list
-        | sort
-      }}
-
-# Leader client = first hostname in the group
-- name: Pick leader client for this validator group
-  set_fact:
-    leader_host: "{{ this_group_hosts | first }}"
-    leader_ip: "{{ hostvars[this_group_hosts | first]['public_ip_address'] if this_group_hosts | length > 0 else None }}"
-
-- name: Set peer IPs per-group (leader vs others)
-  set_fact:
-    peer_ips: "{{ [validator_ip] if inventory_hostname == leader_host else [leader_ip] }}"
-
-- name: Assert peer IPs are defined
+# We had problems with the types of the peer lists in previous implementations, so we assert that here.
+- name: Validate peer IP list
   assert:
     that:
       - peer_ips is sequence
@@ -98,22 +48,59 @@
       - (peer_ips | select('string') | list | length) == (peer_ips | length)
     fail_msg: "peer_ips not a list of strings: {{ peer_ips | to_nice_json }}"
 
-- name: Render peers string with port suffix
+- name: Build peers list with port suffix (empty for bootstrap)
   set_fact:
-    peers_arg: "{{ peer_ips | map('regex_replace', '^(.*)$', '\\1:4130') | join(',') }}"
+    peers_arg_list: >-
+      {{
+        [] if is_bootstrap_client
+        else (peer_ips | map('regex_replace', '^(.*)$', '\1:4130') | list)
+      }}
 
+- name: Build peers_arg string (for env var)
+  set_fact:
+    peers_arg: "{{ peers_arg_list | join(',') }}"
+
+# Only bootstrap clients rotate external peers
+- name: Set rotate flag for bootstrap clients only
+  set_fact:
+    rotate_flag: "{{ '--rotate-external-peers' if is_bootstrap_client else '' }}"
+
+# Can be removed, but good to have for local tests.
 - debug:
     msg:
-      - "peer_ips type: {{ peer_ips | type_debug }}"
-      - "peer_ips val:  {{ peer_ips }}"
+      - "bootstrap_clients:   {{ bootstrap_clients }}"
+      - "is_bootstrap_client: {{ is_bootstrap_client }}"
+      - "peer_ips:            {{ peer_ips }}"
+      - "peers_arg:           {{ peers_arg }}"
+      - "rotate_flag:         {{ rotate_flag }}"
 
-- name: Set snarkos command with the assigned validator
+- name: Client flag
+  set_fact:
+    client_flag: "{{ '--bootstrap-client' if is_bootstrap_client else '--client' }}"
+
+# The 34.12.32.12:9 ip is set to peers, because this is a workaround so that
+# the node doesn't attempt to connect to itself as a peer,
+# as 127.0.0.1 is the default dev peer right now if there are no --peers.
+- name: Dummy Peers flag
+  set_fact:
+    dummy_peers_flag: "{{ '' if is_bootstrap_client else '--peers 34.12.32.12:9' }}"
+
+- name: Set snarkos command for clients
   set_fact:
     snarkos_command: >-
-      snarkos start --client --nocdn --nodisplay \
-        --rest 0.0.0.0:3030 --node 0.0.0.0:4130 \
-        --verbosity {{ snarkos_verbosity }} --metrics \
-        --allow-external-peers \
-        --peers {{ peers_arg }} \
-        --dev {{ node_id }} --dev-num-validators {{ num_instances }} \
-        --rest-rps {{ rest_rps }}  --network {{ snarkos_network_int }}
+      snarkos start {{ client_flag }} --nocdn --nodisplay
+      --rest 0.0.0.0:3030 --node 0.0.0.0:4130
+      --verbosity {{ snarkos_verbosity }} --metrics
+      --allow-external-peers
+      {{ dummy_peers_flag }}
+      {{ rotate_flag }}
+      --dev {{ node_id }} --dev-num-validators {{ num_instances }}
+      --rest-rps {{ rest_rps }} --network {{ snarkos_network_int }}
+
+# Pass the peers as environment variable for each client.
+- name: Build extra environment map for the client service
+  set_fact:
+    snarkos_env_extra: >-
+      {{
+        {'TEST_BOOTSTRAP_PEERS': peers_arg}
+      }}

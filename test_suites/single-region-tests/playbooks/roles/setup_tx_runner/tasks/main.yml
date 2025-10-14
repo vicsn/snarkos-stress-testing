@@ -27,7 +27,7 @@
 
 - name: Set snarkOS binary path based on installation method
   set_fact:
-    snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
+    snarkos_bin_path: "{{ '/home/ubuntu/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
 
 - name: Upload the TX runner script
   template:

@@ -81,6 +81,13 @@ cleanup() {
     source destroy_infra.sh
 }
 
+react_on_exit() {
+  rc=$?
+  echo "EXIT (rc: $rc)"
+
+  exit $rc
+}
+
 set_network_vars() {
   export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
 
@@ -227,6 +234,8 @@ run_utility() {
 # Set up trap to call cleanup function on any error
 trap cleanup ERR
 
+trap react_on_exit EXIT
+
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
@@ -334,6 +343,8 @@ if [ "$RUN_TESTS" == "y" ]; then
         for test in "${PRERELEASE_TESTS[@]}"; do
             export SELECTED=$test
             run_test
+
+            echo "Test finished successfully : $test"
         done
 
     # Else run the selected test

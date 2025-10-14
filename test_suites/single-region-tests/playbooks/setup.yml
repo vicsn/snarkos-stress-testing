@@ -24,6 +24,35 @@
 # ------------------------------------------------
 # snarkOS installation
 
+- name: Choose builder machine (only if remote build)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add chosen host to group 'builder'
+      add_host:
+        name: >-
+          {{ ((groups['snarkos_validator']|default([])) + (groups['snarkos_client']|default([]))) | first }}
+        groups: builder
+      when: (use_remote_build | default(false)) | bool
+
+- name: Build snarkOS once and upload to S3 if use_remote_build
+  hosts: builder
+  remote_user: ubuntu
+  become: true
+  any_errors_fatal: true
+  vars:
+    s3_bucket: "{{ s3_bucket }}"
+    snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
+    snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
+    release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
+    dest_name: "snarkos"
+  tasks:
+    - name: Build from git on one validator to reuse on the others
+      include_role:
+        name: snarkos_build_from_git
+      when: hostvars['localhost'].use_remote_build
+  run_once: true
+
 - name: Install snarkOS
   hosts:
     - snarkos*
@@ -219,6 +248,16 @@
     # - logstash_setup # Enable this again if we use a hosted logging solution.
   vars:
     test_runner_for_metrics_ip: "{{ test_runner_ip | default('localhost') }}"
+
+# ------------------------------------------------
+# snarkOS bootstrap clients
+
+- name: Decide on the bootstrap clients
+  hosts: localhost
+  any_errors_fatal: true
+  roles:
+    - choose_bootstrap_client
+  tags: snarkos
 
 # ------------------------------------------------
 # snarkOS validators

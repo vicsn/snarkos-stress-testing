@@ -1,0 +1,36 @@
+- name: Bootstrap defaults (even if no clients)
+  set_fact:
+    bootstrap_clients: []
+    bootstrap_client_ips: []
+    cacheable: true
+
+- name: Decide bootstrap clients and shared peering sets
+  block:
+    - name: Select bootstrap client hostnames (sorted, first N)
+      set_fact:
+        bootstrap_clients: >-
+          {{
+            (groups['snarkos_client'] | default([]) | list | sort)[: (bootstrap_count | default(1) | int) ]
+          }}
+
+    - name: Resolve bootstrap clients' IPs
+      set_fact:
+        bootstrap_client_ips: >-
+          {{
+            bootstrap_clients
+            | map('extract', hostvars)
+            | map(attribute='public_ip_address')
+            | select('string') | list | unique | sort
+          }}
+
+    - name: Assert bootstrap set is non-empty
+      assert:
+        that:
+          - bootstrap_clients | length > 0
+          - bootstrap_client_ips | length > 0
+        fail_msg: "Bootstrap client set is empty or has no IPs."
+  vars:
+    bootstrap_count: "{{ (clients_bootstrap_count | default(1)) | int }}"
+  when: (groups['snarkos_client'] | default([])) | length > 0
+  run_once: true
+  delegate_to: localhost

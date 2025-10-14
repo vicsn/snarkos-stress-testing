@@ -1,5 +1,17 @@
+- name: Set bootstrap clients related facts
+  hosts: localhost
+  any_errors_fatal: true
+  roles:
+    - choose_bootstrap_client
+  tasks:
+    - name: Put bootstrap hosts into an inventory group
+      add_host:
+        name: "{{ item }}"
+        groups: bootstrap_clients
+      loop: "{{ hostvars['localhost'].bootstrap_clients | default([]) }}"
+
 - name: Reset all clients in parallel
-  hosts: snarkos_client
+  hosts: snarkos_client:!bootstrap_clients
   remote_user: ubuntu
   become: true
   strategy: free
@@ -19,23 +31,39 @@
       ignore_errors: yes  # in case we never deployed malice
 
     - name: Remove existing ledgers on clients
-      ansible.builtin.shell:
-        cmd: "rm -rf /home/ubuntu/.ledger-*"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        shopt -s nullglob dotglob
+        for d in /home/ubuntu/.ledger-*; do
+          [ -d "$d" ] || continue
+          find "$d" -mindepth 1 -maxdepth 1 \
+            ! -name 'cached_router_peers' \
+            ! -name 'cached_gateway_peers' \
+            -exec rm -rf {} +
+        done
+      args:
+        executable: /bin/bash
 
   roles:
     - snarkos_service
   tags: snarkos_client
 
 # Strategy: free doesn't work when we have `pause` and is_synced calles it, so we do it in 3-4 batches instead:
-- name: Check sync status in up to 25% of clients at a time
-  hosts: snarkos_client
+- name: Check sync status in up to 30% of clients at a time
+  hosts: snarkos_client:!bootstrap_clients
   remote_user: ubuntu
   become: true
   serial: "30%"
+  any_errors_fatal: true
   tasks:
+    - name: Wait for the network to advance one block before this host’s sync check
+      include_tasks: ../../playbooks/wait_network_advance.yml
+      vars:
+        node_to_check: "localhost"
+
     - name: Build ordered host list (inventory order)
       set_fact:
-        all_hosts: "{{ groups['snarkos_client'] | list }}"
+        all_hosts: "{{ ansible_play_hosts_all | list }}"
 
     - name: Index of current host (ensure int)
       set_fact:

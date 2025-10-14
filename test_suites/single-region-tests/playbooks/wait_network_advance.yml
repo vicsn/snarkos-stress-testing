@@ -1,0 +1,22 @@
+- name: Check block advance
+  block:
+    - name: Fetch the current block height
+      ansible.builtin.uri:
+        url: "http://{{ node_to_check }}:3030/{{ snarkos_network }}/block/latest"
+        method: GET
+        return_content: true
+      register: current_block
+      until: current_block.status == 200
+      retries: 20
+      delay: 20
+
+    - name: Wait for the network to progress by one block
+      ansible.builtin.uri:
+        url: "http://{{ node_to_check }}:3030/{{ snarkos_network }}/block/latest"
+        method: GET
+        return_content: true
+      register: next_block
+      until: (next_block.json['header']['metadata']['height'] | int) >
+             (current_block.json['header']['metadata']['height'] | int)
+      retries: 20
+      delay: 20
