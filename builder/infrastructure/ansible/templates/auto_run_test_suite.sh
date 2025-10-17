@@ -48,9 +48,6 @@ cleanup_on_error() {
   export SELECTED=analyze_logs
   run_utility
 
-  echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
-  cleanup
-
   exit $rc
 }
 

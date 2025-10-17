@@ -110,8 +110,8 @@
 
     - name: Install sccache
       shell: |
-        wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-aarch64-unknown-linux-musl.tar.gz
-        tar -xf sccache-v0.10.0-aarch64-unknown-linux-musl.tar.gz
+        wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
+        tar -xf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
         sudo install -m 0755 sccache-*/sccache /usr/local/bin/sccache
       when: not sccache.stat.exists
       args:
