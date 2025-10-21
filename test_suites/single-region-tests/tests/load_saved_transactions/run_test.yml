@@ -19,7 +19,7 @@
           - "{{ playbook_dir }}/.venv/bin/python"
           - split_transactions_and_submit_parallel.py
           - "{{ snarkos_network }}"
-          - "{{ s3_bucket }}"
+          - "provable-pregenerated-transactions"
           - "{{ pregeneration_bucket_path }}"
           - "{{ pregeneration_execution_tx_count }}"
           - "{{ pregeneration_deployment_tx_count }}"

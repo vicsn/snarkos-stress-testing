@@ -10,5 +10,9 @@ ExecStart={{ snarkos_bin_path }}/{{ snarkos_command }}
 {% if peers %}
 Environment="TEST_BOOTSTRAP_PEERS={{ peers }}"
 {% endif %}
+{% set committee = (snarkos_env_extra.TEST_COMMITTEE_ADDRS | default('') | string | trim) %}
+{% if committee %}
+Environment="TEST_COMMITTEE_ADDRS={{ committee }}"
+{% endif %}
 Restart=no
 LimitNOFILE=65535

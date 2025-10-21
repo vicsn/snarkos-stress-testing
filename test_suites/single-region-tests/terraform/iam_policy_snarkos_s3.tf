@@ -18,7 +18,9 @@ resource "aws_iam_policy" "snarkos_s3_access" {
           "arn:aws:s3:::${var.RELEASE_BUCKET}",
           "arn:aws:s3:::${var.RELEASE_BUCKET}/*",
           "arn:aws:s3:::snarkos-compiler-cache",
-          "arn:aws:s3:::snarkos-compiler-cache/*"
+          "arn:aws:s3:::snarkos-compiler-cache/*",
+          "arn:aws:s3:::provable-pregenerated-transactions",
+          "arn:aws:s3:::provable-pregenerated-transactions/*"
         ]
       }
     ]

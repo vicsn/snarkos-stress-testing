@@ -97,10 +97,39 @@
       --dev {{ node_id }} --dev-num-validators {{ num_instances }}
       --rest-rps {{ rest_rps }} --network {{ snarkos_network_int }}
 
+- name: Collect committee addresses (all)
+  set_fact:
+    committee_addrs_all: >-
+      {{
+        hostvars['localhost'].validator_data.accounts
+        | default([])
+        | selectattr('address','defined')
+        | map(attribute='address')
+        | list
+        | unique
+      }}
+
+- name: Assert we have enough committee addresses
+  assert:
+    that:
+      - (committee_addrs_all | length) >= (num_instances | int)
+    fail_msg: >-
+      Need at least {{ num_instances }} committee addresses, but found {{ committee_addrs_all | length }}.
+  when: is_bootstrap_client
+
+- name: Build committee addresses list (from localhost.validator_data.accounts)
+  set_fact:
+    committee_addrs_list: "{{ (committee_addrs_all[: (num_instances | int)]) | join(',') }}"
+
 # Pass the peers as environment variable for each client.
 - name: Build extra environment map for the client service
   set_fact:
     snarkos_env_extra: >-
       {{
         {'TEST_BOOTSTRAP_PEERS': peers_arg}
+        | combine(
+            is_bootstrap_client
+            | ternary({'TEST_COMMITTEE_ADDRS': committee_addrs_list}, {}),
+            recursive=True
+          )
       }}

@@ -118,7 +118,7 @@
 
     - name: List existing pregenerated transaction zips for this network + validator count
       aws_s3:
-        bucket: "{{ s3_bucket }}"
+        bucket: "provable-pregenerated-transactions"
         mode: list
         prefix: "{{ pregeneration_bucket_path }}/transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}" # noqa yaml[line-length]
       register: s3_zip_list
@@ -239,7 +239,7 @@
 
     - name: Upload zipped transactions to S3
       aws_s3:
-        bucket: "{{ s3_bucket }}"
+        bucket: "provable-pregenerated-transactions"
         object: "{{ pregeneration_bucket_path }}/{{ zip_name }}"
         src: "/tmp/{{ zip_name }}"
         mode: put

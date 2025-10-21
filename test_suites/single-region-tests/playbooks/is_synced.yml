@@ -1,7 +1,7 @@
 - name: Wait until node is within ±{{ _tol }} blocks of compare node
   vars:
     _tol: "{{ (tolerance | default(50)) | int }}"
-    _retries: "{{ (max_attempts | default(60)) | int }}"
+    _retries: "{{ (max_attempts | default(80)) | int }}"
     _delay: "{{ (delay_secs | default(30)) | int }}"
   ansible.builtin.shell: |
     set -euo pipefail

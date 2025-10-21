@@ -18,5 +18,5 @@
       register: next_block
       until: (next_block.json['header']['metadata']['height'] | int) >
              (current_block.json['header']['metadata']['height'] | int)
-      retries: 20
-      delay: 20
+      retries: 30
+      delay: 30
