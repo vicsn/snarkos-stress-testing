@@ -1,5 +1,5 @@
-resource "aws_iam_role" "builder_role" {
-  name = "aws_iam_builder_role"
+resource "aws_iam_role" "stress_testing_manager_role" {
+  name = "aws_iam_stress_testing_manager_role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -16,9 +16,9 @@ resource "aws_iam_role" "builder_role" {
   })
 }
 
-resource "aws_iam_role_policy" "builder_access_policy" {
-  name = "builder_access_policy"
-  role = aws_iam_role.builder_role.name
+resource "aws_iam_role_policy" "stress_testing_manager_access_policy" {
+  name = "stress_testing_manager_access_policy"
+  role = aws_iam_role.stress_testing_manager_role.name
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -80,9 +80,9 @@ resource "aws_iam_role_policy" "builder_access_policy" {
   })
 }
 
-resource "aws_iam_role_policy" "builder_iam_policy" {
-  name = "builder_iam_policy"
-  role = aws_iam_role.builder_role.name
+resource "aws_iam_role_policy" "stress_testing_manager_iam_policy" {
+  name = "stress_testing_manager_iam_policy"
+  role = aws_iam_role.stress_testing_manager_role.name
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -119,7 +119,7 @@ resource "aws_iam_role_policy" "builder_iam_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "power_user_attachement" {
-  role       = aws_iam_role.builder_role.name
+  role       = aws_iam_role.stress_testing_manager_role.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
 }
 
@@ -127,7 +127,7 @@ resource "aws_iam_role_policy_attachment" "power_user_attachement" {
 # Attach the role to an instance profile, which will be linked to your EC2 instances
 #
 
-resource "aws_iam_instance_profile" "builder_instance_profile" {
-  name = "builder_instance_profile"
-  role = aws_iam_role.builder_role.name
+resource "aws_iam_instance_profile" "stress_testing_manager_instance_profile" {
+  name = "stress_testing_manager_instance_profile"
+  role = aws_iam_role.stress_testing_manager_role.name
 }

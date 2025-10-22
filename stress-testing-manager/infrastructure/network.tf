@@ -2,13 +2,13 @@
 # Security group and ingress rule to allow incoming ssh
 #
 
-resource "aws_security_group" "aleo_builder" {
-  name        = "aleo_builder"
-  description = "Security group for the Aleo builder"
+resource "aws_security_group" "aleo_stress_testing_manager" {
+  name        = "aleo_stress_testing_manager"
+  description = "Security group for the Aleo stress_testing_manager"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "allow_ssh_ipv4" {
-  security_group_id = aws_security_group.aleo_builder.id
+  security_group_id = aws_security_group.aleo_stress_testing_manager.id
   from_port         = 22
   to_port           = 22
   ip_protocol       = "tcp"
@@ -16,7 +16,7 @@ resource "aws_vpc_security_group_ingress_rule" "allow_ssh_ipv4" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "allow_api_ipv4" {
-  security_group_id = aws_security_group.aleo_builder.id
+  security_group_id = aws_security_group.aleo_stress_testing_manager.id
   from_port         = 3030
   to_port           = 3030
   ip_protocol       = "tcp"
@@ -28,7 +28,7 @@ resource "aws_vpc_security_group_ingress_rule" "allow_api_ipv4" {
 #
 
 resource "aws_vpc_security_group_ingress_rule" "allow_aleo_icmp_ipv4" {
-  security_group_id = aws_security_group.aleo_builder.id
+  security_group_id = aws_security_group.aleo_stress_testing_manager.id
   from_port         = -1
   to_port           = -1
   ip_protocol       = "icmp"

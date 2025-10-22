@@ -1,4 +1,4 @@
-- name: Setup the builder machine
+- name: Setup the stress testing manager machine
   hosts: all
   become: true
   gather_facts: true
@@ -169,6 +169,8 @@
     - name: Run aws config
       ansible.builtin.shell: |
         aws configure set default.region us-central-1
+      environment:
+        PYTHONNOUSERSITE: "1"   # ignore ~/.local site-packages
 
     - name: Setup aws config
       template:
@@ -177,13 +179,13 @@
         mode: '0600'
       become: true
 
-    - name: Get IP from inside the builder EC2 instance
+    - name: Get IP from inside the stress testing manager EC2 instance
       shell: curl -s http://checkip.amazonaws.com
       register: ip_result
 
-    - name: Set fact for the builder IP
+    - name: Set fact for the stress testing manager IP
       set_fact:
-        builder_ip: "{{ ip_result.stdout | trim }}"
+        stress_testing_manager_ip: "{{ ip_result.stdout | trim }}"
 
     - name: Set up testing ansible vars
       template:

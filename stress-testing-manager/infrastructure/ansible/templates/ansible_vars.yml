@@ -27,7 +27,7 @@ use_malicious_snarkos_pre_build: true
 snarkos_verbosity: "6"
 rest_rps: 1000000000
 
-test_runner_ip: {{ builder_ip }}
+test_runner_ip: {{ stress_testing_manager_ip }}
 
 txs_target_consensus_version: 10
 

@@ -26,7 +26,7 @@ variable "aws_region" {
   default = "${env("AWS_REGION")}"
 }
 
-data "amazon-ami" "builder-base" {
+data "amazon-ami" "stress-testing-manager-base" {
   filters = {
     name                = "ubuntu/images/hvm-ssd/ubuntu-*-22.04-amd64-server-*"
     root-device-type    = "ebs"
@@ -39,13 +39,13 @@ data "amazon-ami" "builder-base" {
 
 locals { timestamp = regex_replace(timestamp(), "[- TZ:]", "") }
 
-source "amazon-ebs" "builder-base" {
+source "amazon-ebs" "stress-testing-manager-base" {
   #access_key    = "${var.aws_access_key}"
   #secret_key    = "${var.aws_secret_key}"
-  ami_name      = "builder-base-${local.timestamp}"
+  ami_name      = "stress-testing-manager-base-${local.timestamp}"
   instance_type = "m5.4xlarge"
   region        = "${var.aws_region}"
-  source_ami    = "${data.amazon-ami.builder-base.id}"
+  source_ami    = "${data.amazon-ami.stress-testing-manager-base.id}"
   ssh_username  = "ubuntu"
 
   launch_block_device_mappings {
@@ -61,7 +61,7 @@ source "amazon-ebs" "builder-base" {
 }
 
 build {
-  sources = ["source.amazon-ebs.builder-base"]
+  sources = ["source.amazon-ebs.stress-testing-manager-base"]
 
   provisioner "ansible" {
     extra_arguments = ["--scp-extra-args", "'-O'"]

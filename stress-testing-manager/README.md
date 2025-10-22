@@ -1,13 +1,13 @@
-# Aleo SnarkOS Builder and stress tests Tester
+# Aleo SnarkOS Stress Testing Manager and stress tests Tester
 
 A machine that can react to new SnarkOS releases and can build a SnarkOS binary which than can be used and reused
 to run the stress tests.
 
-## Creating the Builder
+## Creating the Stress Testing Manager
 
 ### Base AMI dependency
 
-The Builder uses its own base AMI image (can be build using the scripts int he `packer` folder).
+The Stress Testing Manager uses its own base AMI image (can be build using the scripts int he `packer` folder).
 The image is based on Ubuntu 22 and includes a lot of tools for debugging and building SnarkOS.
 It contains Rust/Cargo, AWS cli, git, Ansible and Terraform.
 
@@ -51,13 +51,13 @@ There is a file with pub keys that will be added to the `authorized_keys` of the
 add it to it, the logic is written in a way it won't duplicate a key. The key has to be added in:
 
 ```
-builder/infrastructure/ansible/templates/extra_keys.pub
+stress-testing-manager/infrastructure/ansible/templates/extra_keys.pub
 ```
 
 Can be done like in this example:
 
 ```
-echo `cat ~/.ssh/id_rsa.pub` >> builder/infrastructure/ansible/templates/extra_keys.pub
+echo `cat ~/.ssh/id_rsa.pub` >> stress-testing-manager/infrastructure/ansible/templates/extra_keys.pub
 ```
 
 ### Running terraform
@@ -68,13 +68,13 @@ Navigate to `infrastructure` and run:
 terraform apply
 ```
 
-This will create the Builder using the base image from the previous section as base.
+This will create the Stress Testing Manager using the base image from the previous section as base.
 What does that include?
 1. A machine of type `t2.xlarge` with 100GB of storage (to store logs and binaries).
 2. A profile giving the machine a lot of rights in AWS - to create and destroy instances, access S3, create and destroy networks, etc. This is needed so stress tests can be ran from it and these tests create instances and a network, read things from S3, etc. The whole list of accesses can be viewd in `infrastructure/ec2_profile.tf`, line `19`.
 
-Keep in mind that in order to create the Builder, first you need to export `TF_VAR_AWS_ACCESS_KEY` and `TF_VAR_AWS_SECRET_KEY`.
-Additionally you need a github token with read access to this repository (so the builder can download the tests). Export it with `TF_VAR_github_token`.
+Keep in mind that in order to create the Stress Testing Manager, first you need to export `TF_VAR_AWS_ACCESS_KEY` and `TF_VAR_AWS_SECRET_KEY`.
+Additionally you need a github token with read access to this repository (so the stress-testing-manager can download the tests). Export it with `TF_VAR_github_token`.
 
 By default, the setup uses the ssh key `id_ed25519.pub` in `~/.ssh/`. You can overwrite this with `TF_VAR_PUBLIC_KEY_PATH=...`.
 
@@ -91,9 +91,9 @@ It does:
 5. Sets up the right test vars that are specific for the automated runs.
 6. By default a local API is ran at port `3030` for talisker its documentation can be found [here](https://github.com/ProvableHQ/talisker/blob/master/README.md#using-the-internal-api)
 
-## Removing the Builder
+## Removing the Stress Testing Manager
 
-The builder is stateless, so it can be removed and created whenever we decide to do so.
+The stress-testing-manager is stateless, so it can be removed and created whenever we decide to do so.
 Just run:
 
 ```
@@ -103,7 +103,7 @@ terraform destroy
 in the `infrastructure` folder.
 
 
-## Updating the Builder
+## Updating the Stress Testing Manager
 
 Just run again:
 
@@ -116,11 +116,11 @@ in the `infrastructure` folder.
 This will evaluate the ansible playbook again in addition to any infrastructure changes, meaning the newest Talisker
 will get intalled and the newest version of the tests will get pulled.
 
-## The builder logic
+## The stress-testing-manager logic
 
 ![alt text](images/diagram.svg "Diagram")<!-- SVG can be modified with app.diagrams.net -->
 
-The Builder machine is running a service called Talisker, a systemd service that can be controlled with (for example):
+The Stress Testing Manager machine is running a service called Talisker, a systemd service that can be controlled with (for example):
 
 ```
 sudo service talisker stop

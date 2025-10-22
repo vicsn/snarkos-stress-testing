@@ -14,9 +14,9 @@ export TF_VAR_devnet_name="${DEVNET_NAME:-prerelease-devnet}"
 
 ANSIBLE_FORKS=40
 
-# Override the USER var for the run, as USER is just ubuntu for the builder and we want a special, visible name:
+# Override the USER var for the run, as USER is just ubuntu for the stress testing manager and we want a special, visible name:
 # Ansible also uses this var to create its dynamic inventory, that's why we need it set the same as the OWNER for terraform.
-export USER=builder
+export USER=stm
 export OWNER=$USER
 
 {% raw %}
@@ -96,8 +96,11 @@ set_network_vars() {
 
 # Function to init and apply Terraform
 init_and_apply_terraform() {
-    cd $PARENT_DIR/terraform
+    # Init so the first time a STM is created cleanup works.
+    cd "$PARENT_DIR/terraform_tx_cannon"
+    terraform init
 
+    cd $PARENT_DIR/terraform
     terraform init -migrate-state
     terraform apply -auto-approve -parallelism=80 -var="owner=$OWNER" 
 
