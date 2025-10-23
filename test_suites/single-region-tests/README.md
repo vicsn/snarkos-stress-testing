@@ -144,3 +144,12 @@ For a local run the logs can be downloaded by selecting the following utiltieis:
 ```
 
 Or all downloaded and then uploaded to S3 by selecting `12`.
+
+## Destroying the stress testing infrastructure locally
+
+On the Stress Test Manager, Talikser deals with cleaning up the infrastructure after testing, locally it has to be done manually.
+
+Destroy the infrastructure when ready by running:
+```
+./run_test_suite.sh destroy
+```

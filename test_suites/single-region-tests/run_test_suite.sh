@@ -14,8 +14,6 @@ export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 export OWNER=$USER
 export TF_VAR_devnet_name="${DEVNET_NAME:-single-region-tests}"
 
-echo "About to run setup/tests for user $OWNER"
-
 # Bucket for the logs:
 RESULTS_AND_LOGS_BUCKET="${RESULTS_AND_LOGS_BUCKET:-provable-logs-results}"
 TEST_RUNNER="${STRESS_TEST_RUNNER:-$USER}"
@@ -33,7 +31,18 @@ download_and_upload_logs() {
   local test_ran="${SELECTED:-download_and_upload_logs}"
 
   # Cleanup old logs:
-  rm -rf $PARENT_DIR/log_files
+  if [ -d "$PARENT_DIR/log_files" ]; then
+    read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans
+    case "$_ans" in
+      [yY])
+        rm -rf "$PARENT_DIR/log_files"
+        ;;
+      *)
+        echo "Keeping existing 'log_files' (new logs may merge with old ones)."
+        ;;
+    esac
+  fi
+  mkdir -p "$PARENT_DIR/log_files"
 
   # Download client logs:
   export SELECTED=download_logs_clients
@@ -73,12 +82,6 @@ download_and_upload_logs() {
   fi
 
   echo "Log files uploaded to https://console.aws.amazon.com/s3/buckets/$RESULTS_AND_LOGS_BUCKET?prefix=$BASE_BUCKET_PATH/$test_ran/"
-}
-
-# Function to clean up resources using Terraform
-cleanup() {
-    cd "$SCRIPT_DIR"
-    source destroy_infra.sh
 }
 
 react_on_exit() {
@@ -231,8 +234,25 @@ run_utility() {
     fi
 }
 
-# Set up trap to call cleanup function on any error
-trap cleanup ERR
+# ---- Cleanup, if provided does a cleanup and exits ----
+if [[ "${1:-}" == "destroy" ]]; then
+  echo "Destroying infrastructure..."
+
+  # Ensure non-interactive behavior
+  RUN_TERRAFORM="n"
+  RUN_SETUP="n"
+  RUN_TESTS="n"
+  RUN_UTILITIES="n"
+
+  cd "$SCRIPT_DIR"
+  source destroy_infra.sh
+
+  # Exit without running the rest of the script
+  exit 0
+fi
+# ---- Cleanup ----
+
+echo "About to run setup/tests for user $OWNER"
 
 trap react_on_exit EXIT
 
@@ -372,20 +392,25 @@ if [ "$RUN_UTILITIES" == "y" ]; then
             say "Finished running utility upload logs to s3"
         fi
     else
+        if [[ "$SELECTED" == download_* ]]; then
+            if [ -d "$PARENT_DIR/log_files" ]; then
+                read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans
+                case "$_ans" in
+                  [yY])
+                      rm -rf "$PARENT_DIR/log_files"
+                      ;;
+                  *)
+                      echo "Keeping existing 'log_files' (new logs may merge with old ones)."
+                      ;;
+                esac
+            fi
+            mkdir -p "$PARENT_DIR/log_files"
+        fi
+
+
         run_utility | tee -a "$PARENT_DIR/observability_runner.log"
     fi
 fi
 
-# Wait for user input before destroying the infrastructure
-read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-
-# Destroy the infrastructure
-echo "Destroying infrastructure..."
-
-cd "$PARENT_DIR/terraform"
-terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
-
-cd "$PARENT_DIR/terraform_tx_cannon"
-# Init the terraform_tx_cannon as if it is not used in this test run, we'll see 'Error: Module not installed' without an init.
-terraform init
-terraform destroy -auto-approve -parallelism=50 -var="owner=$OWNER"
+# Remind of cleanup the infrastructure
+echo "Please remember to destroy the infrastructure with './run_test_suite.sh destroy' after testing work is done..."
