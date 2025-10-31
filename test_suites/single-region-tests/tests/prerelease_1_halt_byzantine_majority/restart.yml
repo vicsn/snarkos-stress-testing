@@ -63,17 +63,3 @@
 - name: prerelease_1_halt_byzantine_majority | restart | Debug current block height
   debug:
     msg: "Current block height: {{  current_block.json['header']['metadata']['height'] }}"
-
-- name: prerelease_1_halt_byzantine_majority | restart | Wait for the network to progress by one block
-  ansible.builtin.uri:
-    url: "http://{{ test_network_url }}:3030/{{ snarkos_network }}/block/latest"
-    method: GET
-    return_content: true
-  register: next_block
-  until: next_block.json['header']['metadata']['height'] | int > current_block.json['header']['metadata']['height'] | int
-  retries: 60
-  delay: 10
-
-- name: prerelease_1_halt_byzantine_majority | restart | Debug next block height
-  debug:
-    msg: "Next block height: {{  next_block.json['header']['metadata']['height'] }}"
