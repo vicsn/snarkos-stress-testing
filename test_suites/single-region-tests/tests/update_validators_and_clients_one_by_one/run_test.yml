@@ -1,3 +1,15 @@
+- name: Set bootstrap clients related facts
+  hosts: localhost
+  any_errors_fatal: true
+  roles:
+    - choose_bootstrap_client
+  tasks:
+    - name: Put bootstrap hosts into an inventory group
+      add_host:
+        name: "{{ item }}"
+        groups: bootstrap_clients
+      loop: "{{ hostvars['localhost'].bootstrap_clients | default([]) }}"
+
 - name: Update snarkOS on validators
   hosts: snarkos_validator
   remote_user: ubuntu
@@ -88,7 +100,7 @@
   tags: snarkos_update
 
 - name: Update snarkOS on clients
-  hosts: snarkos_client
+  hosts: snarkos_client:!bootstrap_clients
   remote_user: ubuntu
   become: true
   serial: 1 # Update one client at a time
