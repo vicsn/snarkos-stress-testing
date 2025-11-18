@@ -25,11 +25,12 @@
       }}
     node_id: "{{ tags['Dev'] }}"
 
-- name: Collect client IPs for the current validator
+- name: Collect prover IPs
   set_fact:
-    peers_arg: >-
+    provers_arg: >-
       {{ (
-        groups.get('snarkos_prover', [])
+        ('snarkos_prover' in groups)
+          | ternary(groups['snarkos_prover'], [])
           | map('extract', hostvars)
           | map(attribute='public_ip_address')
           | map('regex_replace', '^(.*)$', '\1:4130')
@@ -38,9 +39,74 @@
         | join(',')
       }}
 
-# The 34.12.32.12:9 ip is set to peers, because this is a workaround so that
-# the node doesn't attempt to connect to itself as a peer,
-# as 127.0.0.1 is the default dev peer right now if there are no --peers.
+# ---- per-validator client assignment ----
+
+- name: Build ordered validator list
+  set_fact:
+    all_validators: "{{ groups['snarkos_validator'] | list }}"
+
+- name: Index of current validator
+  set_fact:
+    current_index: "{{ all_validators.index(inventory_hostname) | int }}"
+
+- name: Prepare client host list
+  set_fact:
+    all_client_hosts: >-
+      {{
+        ('snarkos_client' in groups)
+          | ternary(groups['snarkos_client'] | list, [])
+      }}
+
+- name: Compute clients_per_validator
+  set_fact:
+    clients_per_validator: >-
+      {{
+        ((all_client_hosts | length) + (num_instances | int) - 1)
+        // (num_instances | int)
+      }}
+
+- name: Group clients per validator (contiguous groups)
+  set_fact:
+    clients_grouped: "{{ all_client_hosts | batch(clients_per_validator) | list }}"
+  when: clients_per_validator | int > 0
+
+- name: No clients – set empty groups
+  set_fact:
+    clients_grouped: []
+  when: clients_per_validator | int == 0
+
+- name: Get client hostnames for this validator
+  set_fact:
+    client_hostnames: >-
+      {{
+        clients_grouped[current_index]
+        if (clients_grouped | length) > current_index
+        else []
+      }}
+
+- name: Build client_peers (IPs with port 4130)
+  set_fact:
+    client_peers: >-
+      {{
+        client_hostnames
+          | map('extract', hostvars)
+          | map(attribute='public_ip_address')
+          | map('regex_replace', '^(.*)$', '\1:4130')
+          | list
+          | join(',')
+      }}
+
+# ---- combine all peers ----
+
+- name: Build combined peers list (validators + provers + clients)
+  set_fact:
+    peers_combined: >-
+      {{
+        [formatted_validator_routers, provers_arg, client_peers]
+          | reject('equalto', '')
+          | join(',')
+      }}
+
 - name: Set snarkos command with peers and validators
   set_fact:
     snarkos_command: >-
@@ -52,7 +118,7 @@
         --dev-num-validators {{ num_instances }} --no-dev-txs \
         --rest-rps {{ rest_rps }} \
         --allow-external-peers \
-        --peers 34.12.32.12:9 \
+        --peers {{ peers_combined }} \
         --network {{ snarkos_network_int }}
 
 - name: Select global bootstrap clients (hostnames)
