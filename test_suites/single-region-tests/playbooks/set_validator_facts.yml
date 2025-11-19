@@ -3,7 +3,7 @@
 
 - name: Set global facts
   set_fact:
-    num_instances: "{{ groups['snarkos_validator'] | length }}"
+    num_instances: "{{ groups['snarkos_validator'] | length | int }}"
     malicemode: ""
   run_once: true
 
@@ -45,9 +45,9 @@
   set_fact:
     all_validators: "{{ groups['snarkos_validator'] | list }}"
 
-- name: Index of current validator
+- name: Index of current validator (int)
   set_fact:
-    current_index: "{{ all_validators.index(inventory_hostname) | int }}"
+    current_index: "{{ (all_validators | list).index(inventory_hostname) | int }}"
 
 - name: Prepare client host list
   set_fact:
@@ -61,26 +61,26 @@
   set_fact:
     clients_per_validator: >-
       {{
-        ((all_client_hosts | length) + (num_instances | int) - 1)
+        ((all_client_hosts | length | int) + (num_instances | int) - 1)
         // (num_instances | int)
       }}
 
 - name: Group clients per validator (contiguous groups)
   set_fact:
-    clients_grouped: "{{ all_client_hosts | batch(clients_per_validator) | list }}"
-  when: clients_per_validator | int > 0
+    clients_grouped: "{{ all_client_hosts | batch(clients_per_validator | int) | list }}"
+  when: (clients_per_validator | int) > 0
 
 - name: No clients – set empty groups
   set_fact:
     clients_grouped: []
-  when: clients_per_validator | int == 0
+  when: (clients_per_validator | int) == 0
 
 - name: Get client hostnames for this validator
   set_fact:
     client_hostnames: >-
       {{
-        clients_grouped[current_index]
-        if (clients_grouped | length) > current_index
+        clients_grouped[current_index | int]
+        if (clients_grouped | length | int) > (current_index | int)
         else []
       }}
 
@@ -110,12 +110,12 @@
 - name: Set snarkos command with peers and validators
   set_fact:
     snarkos_command: >-
-      snarkos start --metrics --nodisplay  --validator \
-        --node 0.0.0.0:4130  --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 \
+      snarkos start --metrics --nodisplay --validator \
+        --node 0.0.0.0:4130 --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 \
         --validators {{ formatted_validator_ips }} \
         --verbosity {{ snarkos_verbosity }} \
         --dev {{ node_id }} \
-        --dev-num-validators {{ num_instances }} --no-dev-txs \
+        --dev-num-validators {{ num_instances | int }} --no-dev-txs \
         --rest-rps {{ rest_rps }} \
         --allow-external-peers \
         --peers {{ peers_combined }} \
@@ -135,3 +135,4 @@
       {{
         {'TEST_BOOTSTRAP_PEERS': bootstrap_peers_arg}
       }}
+
