@@ -56,14 +56,16 @@
 
 # ------------------------------------------------
 # Dependencies
-- name: Install dependencies
+- name: Install dependencies (ensure aria2 is always present)
   hosts: snarkos*
   become: true
   remote_user: ubuntu
+  any_errors_fatal: true
   tasks:
     - name: Update apt cache (retry on transient lock/network issues)
       ansible.builtin.apt:
         update_cache: true
+        cache_valid_time: 600
       register: apt_update
       until: apt_update is succeeded
       retries: 10
@@ -72,16 +74,28 @@
     - name: Install dependencies
       ansible.builtin.apt:
         name:
+          - aria2
           - zip
           - unzip
           - awscli
           - tar
           - zstd
+          - curl
         state: present
       register: apt_result
       until: apt_result is succeeded
       retries: 20
       delay: 30
+
+    - name: Verify aria2 installation
+      ansible.builtin.command: aria2c --version
+      register: aria2_version
+      changed_when: false
+      failed_when: aria2_version.rc != 0
+
+    - name: Print aria2 version
+      debug:
+        msg: "aria2 successfully installed: {{ aria2_version.stdout_lines | first }}"
 
 # ------------------------------------------------
 # Observability setup
@@ -193,17 +207,74 @@
   become: true
   remote_user: ubuntu
   pre_tasks:
-    - name: Set snapshot URL based on client index
+    - name: Load snapshot URLs from controller hostvars
       set_fact:
-        snapshot_url: >-
-          {%- set lines = (hostvars['localhost'].snapshot_urls_content.content | b64decode | regex_replace('\r', '')).split('\n') -%}
-          {%- set idx = groups['snarkos_client'].index(inventory_hostname) -%}
-          {{ (idx > 0 and idx < (lines | length) and (lines[idx] | trim) != '') | ternary(lines[idx] | trim, '') }}
+        _snapshot_lines_clean: >-
+          {{
+            hostvars['localhost'].snapshot_urls_content.content
+            | b64decode
+            | regex_replace('\r', '')
+            | regex_findall('[^\n]+')
+            | map('regex_replace', '^\s+|\s+$', '')
+            | reject('equalto', '')
+            | reject('match', '^#')
+            | list
+          }}
 
-
-    - name: Display assigned snapshot URL
+    - name: Debug normalized URLs (once)
       debug:
-        msg: "Host {{ inventory_hostname }} assigned snapshot URL: {{ snapshot_url }}"
+        var: _snapshot_lines_clean
+      run_once: true
+
+    - name: Compute play-scoped client list in group order
+      set_fact:
+        _clients_in_play: "{{ groups['snarkos_client'] | select('in', ansible_play_hosts_all) | list }}"
+
+    - name: Compute per-client index in this play
+      set_fact:
+        client_index: "{{ _clients_in_play.index(inventory_hostname) }}"
+
+    - name: Set snapshot URL
+      set_fact:
+        # noqa jinja[spacing]
+        snapshot_url: >-
+          {%- set urls = _snapshot_lines_clean -%}
+          {%- set num_urls = urls | length -%}
+          {%- set idx = client_index | int -%}
+
+          {# Case 1: No URLs at all → no snapshot #}
+          {%- if num_urls == 0 -%}
+          {{ '' }}
+
+          {# Case 2: Load-ledger mode → all clients use first URL #}
+          {%- elif load_ledger_testing | default(false) | bool -%}
+          {{ urls[0] }}
+
+          {# Case 3: Normal sync-mode behavior
+             - First client (idx == 0) starts from zero
+             - For idx > 0:
+               * idx-1 selects the URL (so first ledger client gets urls[0])
+               * if more clients than URLs, extra clients use last URL
+          #}
+          {%- else -%}
+            {%- if idx == 0 -%}
+            {{ '' }}
+            {%- elif idx <= num_urls -%}
+            {{ urls[idx - 1] }}
+            {%- else -%}
+            {{ urls[-1] }}
+            {%- endif -%}
+          {%- endif -%}
+
+    - name: Debug assigned snapshot URL
+      debug:
+        msg: >-
+          host={{ inventory_hostname }}
+          idx={{ client_index }}
+          num_clients={{ _clients_in_play | length }}
+          num_urls={{ _snapshot_lines_clean | length }}
+          load_ledger_testing={{ load_ledger_testing | default(false) }}
+          snapshot_url={{ snapshot_url | default('') }}
 
     - name: Deploy download and restart script
       template:
@@ -309,3 +380,69 @@
         that:
           - (network_info | length) == (groups['snarkos_client'] | length)
         fail_msg: "network_info has {{ network_info | length }} entries; expected {{ groups['snarkos_client'] | length }}."
+
+
+# ------------------------------------------------
+# Load-ledger analyser setup (only when load ledger testing enabled)
+
+- name: Set up load ledger service (conditionally)
+  hosts: snarkos_client
+  become: true
+  remote_user: ubuntu
+  any_errors_fatal: true
+  vars:
+    analyser_path: /home/ubuntu/load_ledger_analyser.sh
+    analyser_service_name: load-ledger-analyser
+  tasks:
+    - name: Load-ledger analyser block
+      when: load_ledger_testing | default(false) | bool
+      block:
+        - name: Ensure logs directory exists
+          ansible.builtin.file:
+            path: /home/ubuntu/logs
+            state: directory
+            owner: ubuntu
+            group: ubuntu
+            mode: "0755"
+
+        - name: Deploy load_ledger analyser script
+          ansible.builtin.template:
+            src: load_ledger_analyser.sh.j2
+            dest: "{{ analyser_path }}"
+            owner: ubuntu
+            group: ubuntu
+            mode: "0755"
+
+        - name: Create systemd service for load ledger analyser
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/{{ analyser_service_name }}.service
+            content: |
+              [Unit]
+              Description=Load Ledger Analyser
+              After=network.target
+
+              [Service]
+              Type=simple
+              User=ubuntu
+              Group=ubuntu
+              WorkingDirectory=/home/ubuntu
+              ExecStart={{ analyser_path }}
+              Restart=no
+
+              [Install]
+              WantedBy=multi-user.target
+            owner: root
+            group: root
+            mode: "0644"
+          notify: "Run daemon-reload"
+
+        - name: Enable and start the analyser service
+          ansible.builtin.systemd:
+            name: "{{ analyser_service_name }}"
+            enabled: true
+            state: started
+
+  handlers:
+    - name: Run daemon-reload
+      ansible.builtin.systemd:
+        daemon_reload: true

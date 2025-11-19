@@ -3,5 +3,5 @@
   tasks:
     - name: store client ips
       copy:
-        content: "{{ groups['snarkos_client'] | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"
+        content: "{{ groups['snarkos_client'] | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n')  ~ '\n' }}"
         dest: ../client_ip_addresses.txt

@@ -19,7 +19,11 @@ log() {
 log "=== Starting snapshot download and installation process ==="
 log "Script initiated at $(date)"
 {% endraw %}
-SNAPSHOT_URL="{{ snapshot_url }}"
+SNAPSHOT_URL="{{ (snapshot_url | default('') | regex_replace('\r',''))
+                 .split('\n')
+                 | first
+                 | regex_replace('^\\s+|\\s+$','') }}"
+LOAD_LEDGER_TESTING="{{ (load_ledger_testing | default(false) | bool) | ternary('true','false') }}"
 {% raw %}
 DOWNLOAD_DIR="/tmp/snapshot_download"
 EXTRACT_DIR="/tmp/snapshot_extract"
@@ -67,13 +71,79 @@ if [[ "$SNAPSHOT_URL" == s3://* ]]; then
     exit 1
   fi
 else
-  log "Detected HTTP/HTTPS source; using wget"
-  if wget -c --progress=bar:force "$SNAPSHOT_URL" -O "$DEST_FILE" 2>&1 | tee -a "$LOG_FILE"; then
-    log "HTTP download complete: $DEST_FILE"
-  else
-    log "ERROR: wget failed for $SNAPSHOT_URL"
-    exit 1
+  # -------- Robust HTTP(S) downloader with rotation detection + infinite retry --------
+  # We fingerprint the remote (ETag/Last-Modified/Content-Length). If it changes, we purge
+  # any local partial and start clean. We also watch for aria2 "Invalid range header" or
+  # "content length mismatch" and purge/retry forever.
+  FPRINT="$DOWNLOAD_DIR/${FILENAME}.fprint"
+
+  fingerprint() {
+    curl -sI --connect-timeout 20 --max-time 60 \
+         -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+         "$SNAPSHOT_URL" \
+    | awk 'BEGIN{IGNORECASE=1}
+           /^ETag:/           { gsub("\r",""); print "ETag:"$2 }
+           /^Last-Modified:/  { sub("\r","");  print "LM:" substr($0,16) }
+           /^Content-Length:/ { sub("\r","");  print "CL:" $2 }'
+  }
+
+  mkdir -p "$DOWNLOAD_DIR"
+
+  remote_fp="$(fingerprint)"
+  local_fp="$(cat "$FPRINT" 2>/dev/null || echo "")"
+  if [ "$remote_fp" != "$local_fp" ]; then
+    log "Remote snapshot fingerprint changed. Purging local file/partials."
+    rm -f "$DEST_FILE" "$DEST_FILE.aria2"
+    printf "%s\n" "$remote_fp" > "$FPRINT"
   fi
+
+  while true; do
+    log "Downloading with aria2c…"
+    # Use tee into a small, per-attempt log to detect specific failures reliably.
+    ATTEMPT_LOG="$DOWNLOAD_DIR/aria2_$(date +%s).log"
+    if aria2c \
+        -x16 -s16 \
+        --dir="$DOWNLOAD_DIR" \
+        --out="$FILENAME" \
+        --continue=true \
+        --always-resume=false \
+        --allow-overwrite=true \
+        --auto-file-renaming=false \
+        --max-tries=0 \
+        --retry-wait=10 \
+        --max-file-not-found=0 \
+        --timeout=120 \
+        --connect-timeout=20 \
+        --console-log-level=warn \
+        --summary-interval=10 \
+        --header="Cache-Control: no-cache" \
+        --header="Pragma: no-cache" \
+        "$SNAPSHOT_URL" 2>&1 | tee -a "$ATTEMPT_LOG" -a "$LOG_FILE"; then
+      log "HTTP download complete: $DEST_FILE"
+      rm -f "$ATTEMPT_LOG"
+      break
+    fi
+
+    # If we hit a range mismatch (snapshot rotated under us), purge and retry.
+    if grep -qiE 'Invalid range header|content length mismatch' "$ATTEMPT_LOG"; then
+      log "Detected range/content mismatch. Purging local file/partials and retrying…"
+      rm -f "$DEST_FILE" "$DEST_FILE.aria2"
+      # Refresh fingerprint (CDN may have just rotated again)
+      new_fp="$(fingerprint)"
+      if [ "$new_fp" != "$remote_fp" ]; then
+        printf "%s\n" "$new_fp" > "$FPRINT"
+        remote_fp="$new_fp"
+      fi
+      rm -f "$ATTEMPT_LOG"
+      sleep 5
+      continue
+    fi
+
+    log "aria2c failed; retrying in 15s…"
+    rm -f "$ATTEMPT_LOG"
+    sleep 15
+  done
+  # -------- end robust HTTP(S) downloader --------
 fi
 
 log "File size: $(du -h "$DEST_FILE" | cut -f1)"
@@ -168,11 +238,23 @@ ls -la "$EXTRACT_DIR" | tee -a "$LOG_FILE"
 # 1) Find any file named CURRENT in the extracted tree
 mapfile -t CURRENT_HITS < <(find "$EXTRACT_DIR" -type f -name CURRENT 2>/dev/null | sort)
 
+if [[ "$LOAD_LEDGER_TESTING" == "true" ]]; then
+  log "LOAD_LEDGER_TESTING=true → skipping ledger install, service stop/start, and cleanup."
+  log "Found CURRENT hits: ${#CURRENT_HITS[@]}"
+  for p in "${CURRENT_HITS[@]}"; do
+    log " - $p"
+  done
+  log "Early exit due to load ledger testing mode."
+  exit 0
+fi
+
 if [[ ${#CURRENT_HITS[@]} -eq 0 ]]; then
   log "WARNING: No 'CURRENT' file found after extraction. Showing tree for debugging:"
   find "$EXTRACT_DIR" -maxdepth 4 -type d | sed "s|^|  |" | tee -a "$LOG_FILE"
   log "Proceeding to restart snarkOS without ledger replacement."
 else
+  rm -rf "$DOWNLOAD_DIR"/*
+
   # Prefer a path that includes '/ledger-0'; otherwise pick the shortest path
   LEDGER_ROOT=""
   for p in "${CURRENT_HITS[@]}"; do
@@ -248,7 +330,7 @@ else
   journalctl -u snarkos --no-pager -n 50 | tee -a "$LOG_FILE" || true
 fi
 
-# --- Cleanup (optional) ---
+# --- Cleanup ---
 log "Cleanup: leaving downloaded and extracted files in place."
 
 rm -rf "$EXTRACT_DIR"/*

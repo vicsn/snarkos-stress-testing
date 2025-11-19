@@ -1,0 +1,222 @@
+{% raw %}#!/bin/bash
+set -euo pipefail
+
+# === Config ===
+TARGET_DOWNLOAD_CMD="download_snapshot.sh"
+TARGET_SNARKOS_CMD="/usr/bin/snarkos"
+
+LOG_DIR="/home/ubuntu/logs"
+mkdir -p "$LOG_DIR"
+
+STATS_JSON="/home/ubuntu/load_ledger_stats.json"   # (keeping your original path/typo)
+SLEEP_SECS=60
+
+# Network mapping (provided by Ansible)
+{% endraw %}
+NETWORK_NAME="{{ snarkos_network | lower }}"
+{% raw %}
+case "$NETWORK_NAME" in
+  canary)  NETWORK_CODE=2 ;;
+  testnet) NETWORK_CODE=1 ;;
+  mainnet) NETWORK_CODE=0 ;;
+  *)
+    echo "Unknown snarkos_network='$NETWORK_NAME' (expected canary|testnet|mainnet)" >&2
+    exit 2
+    ;;
+esac
+
+echo "load_ledger_analyser: network=$NETWORK_NAME (code=$NETWORK_CODE)"
+echo "Stats file: $STATS_JSON"
+
+wait_for_downloads() {
+  echo "Waiting for all snapshot download processes to finish..."
+  while pgrep -f "$TARGET_DOWNLOAD_CMD" >/dev/null; do
+    COUNT="$(pgrep -fc "$TARGET_DOWNLOAD_CMD" || true)"
+    echo "Still running: ${COUNT} download process(es)..."
+    sleep 30
+  done
+  echo "All downloads finished."
+}
+
+stop_snarkos_service_and_wait() {
+  echo "Stopping snarkos systemd service (if running)…"
+  sudo service snarkos stop || true
+  while pgrep -f "$TARGET_SNARKOS_CMD" >/dev/null; do
+    COUNT="$(pgrep -fc "$TARGET_SNARKOS_CMD" || true)"
+    echo "snarkos process(es) still running: ${COUNT}…"
+    sleep 30
+  done
+
+  sudo rm -rf /tmp/snarkos.log
+}
+
+# Find the largest directory (by size) within /tmp/snapshot_extract (depth<=3)
+# that contains a file named CURRENT. Fallback to /tmp/snapshot_extract/image/ledger.
+compute_storage_dir() {
+  local root="/tmp/snapshot_extract"
+  local default="${root}/image/ledger"
+  local -a candidates=()
+
+  sudo chown ubuntu:ubuntu -R $root
+
+  # collect dirs that contain CURRENT
+  while IFS= read -r path; do
+    [[ -n "$path" ]] && candidates+=("$(dirname "$path")")
+  done < <(find "$root" -maxdepth 3 -type f -name CURRENT 2>/dev/null | sort -u)
+
+  if [[ ${#candidates[@]} -eq 0 ]]; then
+    echo "WARN: No CURRENT file found under ${root} (depth<=3). Using fallback: ${default}" >&2
+    mkdir -p "$default"
+    printf '%s\n' "$default"        # <-- ONLY the path on stdout
+    return
+  fi
+
+  local best="" best_size=-1
+  for d in "${candidates[@]}"; do
+    local sz
+    sz="$(du -sb "$d" 2>/dev/null | awk '{print $1}')" || sz=0
+    [[ -z "$sz" ]] && sz=0
+    if (( sz > best_size )); then
+      best_size="$sz"
+      best="$d"
+    fi
+  done
+
+  if [[ -z "$best" ]]; then
+    echo "WARN: Could not determine best ledger dir. Using fallback: ${default}" >&2
+    mkdir -p "$default"
+    printf '%s\n' "$default"        # <-- ONLY the path on stdout
+  else
+    echo "Selected storage dir: ${best} (size=${best_size} bytes)" >&2
+    printf '%s\n' "$best"           # <-- ONLY the path on stdout
+  fi
+}
+
+run_once() {
+  wait_for_downloads
+  stop_snarkos_service_and_wait
+
+  STORAGE_DIR="$(compute_storage_dir)"
+
+  TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+  LOG_FILE="${LOG_DIR}/snarkos_${TIMESTAMP}.log"
+  PID_FILE="${LOG_DIR}/snarkos.pid"
+
+  CMD=(
+    /usr/bin/snarkos start
+    --client
+    --nodisplay
+    --rest 0.0.0.0:3030
+    --node 0.0.0.0:4130
+    --verbosity 1
+    --metrics
+    --rest-rps 1000000000
+    --storage "${STORAGE_DIR}"
+    --network "${NETWORK_CODE}"
+  )
+
+  echo "Starting snarkos… (logs: $LOG_FILE)"
+  echo "Using storage: ${STORAGE_DIR}"
+  START_TIME="$(date +%s)"
+  nohup "${CMD[@]}" >"$LOG_FILE" 2>&1 &
+  PID=$!
+  echo "$PID" > "$PID_FILE"
+  echo "snarkos PID: $PID"
+
+  proc_alive() { ps -p "$PID" >/dev/null 2>&1; }
+
+  echo "Waiting for 'Started sync from CDN'…"
+  while true; do
+    if grep -q "Started sync from CDN" "$LOG_FILE" 2>/dev/null; then
+      END_TIME="$(date +%s)"
+      STARTUP_TIME=$((END_TIME - START_TIME))
+      echo "Reached 'Started sync from CDN' in ${STARTUP_TIME}s"
+      break
+    fi
+    if ! proc_alive; then
+      echo "snarkos exited before 'Started sync from CDN' appeared." >&2
+      exit 1
+    fi
+    sleep 2
+  done
+
+  echo "Waiting for 'Loading deployments M-K (of N)'…"
+  extract_N() {
+    sed -n 's/.*Loading deployments .* (of \([0-9]\+\)).*/\1/p' "$LOG_FILE" | tail -n1
+  }
+
+  N=""
+  while [[ -z "${N:-}" ]]; do
+    N="$(extract_N || true)"
+    if [[ -n "${N:-}" ]]; then
+      break
+    fi
+    if ! proc_alive; then
+      echo "snarkos exited before deployments count appeared; setting N=0"
+      N="0"
+      break
+    fi
+    sleep 2
+  done
+
+  # Write stats JSON (include snarkos_network code)
+  cat > "$STATS_JSON" <<JSON
+{
+  "startup_time": ${STARTUP_TIME},
+  "number_of_deployments": ${N},
+  "snarkos_network": ${NETWORK_CODE}
+}
+JSON
+  chmod 0644 "$STATS_JSON"
+  echo "Wrote ${STATS_JSON}: startup_time=${STARTUP_TIME}, number_of_deployments=${N}, snarkos_network=${NETWORK_CODE}"
+
+  {
+    echo
+    echo "=== snarkos startup metrics ==="
+    if date -d "@$START_TIME" '+%Y-%m-%d %H:%M:%S' >/dev/null 2>&1; then
+      echo "Started at:        $(date -d "@$START_TIME" '+%Y-%m-%d %H:%M:%S')"
+      echo "CDN sync reached:  $(date -d "@$END_TIME"   '+%Y-%m-%d %H:%M:%S')"
+    else
+      echo "Started at:        $(date -r "$START_TIME" '+%Y-%m-%d %H:%M:%S')"
+      echo "CDN sync reached:  $(date -r "$END_TIME"   '+%Y-%m-%d %H:%M:%S')"
+    fi
+    echo "Startup time (s):  ${STARTUP_TIME}"
+    echo "Deployments total: ${N}"
+    echo "Network (name):    ${NETWORK_NAME}"
+    echo "Network (code):    ${NETWORK_CODE}"
+    echo "Storage dir:       ${STORAGE_DIR}"
+    echo "==============================="
+  } >> "$LOG_FILE"
+
+  echo "Measurement complete — stopping snarkos process..."
+
+  # --- Stop snarkos immediately after writing JSON ---
+  kill "$PID" 2>/dev/null || true
+  sleep 5
+  if pgrep -f "$TARGET_SNARKOS_CMD" >/dev/null; then
+    echo "Force killing remaining snarkos processes..."
+    pkill -f "$TARGET_SNARKOS_CMD" || true
+    sleep 3
+  fi
+
+  echo "snarkos stopped. Run complete."
+}
+
+# First run if JSON missing, else just report
+if [[ ! -f "$STATS_JSON" ]]; then
+  echo "Stats JSON not found → running measurement now."
+  run_once
+else
+  echo "Stats JSON already exists → skipping initial run."
+fi
+
+# Monitor every minute; if someone deletes JSON, re-run
+echo "Entering watch mode (checking every ${SLEEP_SECS}s for JSON deletion)…"
+while true; do
+  if [[ ! -f "$STATS_JSON" ]]; then
+    echo "Stats JSON deleted → re-running measurement."
+    run_once
+  fi
+  sleep "$SLEEP_SECS"
+done
+{% endraw %}

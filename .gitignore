@@ -76,6 +76,11 @@ builder/infrastructure/ansible/builder_inventory.yml
 test_suites/network-sync-tests/playbooks/snapshot_urls.txt
 test_suites/network-sync-tests/playbooks/network_info.json
 
+# Related to load ledger tests
+test_suites/network-sync-tests/load_ledger_results/
+test_suites/network-sync-tests/playbooks/inventory_load_ledger.aws_ec2.yml
+test_suites/network-sync-tests/playbooks/local.inventory
+
 # Related to scripts
 **/*/.builder_ip
 **/.upload_state

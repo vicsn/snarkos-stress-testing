@@ -151,3 +151,167 @@ Verbose trace (debug):
   `Another instance appears to be running (lock: ...)`, stop the other run (or remove the lock **only** if you’re sure nothing else is running).
 - **Atomic, pretty JSON writes**: updates go through a hidden temp (e.g., `.<name>.tmp.xxxxx`) then `mv` into place; leftover temps from prior runs are cleared at startup.
 - **macOS & Ubuntu 22**: macOS uses `date -j` if GNU `date` isn’t present; Ubuntu uses GNU `date`.
+
+# Load-Ledger Test Runner
+
+This script creates clients (depending on the network passed, by default all three networks), downloads configured ledgers and
+runs snarkos with them, benchmariking and checking logs in order to generate load leadger related stats.
+
+1. Provision EC2 infrastructure via Terraform
+2. Generate a dynamic EC2 inventory
+3. Run Ansible setup on each client
+4. Deploy one snapshot per network (canary/testnet/mainnet, these can be specified)
+5. Launch the load_ledger_analyser systemd service
+6. Collect per-network ledger load statistics
+7. Optionally destroy the entire infrastructure
+
+It is fully deterministic and uses pinned Python versions and pinned Python dependencies for reliability.
+
+## Requirements
+
+### Local machine
+- Supports both macOS and Ubuntu
+- Rwquires terraform installed
+- Requires ansible installed
+- AWS CLI has to be installed and configured
+- Python ≥ 3.13 (default, can be changed)
+
+You can override Python:
+
+```
+PYTHON_BIN=/usr/local/bin/python3.10 REQUIRED_PYTHON_MAJOR=3 REQUIRED_PYTHON_MINOR=10
+```
+
+## Python & Dependency Pinning
+
+The script pins:
+
+| Component | Version |
+|----------|---------|
+| Python | REQUIRED_PYTHON_MAJOR.MINOR (default 3.13) |
+| pip | 24.0 |
+| setuptools | 69.5.1 |
+| wheel | 0.43.0 |
+| boto3 | 1.34.71 |
+| botocore | 1.34.71 |
+
+Override:
+
+```
+PIP_VERSION=23.3 BOTO3_VERSION=1.34.30 ./run_load_ledger_test.sh
+```
+
+## Usage
+
+### Provision infrastructure and run full setup
+
+In this example terraform won't ask for approval:
+
+```
+./run_load_ledger_test.sh --apply
+```
+
+### Select specific networks
+
+In this example we run the load ledger only for canary and testnet snapshots.
+This will create only 2 clients through terraform:
+
+```
+./run_load_ledger_test.sh --apply --networks canary,testnet
+```
+
+### Destroy only
+
+Here is how to clean up/destroy the infrastructure:
+
+```
+./run_load_ledger_test.sh --destroy
+```
+
+### Override Python version
+
+If needed on specific machine we can override all python-related versions, example:
+
+```
+PYTHON_BIN=python3.10 ./run_load_ledger_test.sh --apply
+```
+
+## Generated Files
+
+Maybe we'll change some of these file names in the future, but the README will be updated:
+
+```
+client_ip_addresses.txt
+lb_url.txt
+playbooks/snapshot_urls.txt
+load_ledger_results/*.json
+```
+
+## Collecting Results
+
+Use:
+
+```
+./watch_load_ledger_stats.sh
+```
+
+It:
+
+- SSH-es every 5 minutes
+- Fetches /home/ubuntu/load_ledger_stats.json
+- Outputs into load_ledger_results/<ip>.json
+- Exits with:
+  - 0 when all results are collected
+  - 1 after 10 hours without full results
+
+## Troubleshooting
+
+### Python version mismatch
+
+This can happen, as it was created with the current python that was used on the macos this script was written:
+
+```
+ERROR: Python version mismatch. Wanted 3.13, got 3.10.12
+```
+
+Fix:
+
+```
+PYTHON_BIN=python3.10 REQUIRED_PYTHON_MINOR=10 ./run_load_ledger_test.sh
+```
+
+### Missing stats file on remote node
+
+Can happen if, for example the URL of the snapshot was bad:
+
+```
+ssh ubuntu@<ip> -i devnet-key 'systemctl status load-ledger-analyser'
+```
+
+## Example Workflow
+
+To be automated by Talisker soon, but for now can be ran manually like this:
+
+```
+./run_load_ledger_test.sh --apply --networks canary,testnet,mainnet
+./watch_load_ledger_stats.sh
+./run_load_ledger_test.sh --destroy
+```
+
+## Load Ledger snapshot locations
+
+We can find links for the latests snapshots for the given day at:
+
+```
+https://storage.googleapis.com/snarkos-<network>/archive/YYYY-MM-dd_00-00-01.tar
+```
+
+For example with mainnet and 17th of November 20205:
+
+```
+https://storage.googleapis.com/snarkos-mainnet/archive/2025-11-17_00-00-01.tar
+```
+
+We always use the 1st snapshot of the given day. Per day there are 3 snapshots and in theory we can use them too
+like `2025-11-17_08-00-02.tar` and `2025-11-17_16-00-03.tar`, but the first is sufficient and available.
+This choice can be automated with an option in a future update of the `run_load_ledger_test.sh` script.

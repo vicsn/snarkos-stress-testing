@@ -23,3 +23,9 @@ variable "snarkos_network" {
   description = "The snarkos network"
   default     = "NETWORK"
 }
+
+variable "volume_size" {
+  description = "The volume size of the snapshot nodes"
+  default     = 1200
+  type        = number
+}

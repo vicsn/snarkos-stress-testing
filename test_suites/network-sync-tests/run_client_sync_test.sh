@@ -146,7 +146,7 @@ set_devnet_vars() {
 # Function to init and apply Terraform
 init_and_apply_terraform() {
     cd $PARENT_DIR/terraform
-    terraform init -backend-config="bucket=${TFSTATE_BUCKET}"
+    terraform init -migrate-state -backend-config="bucket=${TFSTATE_BUCKET}"
     terraform apply ${TF_APPLY_ARGS}
 
     # Save the load balancer DNS name

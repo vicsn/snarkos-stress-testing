@@ -42,7 +42,7 @@ resource "aws_instance" "snarkos_client" {
 
   ebs_block_device {
     device_name = "/dev/sda1"
-    volume_size = 1200  # Adjust as needed for mainnet
+    volume_size = var.volume_size
     volume_type = "gp3"
   }
 
@@ -62,7 +62,7 @@ data "aws_availability_zones" "available" {
 
 locals {
   sanitized_devnet_name = lower(replace(var.devnet_name, "/[^a-zA-Z0-9-]/", "-"))
-  
+
   # Dynamically create client list based on client_count variable
   snarkos_clients = [
     for i in range(var.client_count) : {
@@ -77,7 +77,7 @@ locals {
 
 resource "aws_instance" "prometheus_server" {
   ami           = module.stress_base_ami.ami_id
-  instance_type = var.client_instance_type
+  instance_type = "t2.medium"
   key_name      = aws_key_pair.generated_key.key_name
   security_groups = [module.sg.security_group_name]
 
