@@ -44,6 +44,8 @@ resource "aws_instance" "snarkos_client" {
     device_name = "/dev/sda1"
     volume_size = var.volume_size
     volume_type = "gp3"
+    iops        = 12000      # Archive extraction on servers is very slow. These chanegs will make it way better.
+    throughput  = 750        # Calculated possible cost ups with 5 runs per Month for ~12-14 hours per run : + ~7$ a Month
   }
 
   tags = {

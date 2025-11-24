@@ -1,6 +1,8 @@
 {% raw %}#!/bin/bash
 set -euo pipefail
 
+ulimit -n 65535 || echo "WARN: failed to raise ulimit -n" >&2
+
 # === Config ===
 TARGET_DOWNLOAD_CMD="download_snapshot.sh"
 TARGET_SNARKOS_CMD="/usr/bin/snarkos"

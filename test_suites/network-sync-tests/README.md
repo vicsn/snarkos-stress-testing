@@ -220,6 +220,18 @@ This will create only 2 clients through terraform:
 ./run_load_ledger_test.sh --apply --networks canary,testnet
 ```
 
+### Use latest snapshots for the day
+
+Passing the `--use-latest-snapshot` flag will use the latest snapshots available for the specified networks.
+
+```
+./run_load_ledger_test.sh --apply --networks testnet,mainnet --use-latest-snapshot
+```
+
+No need to update the `snapshot_url_load_test_<network>.txt` files in this case, the script will peak the latest
+snapshots available for today and use them.
+
+
 ### Destroy only
 
 Here is how to clean up/destroy the infrastructure:
@@ -315,3 +327,5 @@ https://storage.googleapis.com/snarkos-mainnet/archive/2025-11-17_00-00-01.tar
 We always use the 1st snapshot of the given day. Per day there are 3 snapshots and in theory we can use them too
 like `2025-11-17_08-00-02.tar` and `2025-11-17_16-00-03.tar`, but the first is sufficient and available.
 This choice can be automated with an option in a future update of the `run_load_ledger_test.sh` script.
+
+As noted above, passing the `--use-latest-snapshot` flag removes the need of updating these files.

@@ -6,7 +6,15 @@ PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
 bold=$(tput bold)
 normal=$(tput sgr0)
 
+STACK_NAME="client-sync-tests"
+DEVNET_NAME_VALUE="network-sync-tests"
+
+TF_DATA_DIR="${PARENT_DIR}/.terraform-client-sync"
+export TF_DATA_DIR
+
 TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
+TFSTATE_KEY="${TF_STATE_KEY:-${STACK_NAME}/terraform.tfstate}"
+
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
@@ -116,7 +124,8 @@ check_snapshot_freshness() {
 destroy_infrastructure() {
     echo "Destroying infrastructure..."
     cd "$PARENT_DIR/terraform"
-    terraform destroy -auto-approve -parallelism=50
+    terraform destroy -auto-approve -parallelism=50 \
+      -var="devnet_name=${DEVNET_NAME_VALUE}"
 }
 
 # If --destroy is passed, do it immediately and exit.
@@ -145,16 +154,20 @@ set_devnet_vars() {
 
 # Function to init and apply Terraform
 init_and_apply_terraform() {
-    cd $PARENT_DIR/terraform
-    terraform init -migrate-state -backend-config="bucket=${TFSTATE_BUCKET}"
-    terraform apply ${TF_APPLY_ARGS}
+    cd "$PARENT_DIR/terraform"
 
-    # Save the load balancer DNS name
-    terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
-    LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+    terraform init \
+      --reconfigure \
+      -backend-config="bucket=${TFSTATE_BUCKET}" \
+      -backend-config="key=${TFSTATE_KEY}"
+
+    terraform apply ${TF_APPLY_ARGS} \
+      -var="devnet_name=${DEVNET_NAME_VALUE}"
+
+    terraform output -raw snarkos_lb_dns_name > "$PARENT_DIR/lb_url.txt"
+    LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
     set_devnet_vars || exit 1
 
-    # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
     ansible-playbook ips.yml \
       --extra-vars "devnet_name=${DEVNET_NAME}" \

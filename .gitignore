@@ -72,9 +72,13 @@ log_files
 # Ansible related, for the builder
 builder/infrastructure/ansible/builder_inventory.yml
 
-# Related to the client sync test
+# Related to the client sync and load ledger tests
 test_suites/network-sync-tests/playbooks/snapshot_urls.txt
 test_suites/network-sync-tests/playbooks/network_info.json
+test_suites/network-sync-tests/.terraform-client-sync/
+test_suites/network-sync-tests/.terraform-load-ledger/
+test_suites/network-sync-tests/lb_url_load-ledger-tests.txt
+test_suites/network-sync-tests/playbooks/snapshot_urls_load-ledger-tests.txt
 
 # Related to load ledger tests
 test_suites/network-sync-tests/load_ledger_results/

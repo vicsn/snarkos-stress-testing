@@ -6,7 +6,15 @@ PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
 bold=$(tput bold)
 normal=$(tput sgr0)
 
-TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-load-ledger}"
+STACK_NAME="load-ledger-tests"
+LB_FILE="$PARENT_DIR/lb_url_${STACK_NAME}.txt"
+
+TF_DATA_DIR="${PARENT_DIR}/.terraform-load-ledger"
+export TF_DATA_DIR
+
+TFSTATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
+TFSTATE_KEY="${TF_STATE_KEY:-${STACK_NAME}/terraform.tfstate}"
+
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
@@ -22,6 +30,7 @@ VOLUME_SIZE=5000
 # --- CLI options ---
 TF_APPLY_ARGS=""
 DESTROY_ONLY=0
+USE_LATEST_SNAPSHOT=0
 
 # Parse --networks=<list> or --networks <list>, keep canonical order.
 parse_networks() {
@@ -70,6 +79,8 @@ while [[ $# -gt 0 ]]; do
     --networks)
       [[ $# -ge 2 ]] || { echo "--networks requires an argument"; exit 2; }
       parse_networks "$2"; shift 2;;
+    --use-latest-snapshot)
+      USE_LATEST_SNAPSHOT=1; shift;;
     -h|--help)
       echo "Usage: $0 [--apply|-y] [--destroy] [--networks canary[,testnet|mainnet]]"
       exit 0;;
@@ -101,7 +112,7 @@ destroy_infrastructure() {
   cd "$PARENT_DIR/terraform"
   terraform destroy -auto-approve -parallelism=50 \
     -var="volume_size=${VOLUME_SIZE}" \
-    -var="devnet_name=load-ledger-tests"
+    -var="devnet_name=${STACK_NAME}"
 }
 
 if [[ "${DESTROY_ONLY}" -eq 1 ]]; then
@@ -125,21 +136,23 @@ set_devnet_vars() {
 
 init_and_apply_terraform() {
   cd "$PARENT_DIR/terraform"
-  terraform init -backend-config="bucket=${TFSTATE_BUCKET}" --migrate-state
+  terraform init \
+    --reconfigure \
+    -backend-config="bucket=${TFSTATE_BUCKET}" \
+    -backend-config="key=${TFSTATE_KEY}"
 
   echo "Applying Terraform with volume_size=${VOLUME_SIZE}"
   cmd=(terraform apply)
   if [[ -n "${TF_APPLY_ARGS:-}" ]]; then
-    cmd+=("${TF_APPLY_ARGS}")         # e.g., "-auto-approve"
+    cmd+=("${TF_APPLY_ARGS}")        # e.g. "-auto-approve"
   fi
   cmd+=(-var="volume_size=${VOLUME_SIZE}")
-  cmd+=(-var="devnet_name=load-ledger-tests")
+  cmd+=(-var="devnet_name=${STACK_NAME}")
 
-  # Run
   "${cmd[@]}"
 
-  terraform output -raw snarkos_lb_dns_name > "$PARENT_DIR/lb_url.txt"
-  LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
+  terraform output -raw snarkos_lb_dns_name > "$LB_FILE"
+  LB_URL=$(cat "$LB_FILE")
   set_devnet_vars || exit 1
 
   if [ "$(uname)" == "Darwin" ]; then
@@ -170,7 +183,7 @@ fi
 echo "Updated variables.tf with ${NUMCLIENTS} clients for load_ledger test."
 
 init_and_apply_terraform
-LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
+LB_URL=$(cat "$LB_FILE")
 set_devnet_vars || exit 1
 
 # Create a dynamic inventory for this devnet
@@ -315,9 +328,20 @@ for idx in "${!NETWORKS[@]}"; do
   TARGET_HOST="${CLIENTS[$idx]}"
   SNARKOS_NETWORK_INT="$(network_to_int "$NETWORK")" || exit 1
 
-  SNAPSHOT_FILE_SRC="$PARENT_DIR/playbooks/snapshot_url_load_test_${NETWORK}.txt"
-  SNAPSHOT_FILE_DEST="$PARENT_DIR/playbooks/snapshot_urls.txt"
-  cp "$SNAPSHOT_FILE_SRC" "$SNAPSHOT_FILE_DEST"
+  SNAPSHOT_FILE_DEST="$PARENT_DIR/playbooks/snapshot_urls_${STACK_NAME}.txt"
+
+  if [[ "$USE_LATEST_SNAPSHOT" -eq 1 ]]; then
+    # Use today's snapshot for this network
+    TODAY="$(date +%F)"  # YYYY-MM-DD
+    SNAPSHOT_URL="https://storage.googleapis.com/snarkos-${NETWORK}/archive/${TODAY}_00-00-01.tar"
+    echo "Using latest snapshot for ${NETWORK}: ${SNAPSHOT_URL}"
+    printf '%s\n' "$SNAPSHOT_URL" > "$SNAPSHOT_FILE_DEST"
+  else
+    # Legacy behavior: copy from per-network file
+    SNAPSHOT_FILE_SRC="$PARENT_DIR/playbooks/snapshot_url_load_test_${NETWORK}.txt"
+    echo "Using snapshot file ${SNAPSHOT_FILE_SRC} for ${NETWORK}"
+    cp "$SNAPSHOT_FILE_SRC" "$SNAPSHOT_FILE_DEST"
+  fi
 
   echo "Running Ansible setup for ${NETWORK} on host ${TARGET_HOST}"
 
@@ -328,6 +352,7 @@ for idx in "${!NETWORKS[@]}"; do
     --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
     --extra-vars="snarkos_network=${NETWORK}" \
     --extra-vars="load_ledger_testing=true" \
+    --extra-vars="snapshot_urls_path=${SNAPSHOT_FILE_DEST}" \
     --extra-vars="@vars.yml"
 done
 

@@ -189,7 +189,7 @@
   tasks:
     - name: Read snapshot URLs file
       slurp:
-        src: "{{ playbook_dir }}/snapshot_urls.txt"  # Update with your actual path
+        src: "{{ snapshot_urls_path | default(playbook_dir ~ '/snapshot_urls.txt') }}"
       register: snapshot_urls_content
       run_once: true
 
@@ -293,7 +293,7 @@
   post_tasks:
     - name: Execute download and restart script
       shell: /home/ubuntu/download_snapshot.sh > /home/ubuntu/download_snapshot_$(date +%Y%m%d-%H%M%S).log 2>&1
-      async: 18000  # 5 hours timeout
+      async: 43200  # 12 hours timeout
       poll: 0
       register: download_job
 
@@ -308,7 +308,7 @@
   tasks:
     - name: Read snapshot URLs file (independent of earlier slurp)
       slurp:
-        src: "{{ playbook_dir }}/snapshot_urls.txt"
+        src: "{{ snapshot_urls_path | default(playbook_dir ~ '/snapshot_urls.txt') }}"
       register: snapshot_urls_content_final
       run_once: true
 
@@ -428,6 +428,7 @@
               WorkingDirectory=/home/ubuntu
               ExecStart={{ analyser_path }}
               Restart=no
+              LimitNOFILE=65535
 
               [Install]
               WantedBy=multi-user.target

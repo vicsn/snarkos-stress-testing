@@ -30,6 +30,8 @@ EXTRACT_DIR="/tmp/snapshot_extract"
 ALEO_DIR="/home/ubuntu/.aleo"
 STORAGE_DIR="${ALEO_DIR}/storage"
 
+TAR_COMMON_OPTS=(--no-same-owner --no-same-permissions --numeric-owner)
+
 log "Creating necessary directories"
 mkdir -p "$DOWNLOAD_DIR" "$EXTRACT_DIR"
 log "Created: $DOWNLOAD_DIR and $EXTRACT_DIR"
@@ -162,11 +164,11 @@ fname_lc="$(printf '%s' "$DEST_FILE" | tr '[:upper:]' '[:lower:]')"
 
 extract_tar_zst() {
   if tar --help 2>&1 | grep -q -- '--zstd'; then
-    tar --zstd -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+    tar "${TAR_COMMON_OPTS[@]}" --zstd -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
   elif command -v zstd >/dev/null 2>&1; then
-    zstd -dc "$DEST_FILE" | tar -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+    zstd -dc "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
   elif command -v unzstd >/dev/null 2>&1; then
-    unzstd -c "$DEST_FILE" | tar -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+    unzstd -c "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
   else
     log "ERROR: zstd not installed and tar lacks --zstd"; return 1
   fi
@@ -179,15 +181,15 @@ case "$fname_lc" in
     ;;
   *.tar.gz|*.tgz)
     log "Detected gzipped tar (by extension), using: tar -xzf"
-    if tar -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    if tar "${TAR_COMMON_OPTS[@]}" -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
     ;;
   *.tar.xz)
     log "Detected xz tar (by extension), using: tar -xJf"
-    if tar -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    if tar "${TAR_COMMON_OPTS[@]}" -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
     ;;
   *.tar.bz2|*.tbz|*.tbz2)
     log "Detected bzip2 tar (by extension), using: tar -xjf"
-    if tar -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    if tar "${TAR_COMMON_OPTS[@]}" -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
     ;;
   *.tar.zst)
     log "Detected zstd tar (by extension), using: tar --zstd OR zstd -dc | tar -xf -"
@@ -195,7 +197,7 @@ case "$fname_lc" in
     ;;
   *.tar)
     log "Detected plain tar (by extension), using: tar -xf"
-    if tar -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+    if tar "${TAR_COMMON_OPTS[@]}" -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
     ;;
   *)
     # Fallback using `file` description
