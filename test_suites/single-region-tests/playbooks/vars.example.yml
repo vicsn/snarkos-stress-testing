@@ -13,7 +13,7 @@ flamegraph_node_id: "0" # Validator node ID to generate flamegraph for
 # For local build: (leave commented out if using another installation method)
 snarkos_git_commit_local_build: "66a4dfbefd5d2a7aa75a62dbe3e98f09d262ea92"
 snarkos_repo: "git@github.com:ProvableHQ/snarkOS-staging.git" # note the URL format
-envs: "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
+envs: "RUST_BACKTRACE=0,CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
 features: "test_network" # WARNING: if you turn off test_network, tx-cannon may not use the correct consensus versions.
 
 # For GitHub build: (note that it uses the ProvableHQ/snarkOS-staging repository. Comment out if using another installation method)
@@ -22,8 +22,8 @@ features: "test_network" # WARNING: if you turn off test_network, tx-cannon may 
 # For remote build: (leave commented out if using another installation method)
 # snarkos_git_hash: "mainnet-staging" # NOTE: can be a branch name or a commit hash
 # snarkos_repo: "https://github.com/ProvableHQ/snarkOS-staging" # note the URL format
-# envs: "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
-# features: "test_skip_tx_checks" # optional, e.g., "test_targets,test_skip_tx_checks"
+# envs: "RUSTFLAGS=--cfg tokio_unstable,RUST_BACKTRACE=0,CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
+# features: "test_network,tokio_console" # optional
 
 # Other vars
 snarkos_malice_tag: "malice-2349f3eda" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs. Only GitHub build installation method currently supported.

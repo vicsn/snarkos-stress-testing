@@ -10,7 +10,7 @@ variable "devnet_name" {
 
 variable "validator_instance_type" {
   description = "Instance type for snarkOS validators"
-  default     = "m7i.8xlarge"
+  default     = "m7i.16xlarge"
 }
 
 variable "client_instance_type" {
@@ -40,7 +40,7 @@ variable "client_instance_count" {
 
 variable "prover_instance_count" {
   description = "Number of snarkOS provers"
-  default     = 1 # lower or equal to the number of validators
+  default     = 0 # lower or equal to the number of validators
 }
 
 variable "RELEASE_BUCKET" {

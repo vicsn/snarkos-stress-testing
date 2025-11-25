@@ -1,0 +1,274 @@
+// Copyright (c) 2019-2025 Provable Inc.
+// This file is part of the snarkOS library.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+mod data;
+mod visualization;
+
+use anyhow::{Context, Result};
+use clap::{Arg, Command};
+use data::load_timing_data;
+use visualization::{generate_scatter_chart, generate_text_visualization, print_summary};
+
+fn main() -> Result<()> {
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
+
+    let matches = Command::new("timing_analysis")
+        .version("0.1.0")
+        .author("The Aleo Team <hello@aleo.org>")
+        .about("Analyze consensus timing data from snarkOS JSON files")
+        .arg(
+            Arg::new("json-file")
+                .long("json-file")
+                .value_name("FILE")
+                .help("Path to the consensus_timing_block.json file")
+                .required(true),
+        )
+        .arg(
+            Arg::new("output")
+                .long("output")
+                .value_name("FILE")
+                .help("Output file name for the graph")
+                .default_value("consensus_timing_analysis.svg"),
+        )
+        .arg(
+            Arg::new("width")
+                .long("width")
+                .value_name("PIXELS")
+                .help("Base width of the output image in pixels")
+                .default_value("1200"),
+        )
+        .arg(
+            Arg::new("height")
+                .long("height")
+                .value_name("PIXELS")
+                .help("Base height of the output image in pixels (will be scaled based on number of rounds)")
+                .default_value("800"),
+        )
+        .arg(
+            Arg::new("text-only")
+                .long("text-only")
+                .help("Only show text-based visualization (no chart generation)")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("start-round")
+                .long("start-round")
+                .value_name("ROUND")
+                .help("Filter to show only rounds >= this value (optional)")
+                .value_parser(clap::value_parser!(u64)),
+        )
+        .arg(
+            Arg::new("end-round")
+                .long("end-round")
+                .value_name("ROUND")
+                .help("Filter to show only rounds <= this value (optional)")
+                .value_parser(clap::value_parser!(u64)),
+        )
+        .get_matches();
+
+    let json_file = matches.get_one::<String>("json-file").unwrap();
+    let output_file = matches.get_one::<String>("output").unwrap();
+    let width: u32 = matches.get_one::<String>("width").unwrap().parse()
+        .context("Width must be a valid number")?;
+    let height: u32 = matches.get_one::<String>("height").unwrap().parse()
+        .context("Height must be a valid number")?;
+    let text_only = matches.get_flag("text-only");
+    let start_round = matches.get_one::<u64>("start-round").copied();
+    let end_round = matches.get_one::<u64>("end-round").copied();
+
+    // Validate round range
+    if let (Some(start), Some(end)) = (start_round, end_round) {
+        if start > end {
+            return Err(anyhow::anyhow!("Start round ({}) cannot be greater than end round ({})", start, end));
+        }
+    }
+
+    // Check if the JSON file exists
+    if !std::path::Path::new(json_file).exists() {
+        return Err(anyhow::anyhow!("JSON file '{}' not found", json_file));
+    }
+
+    println!("Loading timing data from: {}", json_file);
+
+    // Load and parse the timing data
+    let mut timing_data = load_timing_data(json_file)
+        .context("Failed to load timing data")?;
+
+    // Apply round range filtering if specified
+    if start_round.is_some() || end_round.is_some() {
+        let original_events = timing_data.events.len();
+        let original_subdags = timing_data.subdag_timings.len();
+        
+        timing_data = timing_data.filter_by_round_range(start_round, end_round);
+        
+        println!("Applied round filter: {} - {}", 
+            start_round.map(|r| r.to_string()).unwrap_or_else(|| "∞".to_string()),
+            end_round.map(|r| r.to_string()).unwrap_or_else(|| "∞".to_string())
+        );
+        println!("Filtered from {} to {} events, {} to {} subdags", 
+            original_events, timing_data.events.len(),
+            original_subdags, timing_data.subdag_timings.len()
+        );
+        
+        if timing_data.events.is_empty() && timing_data.subdag_timings.is_empty() {
+            return Err(anyhow::anyhow!("No data remaining after applying round filter"));
+        }
+    }
+
+    // Print summary statistics
+    print_summary(&timing_data);
+
+    // Show scaling information
+    let all_rounds = timing_data.get_all_rounds();
+    let round_count = all_rounds.len();
+    if round_count > 0 {
+        println!("\n=== Visualization Scaling ===");
+        println!("Number of rounds: {}", round_count);
+        let round_span = (*all_rounds.last().unwrap() - *all_rounds.first().unwrap() + 1) as f64;
+        let height_scale = (1.0 + (round_span / 50.0)).min(3.0);
+        let scaled_height = (height as f64 * height_scale) as u32;
+        let dot_size = ((4.0 * (50.0 / (round_span + 25.0))).max(2.0).min(6.0)) as i32;
+        println!("Chart height scaled by {:.2}x to {} pixels", height_scale, scaled_height);
+        println!("Dot size scaled to {} pixels radius", dot_size);
+    }
+
+    // Generate visualization
+    if text_only {
+        generate_text_visualization(&timing_data)
+            .context("Failed to generate text visualization")?;
+    } else {
+        // Try to generate the chart
+        match generate_scatter_chart(&timing_data, output_file, width, height, start_round, end_round) {
+            Ok(()) => {
+                println!("Chart successfully saved to: {}", output_file);
+            }
+            Err(e) => {
+                eprintln!("Failed to generate chart: {}", e);
+                println!("Falling back to text-based visualization:");
+                generate_text_visualization(&timing_data)
+                    .context("Failed to generate text visualization")?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::{JsonSystemTime, JsonRoundEvents, JsonTimingEvent, RawSubdagTiming, RawTimingSnapshot};
+    use std::collections::HashMap;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn create_test_json_file() -> NamedTempFile {
+        let mut file = NamedTempFile::new().unwrap();
+        
+        let test_data = RawTimingSnapshot {
+            timestamp: JsonSystemTime {
+                secs_since_epoch: 1640995200,
+                nanos_since_epoch: 0,
+            },
+            round_events: {
+                let mut map = HashMap::new();
+                map.insert("100".to_string(), JsonRoundEvents {
+                    round: 100,
+                    proposal_seen: vec![JsonTimingEvent {
+                        round: 100,
+                        timestamp: JsonSystemTime { secs_since_epoch: 1640995200, nanos_since_epoch: 0 },
+                        event_type: "proposal_seen".to_string(),
+                    }],
+                    proposal_created: vec![JsonTimingEvent {
+                        round: 100,
+                        timestamp: JsonSystemTime { secs_since_epoch: 1640995201, nanos_since_epoch: 500_000_000 },
+                        event_type: "proposal_created".to_string(),
+                    }],
+                    certificate_added: vec![JsonTimingEvent {
+                        round: 100,
+                        timestamp: JsonSystemTime { secs_since_epoch: 1640995202, nanos_since_epoch: 200_000_000 },
+                        event_type: "certificate_added".to_string(),
+                    }],
+                });
+                map
+            },
+            subdag_timings: {
+                let mut map = HashMap::new();
+                map.insert("100-102".to_string(), RawSubdagTiming {
+                    lowest_round: 100,
+                    highest_round: 102,
+                    subdag_processing: Some(vec![
+                        JsonSystemTime { secs_since_epoch: 1640995207, nanos_since_epoch: 500_000_000 },
+                        JsonSystemTime { secs_since_epoch: 1640995208, nanos_since_epoch: 200_000_000 }
+                    ]),
+                    prepare_advance_to_next_quorum_block: Some(vec![
+                        JsonSystemTime { secs_since_epoch: 1640995208, nanos_since_epoch: 200_000_000 },
+                        JsonSystemTime { secs_since_epoch: 1640995208, nanos_since_epoch: 600_000_000 }
+                    ]),
+                    check_next_block: Some(vec![
+                        JsonSystemTime { secs_since_epoch: 1640995208, nanos_since_epoch: 600_000_000 },
+                        JsonSystemTime { secs_since_epoch: 1640995208, nanos_since_epoch: 800_000_000 }
+                    ]),
+                    advance_to_next_block: Some(vec![
+                        JsonSystemTime { secs_since_epoch: 1640995208, nanos_since_epoch: 800_000_000 },
+                        JsonSystemTime { secs_since_epoch: 1640995209, nanos_since_epoch: 500_000_000 }
+                    ]),
+                });
+                map
+            },
+        };
+
+        let json_str = serde_json::to_string_pretty(&test_data).unwrap();
+        file.write_all(json_str.as_bytes()).unwrap();
+        file.flush().unwrap();
+        
+        file
+    }
+
+    #[test]
+    fn test_load_timing_data_integration() {
+        let test_file = create_test_json_file();
+        let file_path = test_file.path().to_str().unwrap();
+        
+        let result = load_timing_data(file_path);
+        assert!(result.is_ok());
+        
+        let data = result.unwrap();
+        assert_eq!(data.events.len(), 3);
+        assert_eq!(data.subdag_timings.len(), 1);
+        
+        // Verify event data
+        let proposal_created_events = data.get_events_by_type("proposal_created");
+        assert_eq!(proposal_created_events.len(), 1);
+        assert_eq!(proposal_created_events[0].round, 100);
+        
+        let proposal_seen_events = data.get_events_by_type("proposal_seen");
+        assert_eq!(proposal_seen_events.len(), 1);
+        
+        // Verify subdag timing data
+        let subdag_100_102 = data.subdag_timings.get(&(100, 102)).unwrap();
+        assert!(subdag_100_102.contains_key("subdag_processing"));
+        assert!(subdag_100_102.contains_key("prepare_advance_to_next_quorum_block"));
+        assert!(subdag_100_102.contains_key("check_next_block"));
+        assert!(subdag_100_102.contains_key("advance_to_next_block"));
+    }
+
+    #[test]
+    fn test_nonexistent_file() {
+        let result = load_timing_data("nonexistent_file.json");
+        assert!(result.is_err());
+    }
+}

@@ -1,13 +1,10 @@
-- name: Determine if snarkOS reinstall is needed
-  import_playbook: ../../playbooks/maybe_reinstall_snarkos.yml
-
 - name: Set bootstrap clients related facts
   hosts: localhost
   any_errors_fatal: true
   roles:
     - choose_bootstrap_client
 
-- name: Reset validators
+- name: Stop validators
   hosts: snarkos_validator
   remote_user: ubuntu
   become: true
@@ -26,10 +23,6 @@
         name: snarkos-malice
         state: stopped
       ignore_errors: true # in case we never deployed malice
-
-    - name: Remove existing ledger and batch proposal directories on validators
-      ansible.builtin.shell:
-        cmd: "rm -rf /home/ubuntu/.ledger-* && rm -rf /home/ubuntu/.current-proposal-cache* && rm /tmp/snarkos.log && rm /home/ubuntu/consensus_timing_block_*.json"
   roles:
     - snarkos_service
   tags: snarkos
@@ -47,10 +40,6 @@
       systemd:
         name: snarkos
         state: stopped
-
-    - name: Remove existing .ledger-* directories on clients
-      ansible.builtin.shell:
-        cmd: "rm -rf /home/ubuntu/.ledger-*"
   roles:
     - snarkos_service
   tags: snarkos_client

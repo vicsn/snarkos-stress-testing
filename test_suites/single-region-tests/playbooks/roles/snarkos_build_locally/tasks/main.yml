@@ -6,7 +6,7 @@
 
     - name: Parse envs into a dictionary using dict filter
       set_fact:
-        envs_dict: "{{ dict(envs | default('') | split(' ') | map('split', '=', 1)) }}"
+        envs_dict: "{{ dict(envs | default('') | split(',') | map('split', '=', 1)) }}"
       when: envs is defined and envs | length > 0
 
     - name: Debug envs_dict

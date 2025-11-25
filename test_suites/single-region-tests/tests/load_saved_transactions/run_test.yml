@@ -1,30 +1,65 @@
-- name: Split pregenerated transactions and submit them in parallel
+- name: Split pregenerated transactions and submit them in parallel (Rust)
   hosts: localhost
   gather_facts: yes
+  vars:
+    tx_submitter_dir: "{{ playbook_dir }}/tx_submitter"
+    tx_submitter_bin: "{{ tx_submitter_dir }}/target/release/tx_submitter"
   tasks:
-    - name: Create Python virtual environment
+    - name: Ensure Rust toolchain (rustup) is installed
+      shell: |
+        set -o pipefail
+        set -e
+        if ! command -v rustup >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+        fi
       args:
-        chdir: "{{ playbook_dir }}"
-        creates: "{{ playbook_dir }}/.venv/bin/activate"
-      command: python3 -m venv .venv
+        executable: /bin/bash
+      changed_when: false
 
-    - name: Install script dependencies into virtualenv
-      command: "{{ playbook_dir }}/.venv/bin/pip install -r requirements.txt"
-      environment:
-        PIP_BREAK_SYSTEM_PACKAGES: "1"
+    - name: Ensure cargo in PATH for this run
+      shell: |
+        set -o pipefail
+        set -e
+        source $HOME/.cargo/env
+        echo $PATH >/dev/null
+      args:
+        executable: /bin/bash
+      changed_when: false
 
-    - name: Run the python program using virtualenv
-      command:
-        argv:
-          - "{{ playbook_dir }}/.venv/bin/python"
-          - split_transactions_and_submit_parallel.py
-          - "{{ snarkos_network }}"
-          - "provable-pregenerated-transactions"
-          - "{{ pregeneration_bucket_path }}"
-          - "{{ pregeneration_execution_tx_count }}"
-          - "{{ pregeneration_deployment_tx_count }}"
-          - "{{ txs_target_consensus_version }}"
-          - "{{ txs_target_consensus_version_height }}"
+    - name: Build tx_submitter (release) if needed
+      shell: |
+        set -o pipefail
+        set -e
+        source $HOME/.cargo/env
+        cd "{{ tx_submitter_dir }}"
+        if [ ! -x "{{ tx_submitter_bin }}" ]; then
+          cargo build --release
+        else
+          # Rebuild if sources are newer than binary
+          if find src -type f -newer "{{ tx_submitter_bin }}" | grep -q .; then
+            cargo build --release
+          fi
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Run the Rust program
+      shell: |
+        set -o pipefail
+        set -e
+        source $HOME/.cargo/env
+        "{{ tx_submitter_bin }}" \
+          "{{ snarkos_network }}" \
+          "provable-pregenerated-transactions" \
+          "{{ pregeneration_bucket_path }}" \
+          "{{ pregeneration_execution_tx_count }}" \
+          "{{ pregeneration_deployment_tx_count }}" \
+          "{{ txs_target_consensus_version }}" \
+          "{{ txs_target_consensus_version_height }}"
+      args:
+        executable: /bin/bash
+        chdir: "{{ tx_submitter_dir }}"
       register: out
 
     - name: Print the output

@@ -27,6 +27,8 @@
 /test_suites/single-region-tests/auto_run_test_suite.sh
 /test_suites/single-region-tests/transaction_files/
 /test_suites/single-region-tests/tests/load_saved_transactions/transactions_to_send/
+/test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/target
+/test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/*.log
 
 # General
 .DS_Store

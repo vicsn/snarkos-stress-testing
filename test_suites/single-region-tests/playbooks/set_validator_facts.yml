@@ -51,11 +51,7 @@
 
 - name: Prepare client host list
   set_fact:
-    all_client_hosts: >-
-      {{
-        ('snarkos_client' in groups)
-          | ternary(groups['snarkos_client'] | list, [])
-      }}
+    all_client_hosts: "{{ (groups.get('snarkos_client') or []) | list }}"
 
 - name: Compute clients_per_validator
   set_fact:

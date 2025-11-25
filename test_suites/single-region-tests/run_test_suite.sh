@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ulimit -n 2048
+ulimit -n 4096
 
 PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
 SCRIPT_DIR=$(pwd)
