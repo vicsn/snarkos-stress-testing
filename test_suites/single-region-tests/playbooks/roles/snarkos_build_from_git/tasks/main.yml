@@ -139,7 +139,7 @@
 
     - name: Source cargo env and install snarkOS with git CLI
       become_user: ubuntu
-      ansible.builtin.shell: source /home/ubuntu/.cargo/env && cargo install --locked --path . {{ featureflags }}
+      ansible.builtin.shell: source /home/ubuntu/.cargo/env && cargo install --force --locked --path . {{ featureflags }}
       args:
         executable: /bin/bash
         chdir: /home/ubuntu/snarkOS

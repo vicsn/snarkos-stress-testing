@@ -308,6 +308,17 @@
   tags: snarkos
 
 # ------------------------------------------------
+# Save the git hash of snarkos that was installed
+
+- name: Persist deployed snarkOS hash for future runs
+  hosts: localhost
+  tasks:
+    - name: Write current snarkOS hash to file
+      copy:
+        dest: "{{ playbook_dir }}/.last_snarkos_hash"
+        content: "{{ snarkos_git_commit_local_build | default(snarkos_git_hash, true) | default('') }}\n"
+
+# ------------------------------------------------
 # TX Runner
 
 - name: Set up the TX Runner
