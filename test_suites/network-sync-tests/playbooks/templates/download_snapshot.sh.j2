@@ -1,5 +1,5 @@
 {% raw %}#!/bin/bash
-# Download a snapshot (HTTP/S or s3://), extract (.tar, .tar.gz, .zip),
+# Download a snapshot (HTTP/S, s3://, or gs://), extract (.tar, .tar.gz, .zip),
 # and install it for snarkOS, flattening at the folder that contains 'CURRENT'.
 
 set -euo pipefail
@@ -32,6 +32,14 @@ STORAGE_DIR="${ALEO_DIR}/storage"
 
 TAR_COMMON_OPTS=(--no-same-owner --no-same-permissions --numeric-owner)
 
+# How we populated EXTRACT_DIR:
+#   archive   -> we downloaded a single archive and extracted it into EXTRACT_DIR
+#   directory -> we synced a tree (e.g., gs://...) directly into EXTRACT_DIR
+DOWNLOAD_MODE="archive"
+
+# Make gsutil visible (installed via /usr/local/google-cloud-sdk)
+export PATH=/usr/local/google-cloud-sdk/bin:$PATH
+
 log "Creating necessary directories"
 mkdir -p "$DOWNLOAD_DIR" "$EXTRACT_DIR"
 log "Created: $DOWNLOAD_DIR and $EXTRACT_DIR"
@@ -60,183 +68,273 @@ fi
 # --- Download ---
 log "Snapshot URL: $SNAPSHOT_URL"
 
-FILENAME=$(basename "$SNAPSHOT_URL" | sed 's/[[:space:]]*$//')
-DEST_FILE="$DOWNLOAD_DIR/$FILENAME"
-log "Target filename: '$FILENAME'"
+if [[ "$SNAPSHOT_URL" == gs://* ]]; then
+  # ---------------------------------------------------
+  # GCS: sync directory tree directly into EXTRACT_DIR
+  # ---------------------------------------------------
+  DOWNLOAD_MODE="directory"
+  log "Detected GCS source; using gsutil rsync directly into $EXTRACT_DIR"
 
-if [[ "$SNAPSHOT_URL" == s3://* ]]; then
-  log "Detected S3 source; using aws s3 cp"
-  if aws s3 cp "$SNAPSHOT_URL" "$DEST_FILE" 2>&1 | tee -a "$LOG_FILE"; then
-    log "S3 download complete: $DEST_FILE"
-  else
-    log "ERROR: aws s3 cp failed for $SNAPSHOT_URL"
+  if ! command -v gsutil >/dev/null 2>&1; then
+    log "ERROR: gsutil not found in PATH. Install Google Cloud SDK / gsutil first."
     exit 1
   fi
-else
-  # -------- Robust HTTP(S) downloader with rotation detection + infinite retry --------
-  # We fingerprint the remote (ETag/Last-Modified/Content-Length). If it changes, we purge
-  # any local partial and start clean. We also watch for aria2 "Invalid range header" or
-  # "content length mismatch" and purge/retry forever.
-  FPRINT="$DOWNLOAD_DIR/${FILENAME}.fprint"
 
-  fingerprint() {
-    curl -sI --connect-timeout 20 --max-time 60 \
-         -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
-         "$SNAPSHOT_URL" \
-    | awk 'BEGIN{IGNORECASE=1}
-           /^ETag:/           { gsub("\r",""); print "ETag:"$2 }
-           /^Last-Modified:/  { sub("\r","");  print "LM:" substr($0,16) }
-           /^Content-Length:/ { sub("\r","");  print "CL:" $2 }'
-  }
+  log "Cleaning extraction directory for GCS sync"
+  rm -rf "$EXTRACT_DIR"
+  mkdir -p "$EXTRACT_DIR"
 
-  mkdir -p "$DOWNLOAD_DIR"
+  # Exclude node-local / ephemeral files that may change mid-sync and are
+  # not needed for a ledger snapshot.
+  #
+  #  - LOG.old.*            : old RocksDB logs
+  #  - jwt_secret_aleo...   : node JWT secrets
+  #  - cached_router_peers  : peer cache
+  #
+  # gsutil -x uses a Python regex.
+  EXCLUDE_RE='LOG\.old\..*|jwt_secret_aleo.*|cached_router_peers'
 
-  remote_fp="$(fingerprint)"
-  local_fp="$(cat "$FPRINT" 2>/dev/null || echo "")"
-  if [ "$remote_fp" != "$local_fp" ]; then
-    log "Remote snapshot fingerprint changed. Purging local file/partials."
-    rm -f "$DEST_FILE" "$DEST_FILE.aria2"
-    printf "%s\n" "$remote_fp" > "$FPRINT"
-  fi
+  max_attempts=5
+  attempt=1
+  success=0
+  while (( attempt <= max_attempts )); do
+    log "gsutil rsync attempt ${attempt}/${max_attempts}..."
+    ATTEMPT_LOG="$DOWNLOAD_DIR/gsutil_rsync_$(date +%s)_${attempt}.log"
 
-  while true; do
-    log "Downloading with aria2c…"
-    # Use tee into a small, per-attempt log to detect specific failures reliably.
-    ATTEMPT_LOG="$DOWNLOAD_DIR/aria2_$(date +%s).log"
-    if aria2c \
-        -x16 -s16 \
-        --dir="$DOWNLOAD_DIR" \
-        --out="$FILENAME" \
-        --continue=true \
-        --always-resume=false \
-        --allow-overwrite=true \
-        --auto-file-renaming=false \
-        --max-tries=0 \
-        --retry-wait=10 \
-        --max-file-not-found=0 \
-        --file-allocation=falloc \
-        --timeout=120 \
-        --connect-timeout=20 \
-        --console-log-level=warn \
-        --summary-interval=10 \
-        --enable-http-keep-alive=true \
-        --enable-http-pipelining=true \
-        --socket-recv-buffer-size=4M \
-        --max-connection-per-server=16 \
-        --header="Cache-Control: no-cache" \
-        --header="Pragma: no-cache" \
-        "$SNAPSHOT_URL" 2>&1 | tee -a "$ATTEMPT_LOG" -a "$LOG_FILE"; then
-      log "HTTP download complete: $DEST_FILE"
+    # -m: parallel; -r: recursive; -c: checksum-safe; -x: exclude regex
+    if gsutil -m rsync -r -c -x "$EXCLUDE_RE" \
+         "$SNAPSHOT_URL" "$EXTRACT_DIR" \
+         2>&1 | tee -a "$ATTEMPT_LOG" -a "$LOG_FILE"; then
+      log "GCS rsync completed successfully into $EXTRACT_DIR"
       rm -f "$ATTEMPT_LOG"
+      success=1
       break
     fi
 
-    # If we hit a range mismatch (snapshot rotated under us), purge and retry.
-    if grep -qiE 'Invalid range header|content length mismatch' "$ATTEMPT_LOG"; then
-      log "Detected range/content mismatch. Purging local file/partials and retrying…"
-      rm -f "$DEST_FILE" "$DEST_FILE.aria2"
-      # Refresh fingerprint (CDN may have just rotated again)
-      new_fp="$(fingerprint)"
-      if [ "$new_fp" != "$remote_fp" ]; then
-        printf "%s\n" "$new_fp" > "$FPRINT"
-        remote_fp="$new_fp"
-      fi
-      rm -f "$ATTEMPT_LOG"
-      sleep 5
-      continue
+    log "gsutil rsync failed on attempt ${attempt}. Relevant error lines:"
+    grep -iE 'Exception|Error|denied|not found|ServiceException' "$ATTEMPT_LOG" \
+      | tail -n 40 | tee -a "$LOG_FILE" || true
+
+    rm -f "$ATTEMPT_LOG"
+    attempt=$((attempt + 1))
+    if (( attempt <= max_attempts )); then
+      log "Retrying gsutil rsync in 10s..."
+      sleep 10
+    fi
+  done
+
+  if (( success == 0 )); then
+    log "ERROR: gsutil rsync failed for $SNAPSHOT_URL after ${max_attempts} attempts."
+    exit 1
+  fi
+
+else
+  # ---------------------------------------------------
+  # S3 or HTTP(S): download a single archive to DEST_FILE
+  # ---------------------------------------------------
+  FILENAME=$(basename "$SNAPSHOT_URL" | sed 's/[[:space:]]*$//')
+  DEST_FILE="$DOWNLOAD_DIR/$FILENAME"
+  log "Target filename: '$FILENAME'"
+
+  if [[ "$SNAPSHOT_URL" == s3://* ]]; then
+    log "Detected S3 source; using aws s3 cp"
+
+    if ! command -v aws >/dev/null 2>&1; then
+      log "ERROR: aws CLI not found in PATH."
+      exit 1
     fi
 
-    log "aria2c failed; retrying in 15s…"
-    rm -f "$ATTEMPT_LOG"
-    sleep 15
-  done
-  # -------- end robust HTTP(S) downloader --------
+    if aws s3 cp "$SNAPSHOT_URL" "$DEST_FILE" 2>&1 | tee -a "$LOG_FILE"; then
+      log "S3 download complete: $DEST_FILE"
+    else
+      log "ERROR: aws s3 cp failed for $SNAPSHOT_URL"
+      exit 1
+    fi
+  else
+    # -------- Robust HTTP(S) downloader with rotation detection + infinite retry --------
+    if ! command -v aria2c >/dev/null 2>&1; then
+      log "ERROR: aria2c not found in PATH."
+      exit 1
+    fi
+
+    # We fingerprint the remote (ETag/Last-Modified/Content-Length). If it changes, we purge
+    # any local partial and start clean. We also watch for aria2 "Invalid range header" or
+    # "content length mismatch" and purge/retry forever.
+    FPRINT="$DOWNLOAD_DIR/${FILENAME}.fprint"
+
+    fingerprint() {
+      curl -sI --connect-timeout 20 --max-time 60 \
+           -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+           "$SNAPSHOT_URL" \
+      | awk 'BEGIN{IGNORECASE=1}
+             /^ETag:/           { gsub("\r",""); print "ETag:"$2 }
+             /^Last-Modified:/  { sub("\r","");  print "LM:" substr($0,16) }
+             /^Content-Length:/ { sub("\r","");  print "CL:" $2 }'
+    }
+
+    mkdir -p "$DOWNLOAD_DIR"
+
+    remote_fp="$(fingerprint)"
+    local_fp="$(cat "$FPRINT" 2>/dev/null || echo "")"
+    if [ "$remote_fp" != "$local_fp" ]; then
+      log "Remote snapshot fingerprint changed. Purging local file/partials."
+      rm -f "$DEST_FILE" "$DEST_FILE.aria2"
+      printf "%s\n" "$remote_fp" > "$FPRINT"
+    fi
+
+    while true; do
+      log "Downloading with aria2c…"
+      # Use tee into a small, per-attempt log to detect specific failures reliably.
+      ATTEMPT_LOG="$DOWNLOAD_DIR/aria2_$(date +%s).log"
+      if aria2c \
+          -x16 -s16 \
+          --dir="$DOWNLOAD_DIR" \
+          --out="$FILENAME" \
+          --continue=true \
+          --always-resume=false \
+          --allow-overwrite=true \
+          --auto-file-renaming=false \
+          --max-tries=0 \
+          --retry-wait=10 \
+          --max-file-not-found=0 \
+          --file-allocation=falloc \
+          --timeout=120 \
+          --connect-timeout=20 \
+          --console-log-level=warn \
+          --summary-interval=10 \
+          --enable-http-keep-alive=true \
+          --enable-http-pipelining=true \
+          --socket-recv-buffer-size=4M \
+          --max-connection-per-server=16 \
+          --header="Cache-Control: no-cache" \
+          --header="Pragma: no-cache" \
+          "$SNAPSHOT_URL" 2>&1 | tee -a "$ATTEMPT_LOG" -a "$LOG_FILE"; then
+        log "HTTP download complete: $DEST_FILE"
+        rm -f "$ATTEMPT_LOG"
+        break
+      fi
+
+      # If we hit a range mismatch (snapshot rotated under us), purge and retry.
+      if grep -qiE 'Invalid range header|content length mismatch' "$ATTEMPT_LOG"; then
+        log "Detected range/content mismatch. Purging local file/partials and retrying…"
+        rm -f "$DEST_FILE" "$DEST_FILE.aria2"
+        # Refresh fingerprint (CDN may have just rotated again)
+        new_fp="$(fingerprint)"
+        if [ "$new_fp" != "$remote_fp" ]; then
+          printf "%s\n" "$new_fp" > "$FPRINT"
+          remote_fp="$new_fp"
+        fi
+        rm -f "$ATTEMPT_LOG"
+        sleep 5
+        continue
+      fi
+
+      log "aria2c failed; retrying in 15s…"
+      rm -f "$ATTEMPT_LOG"
+      sleep 15
+    done
+    # -------- end robust HTTP(S) downloader --------
+  fi
+
+  log "File size: $(du -h "$DEST_FILE" | cut -f1)"
+  FILE_DESC=$(file -b "$DEST_FILE")
+  log "File type: $FILE_DESC"
 fi
 
-log "File size: $(du -h "$DEST_FILE" | cut -f1)"
-FILE_DESC=$(file -b "$DEST_FILE")
-log "File type: $FILE_DESC"
-
-# --- Extract ---
-log "Cleaning extraction directory"
-rm -rf "$EXTRACT_DIR"/*
-log "Extracting snapshot archive..."
-
+# --- Extract / Prepare EXTRACT_DIR ---
 extract_ok=false
 
-# Lowercased filename (portable, works on macOS too)
-fname_lc="$(printf '%s' "$DEST_FILE" | tr '[:upper:]' '[:lower:]')"
-
-extract_tar_zst() {
-  if tar --help 2>&1 | grep -q -- '--zstd'; then
-    tar "${TAR_COMMON_OPTS[@]}" --zstd -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
-  elif command -v zstd >/dev/null 2>&1; then
-    zstd -dc "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
-  elif command -v unzstd >/dev/null 2>&1; then
-    unzstd -c "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+if [[ "$DOWNLOAD_MODE" == "directory" ]]; then
+  # GCS mode: EXTRACT_DIR is already populated by gsutil rsync
+  log "DOWNLOAD_MODE=directory → skipping archive extraction, using synced tree in $EXTRACT_DIR"
+  if [[ -d "$EXTRACT_DIR" ]]; then
+    extract_ok=true
+    log "Contents of $EXTRACT_DIR (top level):"
+    ls -la "$EXTRACT_DIR" | tee -a "$LOG_FILE"
   else
-    log "ERROR: zstd not installed and tar lacks --zstd"; return 1
+    log "ERROR: Expected directory at $EXTRACT_DIR after gsutil rsync, but it does not exist."
+    exit 1
   fi
-}
+else
+  # Archive mode: we downloaded a single archive file to DEST_FILE and now extract it.
+  log "Cleaning extraction directory"
+  rm -rf "$EXTRACT_DIR"/*
+  log "Extracting snapshot archive..."
 
-case "$fname_lc" in
-  *.zip)
-    log "Detected ZIP archive (by extension), using: unzip"
-    if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    ;;
-  *.tar.gz|*.tgz)
-    log "Detected gzipped tar (by extension), using: tar -xzf"
-    if tar "${TAR_COMMON_OPTS[@]}" -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    ;;
-  *.tar.xz)
-    log "Detected xz tar (by extension), using: tar -xJf"
-    if tar "${TAR_COMMON_OPTS[@]}" -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    ;;
-  *.tar.bz2|*.tbz|*.tbz2)
-    log "Detected bzip2 tar (by extension), using: tar -xjf"
-    if tar "${TAR_COMMON_OPTS[@]}" -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    ;;
-  *.tar.zst)
-    log "Detected zstd tar (by extension), using: tar --zstd OR zstd -dc | tar -xf -"
-    if extract_tar_zst; then extract_ok=true; fi
-    ;;
-  *.tar)
-    log "Detected plain tar (by extension), using: tar -xf"
-    if tar "${TAR_COMMON_OPTS[@]}" -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    ;;
-  *)
-    # Fallback using `file` description
-    FILE_DESC="$(file -b "$DEST_FILE")"
-    if echo "$FILE_DESC" | grep -qi 'zip archive'; then
-      log "Detected ZIP archive (by file), using: unzip"
-      if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    elif echo "$FILE_DESC" | grep -qi 'gzip compressed data'; then
-      log "Detected gzipped tar (by file), using: tar -xzf"
-      if tar -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    elif echo "$FILE_DESC" | grep -qi 'xz compressed data'; then
-      log "Detected xz tar (by file), using: tar -xJf"
-      if tar -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    elif echo "$FILE_DESC" | grep -qi 'bzip2 compressed data'; then
-      log "Detected bzip2 tar (by file), using: tar -xjf"
-      if tar -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-    elif echo "$FILE_DESC" | grep -qi 'zstandard compressed data'; then
-      log "Detected zstd-compressed tar (by file), attempting zstd extraction"
-      if extract_tar_zst; then extract_ok=true; fi
-    elif echo "$FILE_DESC" | grep -qi 'tar archive'; then
-      log "Detected tar archive (by file), using: tar -xf"
-      if tar -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+  # Lowercased filename (portable, works on macOS too)
+  fname_lc="$(printf '%s' "$DEST_FILE" | tr '[:upper:]' '[:lower:]')"
+
+  extract_tar_zst() {
+    if tar --help 2>&1 | grep -q -- '--zstd'; then
+      tar "${TAR_COMMON_OPTS[@]}" --zstd -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+    elif command -v zstd >/dev/null 2>&1; then
+      zstd -dc "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
+    elif command -v unzstd >/dev/null 2>&1; then
+      unzstd -c "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
     else
-      log "ERROR: Unsupported archive type: $FILE_DESC"
+      log "ERROR: zstd not installed and tar lacks --zstd"; return 1
     fi
-    ;;
-esac
+  }
+
+  case "$fname_lc" in
+    *.zip)
+      log "Detected ZIP archive (by extension), using: unzip"
+      if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      ;;
+    *.tar.gz|*.tgz)
+      log "Detected gzipped tar (by extension), using: tar -xzf"
+      if tar "${TAR_COMMON_OPTS[@]}" -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      ;;
+    *.tar.xz)
+      log "Detected xz tar (by extension), using: tar -xJf"
+      if tar "${TAR_COMMON_OPTS[@]}" -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      ;;
+    *.tar.bz2|*.tbz|*.tbz2)
+      log "Detected bzip2 tar (by extension), using: tar -xjf"
+      if tar "${TAR_COMMON_OPTS[@]}" -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      ;;
+    *.tar.zst)
+      log "Detected zstd tar (by extension), using: tar --zstd OR zstd -dc | tar -xf -"
+      if extract_tar_zst; then extract_ok=true; fi
+      ;;
+    *.tar)
+      log "Detected plain tar (by extension), using: tar -xf"
+      if tar "${TAR_COMMON_OPTS[@]}" -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      ;;
+    *)
+      # Fallback using `file` description
+      FILE_DESC="$(file -b "$DEST_FILE")"
+      if echo "$FILE_DESC" | grep -qi 'zip archive'; then
+        log "Detected ZIP archive (by file), using: unzip"
+        if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      elif echo "$FILE_DESC" | grep -qi 'gzip compressed data'; then
+        log "Detected gzipped tar (by file), using: tar -xzf"
+        if tar -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      elif echo "$FILE_DESC" | grep -qi 'xz compressed data'; then
+        log "Detected xz tar (by file), using: tar -xJf"
+        if tar -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      elif echo "$FILE_DESC" | grep -qi 'bzip2 compressed data'; then
+        log "Detected bzip2 tar (by file), using: tar -xjf"
+        if tar -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      elif echo "$FILE_DESC" | grep -qi 'zstandard compressed data'; then
+        log "Detected zstd-compressed tar (by file), attempting zstd extraction"
+        if extract_tar_zst; then extract_ok=true; fi
+      elif echo "$FILE_DESC" | grep -qi 'tar archive'; then
+        log "Detected tar archive (by file), using: tar -xf"
+        if tar -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
+      else
+        log "ERROR: Unsupported archive type: $FILE_DESC"
+      fi
+      ;;
+  esac
+fi
 
 if ! $extract_ok; then
-  log "ERROR: Extraction failed."
+  log "ERROR: Extraction (or directory sync) failed."
   exit 1
 fi
 
-log "Successfully extracted snapshot"
+log "Successfully prepared snapshot contents in $EXTRACT_DIR"
 log "Extracted files (top level):"
 ls -la "$EXTRACT_DIR" | tee -a "$LOG_FILE"
 

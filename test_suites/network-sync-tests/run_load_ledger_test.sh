@@ -82,7 +82,7 @@ while [[ $# -gt 0 ]]; do
     --use-latest-snapshot)
       USE_LATEST_SNAPSHOT=1; shift;;
     -h|--help)
-      echo "Usage: $0 [--apply|-y] [--destroy] [--networks canary[,testnet|mainnet]]"
+      echo "Usage: $0 [--apply|-y] [--destroy] [--networks canary[,testnet|mainnet]] [--use-latest-snapshot]"
       exit 0;;
     *)
       echo "Unknown option: $1"
@@ -331,10 +331,9 @@ for idx in "${!NETWORKS[@]}"; do
   SNAPSHOT_FILE_DEST="$PARENT_DIR/playbooks/snapshot_urls_${STACK_NAME}.txt"
 
   if [[ "$USE_LATEST_SNAPSHOT" -eq 1 ]]; then
-    # Use today's snapshot for this network
-    TODAY="$(date +%F)"  # YYYY-MM-DD
-    SNAPSHOT_URL="https://storage.googleapis.com/snarkos-${NETWORK}/archive/${TODAY}_00-00-01.tar"
-    echo "Using latest snapshot for ${NETWORK}: ${SNAPSHOT_URL}"
+    # Use latest uncompressed snapshot directory in GCS
+    SNAPSHOT_URL="gs://snarkos-${NETWORK}/uncompressed"
+    echo "Using latest uncompressed snapshot for ${NETWORK}: ${SNAPSHOT_URL}"
     printf '%s\n' "$SNAPSHOT_URL" > "$SNAPSHOT_FILE_DEST"
   else
     # Legacy behavior: copy from per-network file

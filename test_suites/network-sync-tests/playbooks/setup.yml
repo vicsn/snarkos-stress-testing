@@ -61,6 +61,10 @@
   become: true
   remote_user: ubuntu
   any_errors_fatal: true
+  vars:
+    gcloud_version: "486.0.0"
+    gcloud_tgz_url: "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-{{ gcloud_version }}-linux-x86_64.tar.gz"
+    gcloud_sdk_dir: /usr/local/google-cloud-sdk
   tasks:
     - name: Update apt cache (retry on transient lock/network issues)
       ansible.builtin.apt:
@@ -96,6 +100,41 @@
     - name: Print aria2 version
       debug:
         msg: "aria2 successfully installed: {{ aria2_version.stdout_lines | first }}"
+
+    - name: Download Google Cloud SDK archive
+      ansible.builtin.get_url:
+        url: "{{ gcloud_tgz_url }}"
+        dest: /tmp/gcloud.tar.gz
+        mode: '0644'
+
+    - name: Extract Google Cloud SDK
+      ansible.builtin.unarchive:
+        src: /tmp/gcloud.tar.gz
+        dest: /usr/local
+        remote_src: yes
+        creates: "{{ gcloud_sdk_dir }}"
+
+    - name: Install components (gsutil included by default)
+      ansible.builtin.command:
+        cmd: "{{ gcloud_sdk_dir }}/install.sh --quiet"
+      args:
+        creates: "{{ gcloud_sdk_dir }}/bin/gcloud"
+
+    - name: Add PATH for all users
+      ansible.builtin.copy:
+        dest: /etc/profile.d/google-cloud-sdk.sh
+        mode: '0644'
+        content: |
+          export PATH={{ gcloud_sdk_dir }}/bin:$PATH
+
+    - name: Verify gsutil
+      ansible.builtin.command: "{{ gcloud_sdk_dir }}/bin/gsutil version"
+      register: gsutil_version
+      changed_when: false
+
+    - name: Print gsutil version (which will show it was installed OK)
+      debug:
+        msg: "gsutil version: {{ gsutil_version.stdout }}"
 
 # ------------------------------------------------
 # Observability setup
