@@ -30,9 +30,11 @@
         path: "consensus_timing_block_{{ node_id }}.json"
         dest: "consensus_timing_block_{{ node_id }}.json.gz"
         mode: "0644"
+      failed_when: false
 
     - name: Fetch consensus progression logs
       fetch:
         src: "consensus_timing_block_{{ node_id }}.json.gz"
         dest: "../../log_files/val-{{ node_id }}-{{ ansible_host }}.consensus_timing_block.json.gz"
         flat: true
+      failed_when: false
