@@ -3,6 +3,10 @@
   set_fact:
     snarkos_bin_path: "{{ '/home/ubuntu/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
 
+- name: Preserve real snarkOS binary path (without flamegraph)
+  set_fact:
+    snarkos_real_bin: "{{ '/home/ubuntu/.cargo/bin/snarkos' if snarkos_git_hash is defined else '/usr/bin/snarkos' }}"
+
 - name: Set optional flamegraph facts
   set_fact:
     snarkos_bin_path: "/root/.cargo/bin/flamegraph -o /tmp/snarkos_flamegraph.svg -- {{ snarkos_bin_path }}"
@@ -20,10 +24,6 @@
     src: /etc/systemd/system/snarkos.service
   register: snarkos_service_file
 
-# - name: Decode and print the snarkos service file contents
-#   debug:
-#     msg: "{{ snarkos_service_file['content'] | b64decode }}"
-
 - name: Reload systemd to read new snarkos service file
   systemd:
     daemon_reload: true
@@ -34,3 +34,24 @@
     name: snarkos
     state: restarted
   become: true
+
+- name: Get local repo git hash
+  set_fact:
+    local_git_hash: "{{ lookup('pipe', 'git rev-parse HEAD') }}"
+  run_once: true
+
+- name: Prepare to print snarkos version and timestamp
+  shell: |
+    echo "Timestamp: $(date -Iseconds)"
+    echo "SnarkOS Stress Tests git hash:"
+    echo "{{ local_git_hash }}"
+    echo "SnarkOS version:"
+    "{{ snarkos_real_bin }}" -V
+  register: snarkos_version_output
+  args:
+    executable: /bin/bash
+  become: true
+
+- name: SnarkOS version running is
+  debug:
+    var: snarkos_version_output.stdout_lines
