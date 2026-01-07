@@ -35,7 +35,7 @@ variable "validator_instance_count" {
 
 variable "client_instance_count" {
   description = "Number of snarkOS clients per validator"
-  default     = 2
+  default     = 0
 }
 
 variable "prover_instance_count" {
