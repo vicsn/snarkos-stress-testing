@@ -24,7 +24,7 @@
       git:
         repo: "https://{{ github_token }}@github.com/ProvableHQ/snarkos-stress-testing.git"
         dest: "/home/ubuntu/stress_testing"
-        version: main
+        version: "{{ stress_testing_branch | default('main') }}"
         force: true
 
     - name: Update APT package index and install dependencies
@@ -121,7 +121,7 @@
       git:
         repo: "https://{{ github_token }}@github.com/ProvableHQ/talisker.git"
         dest: "/home/ubuntu/talisker-src"
-        version: master
+        version: "{{ talisker_branch | default('master') }}"
         force: true
 
     - name: Check if talisker.service unit file exists

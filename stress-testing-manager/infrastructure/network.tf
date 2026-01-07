@@ -3,7 +3,7 @@
 #
 
 resource "aws_security_group" "aleo_stress_testing_manager" {
-  name        = "aleo_stress_testing_manager"
+  name        = "aleo_stress_testing_manager${local.name_suffix}"
   description = "Security group for the Aleo stress_testing_manager"
 }
 
@@ -40,7 +40,7 @@ resource "aws_vpc_security_group_ingress_rule" "allow_aleo_icmp_ipv4" {
 #
 
 resource "aws_security_group" "allow_out" {
-  name        = "allow_out"
+  name        = "allow_out${local.name_suffix}"
   description = "Allow outbound traffic"
 }
 

@@ -39,6 +39,21 @@ variable "GRAFANA_CLOUD_API_KEY" {
   default = "your_grafana_cloud_api_key_here"
 }
 
+variable "TALISKER_BRANCH" {
+  type    = string
+  default = "master"
+}
+
+variable "STRESS_TESTING_BRANCH" {
+  type    = string
+  default = "main"
+}
+
+variable "PROVISION_RUN_ID" {
+  type    = string
+  default = ""
+}
+
 variable github_token {
   sensitive = true
 }
@@ -48,6 +63,14 @@ terraform {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.7"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
     }
   }
 }

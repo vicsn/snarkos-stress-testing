@@ -1,5 +1,5 @@
 resource "aws_iam_role" "stress_testing_manager_role" {
-  name = "aws_iam_stress_testing_manager_role"
+  name = "aws_iam_stress_testing_manager_role${local.name_suffix}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -17,7 +17,7 @@ resource "aws_iam_role" "stress_testing_manager_role" {
 }
 
 resource "aws_iam_role_policy" "stress_testing_manager_access_policy" {
-  name = "stress_testing_manager_access_policy"
+  name = "stress_testing_manager_access_policy${local.name_suffix}"
   role = aws_iam_role.stress_testing_manager_role.name
 
   policy = jsonencode({
@@ -81,7 +81,7 @@ resource "aws_iam_role_policy" "stress_testing_manager_access_policy" {
 }
 
 resource "aws_iam_role_policy" "stress_testing_manager_iam_policy" {
-  name = "stress_testing_manager_iam_policy"
+  name = "stress_testing_manager_iam_policy${local.name_suffix}"
   role = aws_iam_role.stress_testing_manager_role.name
 
   policy = jsonencode({
@@ -128,6 +128,6 @@ resource "aws_iam_role_policy_attachment" "power_user_attachement" {
 #
 
 resource "aws_iam_instance_profile" "stress_testing_manager_instance_profile" {
-  name = "stress_testing_manager_instance_profile"
+  name = "stress_testing_manager_instance_profile${local.name_suffix}"
   role = aws_iam_role.stress_testing_manager_role.name
 }
