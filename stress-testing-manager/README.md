@@ -62,7 +62,7 @@ echo `cat ~/.ssh/id_rsa.pub` >> stress-testing-manager/infrastructure/ansible/te
 
 ### Using tf_stack.sh
 
-Before running anything modify the `env-default` or `env-staging` with the right environemnt variable values and source it:
+Before running anything modify the `env-default` or `env-staging` with the right environment variable values and source it:
 
 ```
 cd infrastructure
@@ -106,7 +106,7 @@ Staging uses a separate Terraform workspace (staging) and resource names are suf
 
 ### Provisioning with Ansible
 
-Before running anything modify the `env-default` or `env-staging` with the right environemnt variable values and source it:
+Before running anything modify the `env-default` or `env-staging` with the right environment variable values and source it:
 
 ```
 cd infrastructure

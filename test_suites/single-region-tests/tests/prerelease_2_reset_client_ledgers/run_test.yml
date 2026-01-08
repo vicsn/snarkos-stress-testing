@@ -48,7 +48,7 @@
     - snarkos_service
   tags: snarkos_client
 
-# Strategy: free doesn't work when we have `pause` and is_synced calles it, so we do it in 3-4 batches instead:
+# Strategy: free doesn't work when we have `pause` and is_synced calls it, so we do it in 3-4 batches instead:
 - name: Check sync status in up to 30% of clients at a time
   hosts: snarkos_client:!bootstrap_clients
   remote_user: ubuntu

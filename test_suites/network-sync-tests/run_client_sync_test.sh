@@ -87,7 +87,7 @@ check_snapshot_freshness() {
     # Note: we use snapshots from block heights every 5 days, with the goal that the test takes
     # about 1 day to complete. Thus, the snapshot links in `snapshot_urls_mainnet.txt` and
     # `snapshot_urls_testnet.txt` will be incomplete after ~5 days. This function triggers a
-    # warning mesage in such cases. The spacing between the snapshot block heights differs
+    # warning message in such cases. The spacing between the snapshot block heights differs
     # (since they were retrieved time based instead of block height based), but was recently up
     # to ~200k for mainnet and up to ~300k for testnet. Here, we use 1.5x these thresholds for
     # triggering the warnings, a somewhat arbitrary value.

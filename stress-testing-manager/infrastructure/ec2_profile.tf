@@ -118,7 +118,7 @@ resource "aws_iam_role_policy" "stress_testing_manager_iam_policy" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "power_user_attachement" {
+resource "aws_iam_role_policy_attachment" "power_user_attachment" {
   role       = aws_iam_role.stress_testing_manager_role.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
 }

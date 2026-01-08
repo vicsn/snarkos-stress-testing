@@ -17,7 +17,7 @@
     - `brew install x86_64-unknown-linux-gnu`
     - `brew install openssl@3` (this should create a folder `/opt/homebrew/Cellar/openssl@3/3.4.0`. In case newer versions are released, update the version in the file `playbooks/roles/snarkos_build_locally/defaults/main.yml` and try it out.)
     - `rustup target add x86_64-unknown-linux-gnu`
-- [Install pre-commit](https://pre-commit.com/#installation). It can be intalled with `pip install pre-commit`.
+- [Install pre-commit](https://pre-commit.com/#installation). It can be installed with `pip install pre-commit`.
     - Run `cd test_suites/single-region-tests && pre-commit install`. Now you have an Ansible lint commit hook.
 
 The local build method uses the S3 bucket `release-bucket-2122415`, which been created on AWS using the command `aws s3api create-bucket --bucket release-bucket --region us-east-1`. By default in the `vars.example.yml` file, it compiles snarkOS with the `test_targets` feature (lowering the coinbase proving target, tx cannon needs to be compiled with the `enable_test_targets` feature alongside) and the `test_skip_tx_checks` feature (allows for fake txs to be processed, only exists for the `malice` snarkOS branches.)
@@ -41,7 +41,7 @@ Authentication happens via Google SSO:
 
 The devnet name can be set via the `DEVNET_NAME` env variable (for example `DEVNET_NAME="my_net" ./run_test_suite.sh`).
 By default for local test runs it is `single-region-tests` and for automatic pre-release tests it is `prerelease-devnet`.
-Alternatively the TF var `devnet_name` can be eddited to change it too.
+Alternatively the TF var `devnet_name` can be edited to change it too.
 
 `./run_test_suite.sh` will allow you to choose infra to set up and tests to run.
 

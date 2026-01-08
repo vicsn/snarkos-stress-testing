@@ -1,0 +1,11 @@
+[default.extend-words]
+ansible = "ansible"
+playbook = "playbook"
+terraform = "terraform"
+
+[files]
+extend-exclude = [
+  ".terraform/",
+  "vendor/",
+  "target/",
+]

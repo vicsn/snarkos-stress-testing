@@ -3,9 +3,18 @@ default_language_version:
   python: python3.11
 
 repos:
-- repo: https://github.com/ansible/ansible-lint.git
-  rev: v25.1.3
-  hooks:
-    - id: ansible-lint
-      entry: ./lint.sh
-      verbose: true
+  - repo: https://github.com/ansible/ansible-lint.git
+    rev: a2bc8b8b13a80802215856c56823d85007d3baf5  # frozen: v25.12.2
+    hooks:
+      - id: ansible-lint
+        entry: ./lint.sh
+        verbose: true
+
+  # Spell checking for tf / md / yml
+  - repo: https://github.com/crate-ci/typos
+    rev: 90356c2064dddca5f04a5ee3deaecb1784ba692d  # frozen: v1
+    hooks:
+      - id: typos
+        name: spell-check (typos)
+        args: ["--write-changes"]
+        files: \.(sh|md|tf|ya?ml)$

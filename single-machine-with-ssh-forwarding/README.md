@@ -86,7 +86,7 @@ export SSH_KEY_PATH_PUB=<absolute-path-to-the-public-counterpart-of-the-key-so-t
 ./run.sh setup
 ```
 
-This will do the key forwarding and create an instance for testing, aslo check the ssh forwarding.
+This will do the key forwarding and create an instance for testing, also check the ssh forwarding.
 It also will print the IP of the instance. Now:
 
 ```

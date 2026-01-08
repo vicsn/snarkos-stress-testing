@@ -49,5 +49,5 @@ To analyze whether requested transmissions have been in the mempool:
 * Run `analysis_02_transmission_consensus_queues.py`, which outputs the analysis. Example command: `python3 analysis_02_transmission_consensus_queues.py --logfile prepared_aws-logs/prepared_validator-0.log`.
 
 # Flamegraph analysis
-To count frequently occuring tasks from a flamegraph, you can use:
+To count frequently occurring tasks from a flamegraph, you can use:
 `python3 analysis_flamegraph_svg.py ../test_suites/single-region-tests/log_files/val-0.svg`

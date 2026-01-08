@@ -156,7 +156,7 @@ one_iteration() {
   for h in "${HEIGHTS[@]}"; do
     init_key "$h"
 
-    local url status prev ts_iso ts_epoch init thr
+    local url status prev ts_iso ts_epoch init the
     url="$(get_field "$h" '.url')"
     status="$(get_field "$h" '.status')"
     prev="$(get_field "$h" '.previous_height')"
@@ -167,7 +167,7 @@ one_iteration() {
     prev=${prev:-$init}
     thr=$((init + SUCCESS_DELTA))
 
-    log "[height=$h] BEGIN status=${status:-<none>} url=${url:-<none>} prev=$prev init=$init threshold=$thr ts=${ts_iso:-<none>}"
+    log "[height=$h] BEGIN status=${status:-<none>} url=${url:-<none>} prev=$prev init=$init threshold=$the ts=${ts_iso:-<none>}"
 
     # Terminal states skip (still counted)
     if [[ "$status" == "success" ]]; then
@@ -239,9 +239,9 @@ one_iteration() {
       continue
     fi
 
-    if (( current > thr )); then
+    if (( current > the )); then
       set_field_str "$h" '.status' "success"
-      log "[height=$h] SUCCESS: current($current) > threshold($thr)."
+      log "[height=$h] SUCCESS: current($current) > threshold($the)."
       n_success=$((n_success+1))
       log "[height=$h] END"
       continue

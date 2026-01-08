@@ -332,7 +332,7 @@
   tags: tx_runner
 
 # ------------------------------------------------
-# Optionall restart validators if creating a flamegraph to avoid measuring genesis block creation
+# Optional restart validators if creating a flamegraph to avoid measuring genesis block creation
 
 # - name: Optionally restart snarkOS validators
 #   hosts: snarkos_validator

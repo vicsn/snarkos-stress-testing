@@ -22,7 +22,7 @@
 
     - name: Swap ledgers of half the nodes at a time
       include_tasks: swap.yml
-      loop: "{{ range(0, 2) }}"
+      loop: "{{ range(0, 2) | list }}"
       loop_control:
         loop_var: cycle_index
       vars:

@@ -312,7 +312,7 @@ To be automated by Talisker soon, but for now can be ran manually like this:
 
 ## Load Ledger snapshot locations
 
-We can find links for the latests snapshots for the given day at:
+We can find links for the latest snapshots for the given day at:
 
 ```
 https://storage.googleapis.com/snarkos-<network>/archive/YYYY-MM-dd_00-00-01.tar
