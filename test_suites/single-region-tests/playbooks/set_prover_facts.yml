@@ -27,14 +27,13 @@
   set_fact:
     node_id: "{{ tags['Dev'] }}"
 
-# Ensure the prover's`--dev` id does not conflict with the validator's `--dev` id.
 - name: Set snarkos command with peers
   set_fact:
     snarkos_command: >-
       snarkos start --metrics --nodisplay  --prover \
         --node 0.0.0.0:4130 \
         --verbosity {{ snarkos_verbosity }} \
-        --dev {{ (node_id | int) + (num_instances | int) }} \
+        --dev {{ node_id }} \
         --dev-num-validators {{ num_instances }} --no-dev-txs \
         --peers {{ validator_ips }} \
         --network {{ snarkos_network_int }}
