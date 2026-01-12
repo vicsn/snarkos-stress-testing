@@ -139,6 +139,7 @@
 
     - name: Compile Talisker
       shell: |
+        set -euo pipefail
         source $HOME/.cargo/env
         cd /home/ubuntu/talisker-src && \
         cargo build --release && \
@@ -146,6 +147,9 @@
         cp target/release/talisker /home/ubuntu/talisker/bin
       args:
         executable: /bin/bash
+        creates: /home/ubuntu/talisker/bin/talisker
+      async: 7200
+      poll: 15
 
     - name: Ensure the talisker binary is executable
       file:

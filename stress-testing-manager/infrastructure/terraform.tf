@@ -59,6 +59,14 @@ variable github_token {
 }
 
 terraform {
+  backend "s3" {
+    bucket               = "ephnet-terraform-state-bucket-stm"
+    workspace_key_prefix = "terraform/state/stm"
+    key                  = "terraform.tfstate"
+    region               = "us-west-2"
+    profile              = "ephnet"
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
