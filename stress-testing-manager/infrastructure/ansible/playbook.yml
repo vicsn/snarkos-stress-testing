@@ -148,6 +148,13 @@
       args:
         executable: /bin/bash
         creates: /home/ubuntu/talisker/bin/talisker
+      environment:
+        RUSTC_WRAPPER: '/usr/local/bin/sccache'
+        SCCACHE_BUCKET: 'snarkos-compiler-cache'
+        SCCACHE_REGION: 'us-west-2'
+        SCCACHE_S3_USE_SSL: 'true'
+        SCCACHE_S3_KEY_PREFIX: 'talisker_linux_rust/'
+        CARGO_INCREMENTAL: '0'
       async: 7200
       poll: 15
 

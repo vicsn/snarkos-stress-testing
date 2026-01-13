@@ -1,7 +1,7 @@
 ---
 - name: Set snarkOS binary path based on installation method
   set_fact:
-    snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
+    snarkos_bin_path: "/usr/bin"
 
 - name: Set optional flamegraph facts
   set_fact:

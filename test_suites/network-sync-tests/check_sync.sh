@@ -165,7 +165,7 @@ one_iteration() {
     [[ -n "$ts_iso" ]] && ts_epoch="$(iso_to_epoch "$ts_iso")" || true
     init=$((10#$h))
     prev=${prev:-$init}
-    thr=$((init + SUCCESS_DELTA))
+    the=$((init + SUCCESS_DELTA))
 
     log "[height=$h] BEGIN status=${status:-<none>} url=${url:-<none>} prev=$prev init=$init threshold=$the ts=${ts_iso:-<none>}"
 
