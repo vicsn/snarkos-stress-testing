@@ -175,6 +175,8 @@
   remote_user: ubuntu
   any_errors_fatal: true
   strategy: free
+  vars:
+    ansible_ssh_pipelining: false
   tasks:
     - name: Rename docker-compose.yml if process-exporter version does not exist
       ansible.builtin.command: mv /home/ubuntu/docker-compose.yml /home/ubuntu/docker-compose-process-exporter.yml
@@ -197,6 +199,8 @@
   remote_user: ubuntu
   any_errors_fatal: true
   strategy: free
+  vars:
+    ansible_ssh_pipelining: false
   tasks:
     - name: Force-Run docker-compose up with node exporter, restart
       command:

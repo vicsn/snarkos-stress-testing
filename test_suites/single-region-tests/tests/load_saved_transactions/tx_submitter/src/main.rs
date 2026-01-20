@@ -15,8 +15,7 @@ use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::Read;
-use std::io::Write as IoWrite;
+use std::io::{Read, Write as IoWrite, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -27,10 +26,24 @@ use tokio::sync::Semaphore;
 // As a whole this is ran through the Ansible setup code, so output is blocked by Ansible, we need
 // output in real time, so we use these log files.
 static LOG_PATH: &str = "confirmed_txs.log";
-static LOG_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static LOG_LOCK: Lazy<Mutex<BufWriter<File>>> = Lazy::new(|| {
+    let f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(LOG_PATH)
+        .unwrap();
+    Mutex::new(BufWriter::new(f))
+});
 
 static SEND_LOG_PATH: &str = "sender_txs.log";
-static SEND_LOG_LOCK: Lazy<std::sync::Mutex<()>> = Lazy::new(|| std::sync::Mutex::new(()));
+static SEND_LOG_LOCK: Lazy<Mutex<BufWriter<File>>> = Lazy::new(|| {
+    let f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(SEND_LOG_PATH)
+        .unwrap();
+    Mutex::new(BufWriter::new(f))
+});
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -47,6 +60,7 @@ async fn main() -> Result<()> {
     let deploy_cnt = &args[5];
     let target_consensus_version: i64 = args[6].parse().context("bad consensus version")?;
     let target_height: i64 = args[7].parse().context("bad height")?;
+    let load_saved_type = args.get(8).map(|s| s.as_str()).unwrap_or("all");
 
     println!("=== TX Submitter (Rust) ===");
     println!(
@@ -118,10 +132,35 @@ async fn main() -> Result<()> {
         deploy_lines.len() + exec_lines.len()
     );
 
-    // Build expected TX id set (from payload JSON)
-    let mut all_lines = Vec::with_capacity(deploy_lines.len() + exec_lines.len());
-    all_lines.extend(deploy_lines);
-    all_lines.extend(exec_lines);
+    // Build all_lines based on load_saved_type
+    let all_lines: Vec<String> = match load_saved_type {
+        "executions" => {
+            println!("Using only execution transactions (load_saved_transactions_type=executions)");
+            exec_lines
+        }
+        "deployments" => {
+            println!("Using only deployment transactions (load_saved_transactions_type=deployments)");
+            deploy_lines
+        }
+        "all" | "" => {
+            println!("Using both deployment and execution transactions (load_saved_transactions_type=all)");
+            let mut v = Vec::with_capacity(deploy_lines.len() + exec_lines.len());
+            v.extend(deploy_lines);
+            v.extend(exec_lines);
+            v
+        }
+        other => {
+            eprintln!(
+                "Unknown load_saved_transactions_type='{}'. Defaulting to 'all' (deployments + executions).",
+                other
+            );
+            let mut v = Vec::with_capacity(deploy_lines.len() + exec_lines.len());
+            v.extend(deploy_lines);
+            v.extend(exec_lines);
+            v
+        }
+    };
+
     if all_lines.is_empty() {
         println!("No transactions to send. Exiting.");
         return Ok(());
@@ -132,7 +171,7 @@ async fn main() -> Result<()> {
     // These are because we are hitting "too many open files" otherwise:
     let per_ip_limit = parse_env_usize(
         "TX_PER_IP_LIMIT",
-        std::cmp::max(128usize, all_lines.len() / ips.len()),
+        std::cmp::max(256usize, all_lines.len() / ips.len()),
     );
     let overall_limit = parse_env_usize(
         "TX_OVERALL_LIMIT",
@@ -191,13 +230,14 @@ async fn main() -> Result<()> {
 
     // --- Measure only the send phase (using the sender client) ---
     let t0 = Instant::now();
-    let (ok_count, err_count) = blast_all(
+    let (ok_count, err_count, first_ok, last_ok) = blast_all(
         &send_client,
         network,
         &ips,
         &all_lines,
         per_ip_limit,
         overall_limit,
+        t0,
     )
     .await;
     let dt = t0.elapsed().as_secs_f64();
@@ -216,6 +256,15 @@ async fn main() -> Result<()> {
         dt,
         (all_lines.len() as f64 / dt) as usize
     );
+
+    if let (Some(f), Some(l)) = (first_ok, last_ok) {
+        let window = l - f;
+        println!(
+            "Effective success window: {:.3}s (first-ok at {:.3}s, last-ok at {:.3}s)",
+            window, f, l
+        );
+    }
+
     // --- end of measured section ---
 
     // Wait for scanner to finish (it exits when all confirmed or idle threshold)
@@ -430,7 +479,8 @@ fn tx_ids_from_lines(lines: &[String]) -> HashSet<String> {
 ///   `per_ip_limit` using Tokio semaphores.
 /// - Uses the provided `reqwest::Client` for connection reuse and timeouts.
 /// - Each send attempt is logged to `sender_txs.log` (via `slogf`):
-///     * On success: logs the echoed or expected transaction ID as sent.
+///     * On success: logs the expected transaction ID as sent (we no longer
+///       read the echoed body for speed).
 ///     * On failure: logs HTTP status or detailed network error chain.
 /// - The function waits for all requests to complete before returning.
 /// - Success entries look like:
@@ -449,10 +499,13 @@ fn tx_ids_from_lines(lines: &[String]) -> HashSet<String> {
 ///   verbatim as body).
 /// * `per_ip_limit` — maximum concurrent in-flight requests per validator.
 /// * `overall_limit` — global cap on all concurrent in-flight requests.
+/// * `start` — Instant captured before sending starts; used to compute the
+///   effective timing window of successful sends.
 ///
 /// # Returns
-/// `(ok_count, err_count)` — numbers of successfully and unsuccessfully sent
-/// transactions (errors include HTTP and transport failures).
+/// `(ok_count, err_count, first_ok, last_ok)` — numbers of successfully and
+/// unsuccessfully sent transactions, plus timestamps (seconds since `start`)
+/// of the earliest and latest successful send (if any).
 ///
 /// - Designed for extremely high concurrency, but still bounded by semaphores because of the FD
 /// problems - too many open files.
@@ -467,14 +520,19 @@ async fn blast_all(
     tx_lines: &[String],
     per_ip_limit: usize,
     overall_limit: usize,
-) -> (usize, usize) {
+    start: Instant,
+) -> (usize, usize, Option<f64>, Option<f64>) {
     let overall = Arc::new(Semaphore::new(overall_limit));
-    let per_ip: Vec<Arc<Semaphore>> = ips.iter().map(|_| Arc::new(Semaphore::new(per_ip_limit))).collect();
+    let per_ip: Vec<Arc<Semaphore>> =
+        ips.iter().map(|_| Arc::new(Semaphore::new(per_ip_limit))).collect();
 
     let urls: Vec<String> = ips
         .iter()
         .map(|ip| format!("http://{}:3030/{}/transaction/broadcast", ip.trim(), network))
         .collect();
+
+    let first_ok = Arc::new(Mutex::new(None::<f64>));
+    let last_ok = Arc::new(Mutex::new(None::<f64>));
 
     let mut futs = Vec::with_capacity(tx_lines.len());
     for (i, payload) in tx_lines.iter().enumerate() {
@@ -486,6 +544,8 @@ async fn blast_all(
 
         let overall_sem = overall.clone();
         let ip_sem = per_ip[idx].clone();
+        let first_ok_clone = first_ok.clone();
+        let last_ok_clone = last_ok.clone();
 
         let fut = async move {
             // meddle@2025-10-28: I couldn't fix the too many open files problems on my mac, but
@@ -503,32 +563,28 @@ async fn blast_all(
 
             match rsp {
                 Ok(r) if r.status().is_success() => {
-                    // Read echoed id (server returns `"at1..."`), but don't choke if not present
-                    match r.text().await {
-                        Ok(mut body) => {
-                            body = body.trim().trim_matches('"').to_string();
-                            let id_to_log = if body.starts_with("at1") {
-                                // if expected exists and differs, warn in the log line
-                                if let Some(exp) = exp_id {
-                                    if body != exp {
-                                        slogf(&format!("[Exec] Warning: echoed {} != expected {}", body, exp));
-                                    }
-                                }
-                                body
-                            } else {
-                                exp_id.unwrap_or_else(|| "<no-id>".into())
-                            };
-                            slogf(&format!("[Exec] TX sent : {}", id_to_log));
-                        }
-                        Err(_) => {
-                            // Couldn't read body; still log expected id if known
-                            if let Some(exp) = exp_id {
-                                slogf(&format!("[Exec] TX sent : {}", exp));
-                            } else {
-                                slogf("[Exec] TX sent : <unknown-id>");
-                            }
+                    // Fast path: don't read the body at all on success – just log expected id.
+                    if let Some(exp) = exp_id {
+                        slogf(&format!("[Exec] TX sent : {}", exp));
+                    } else {
+                        slogf("[Exec] TX sent : <unknown-id>");
+                    }
+
+                    // Track earliest and latest successful send times (relative to `start`).
+                    let elapsed = start.elapsed().as_secs_f64();
+                    {
+                        let mut f = first_ok_clone.lock().unwrap();
+                        if f.is_none() || elapsed < f.unwrap() {
+                            *f = Some(elapsed);
                         }
                     }
+                    {
+                        let mut l = last_ok_clone.lock().unwrap();
+                        if l.is_none() || elapsed > l.unwrap() {
+                            *l = Some(elapsed);
+                        }
+                    }
+
                     Ok::<(), anyhow::Error>(())
                 }
                 Ok(r) => {
@@ -565,7 +621,10 @@ async fn blast_all(
             _ => err += 1,
         }
     }
-    (ok, err)
+
+    let first_ok_val = *first_ok.lock().unwrap();
+    let last_ok_val = *last_ok.lock().unwrap();
+    (ok, err, first_ok_val, last_ok_val)
 }
 
 // ---------------- Block scanner ----------------
@@ -814,28 +873,20 @@ fn extract_id_from_payload(line: &str) -> Option<String> {
 
 fn logf(msg: &str) {
     use chrono::Local;
+    use std::io::Write;
+
     let ts = Local::now().format("%F %T");
-    let line = format!("[{}] {}", ts, msg);
-    //println!("{}", line);
-    let _guard = LOG_LOCK.lock().unwrap();
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(LOG_PATH)
-        .unwrap();
-    writeln!(file, "{}", line).ok();
+    let line = format!("[{}] {}\n", ts, msg);
+
+    let mut w = LOG_LOCK.lock().unwrap();
+    let _ = w.write_all(line.as_bytes());
+    let _ = w.flush();
 }
 
 fn slogf(msg: &str) {
     use chrono::Local;
     let ts = Local::now().format("%F %T");
-    let line = format!("[{}] {}", ts, msg);
-    //println!("{}", line); // also to stdout
-    let _g = SEND_LOG_LOCK.lock().unwrap();
-    let mut f = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(SEND_LOG_PATH)
-        .unwrap();
-    let _ = writeln!(f, "{}", line);
+    let line = format!("[{}] {}\n", ts, msg);
+    let mut w = SEND_LOG_LOCK.lock().unwrap();
+    let _ = w.write_all(line.as_bytes());
 }

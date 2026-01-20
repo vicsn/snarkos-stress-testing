@@ -68,6 +68,9 @@ rest_rps: 1000000000
 # pregeneration_bucket_path: "pregenerated_transactions"
 # pregenerate_transactions_num_validators: 5
 # pregeneration_tx_batch_size: 5
+#
+# Vars controlling load_saved_transactions:
+# load_saved_transactions_type: "executions" # Possible values executions,deployments,all, default: all
 
 # Ansible vars
 # ansible_python_interpreter: /usr/bin/python3.10

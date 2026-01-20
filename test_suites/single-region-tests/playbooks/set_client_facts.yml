@@ -1,4 +1,5 @@
 - name: Gather facts from all nodes
+  become: false
   setup:
 
 - name: Determine the number of validators

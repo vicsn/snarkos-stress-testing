@@ -4,6 +4,7 @@
   vars:
     tx_submitter_dir: "{{ playbook_dir }}/tx_submitter"
     tx_submitter_bin: "{{ tx_submitter_dir }}/target/release/tx_submitter"
+    load_saved_tx_type: "{{ load_saved_transactions_type | default('all') }}"
   tasks:
     - name: Ensure Rust toolchain (rustup) is installed
       shell: |
@@ -56,7 +57,8 @@
           "{{ pregeneration_execution_tx_count }}" \
           "{{ pregeneration_deployment_tx_count }}" \
           "{{ txs_target_consensus_version }}" \
-          "{{ txs_target_consensus_version_height }}"
+          "{{ txs_target_consensus_version_height }}" \
+          "{{ load_saved_tx_type }}"
       args:
         executable: /bin/bash
         chdir: "{{ tx_submitter_dir }}"

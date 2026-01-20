@@ -1,4 +1,5 @@
 - name: Gather facts from all validators
+  become: false
   setup:
 
 - name: Set global facts
