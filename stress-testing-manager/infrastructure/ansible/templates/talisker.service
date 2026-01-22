@@ -18,6 +18,9 @@ Environment="TEST_RESULTS_AND_LOGS_BUCKET={{ results_bucket }}"
 Environment="SLACK_TOKEN={{ slack_token }}"
 Environment="SLACK_CHANNEL_ID={{ slack_channel_id }}"
 Environment="TALISKER_API_PORT=3030"
+Environment="PRE_RELEASE_PREFIX={{ pre_release_prefix }}"
+Environment="SYNC_PREFIX={{ sync_prefix }}"
+Environment="LOAD_LEDGER_PREFIX={{ load_ledger_prefix }}"
 ExecStart=/home/ubuntu/talisker/bin/talisker
 Restart=on-failure
 

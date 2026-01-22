@@ -54,6 +54,21 @@ variable "PROVISION_RUN_ID" {
   default = ""
 }
 
+variable "PRE_RELEASE_PREFIX" {
+  type    = string
+  default = "prerelease"
+}
+
+variable "SYNC_PREFIX" {
+  type    = string
+  default = "sync"
+}
+
+variable "LOAD_LEDGER_PREFIX" {
+  type    = string
+  default = "load-ledger"
+}
+
 variable github_token {
   sensitive = true
 }

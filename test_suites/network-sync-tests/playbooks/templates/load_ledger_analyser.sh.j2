@@ -59,7 +59,7 @@ compute_storage_dir() {
   local default="${root}/image/ledger"
   local -a candidates=()
 
-  sudo chown ubuntu:ubuntu -R $root
+  sudo chown ubuntu:ubuntu -R "$root"
 
   # collect dirs that contain CURRENT
   while IFS= read -r path; do
@@ -94,15 +94,48 @@ compute_storage_dir() {
   fi
 }
 
-run_once() {
-  wait_for_downloads
-  stop_snarkos_service_and_wait
+graceful_stop_pid_and_wait() {
+  local pid="$1"
+  local name="${2:-snarkos}"
+  local timeout_secs="${3:-300}"
 
-  STORAGE_DIR="$(compute_storage_dir)"
+  if ! ps -p "$pid" >/dev/null 2>&1; then
+    echo "$name already stopped (pid=$pid)"
+    return 0
+  fi
 
-  TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-  LOG_FILE="${LOG_DIR}/snarkos_${TIMESTAMP}.log"
-  PID_FILE="${LOG_DIR}/snarkos.pid"
+  echo "Gracefully stopping $name (pid=$pid) with SIGTERM (systemctl-like)..."
+  #kill -TERM "$pid" 2>/dev/null || true
+  kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+
+  local start
+  start="$(date +%s)"
+  while ps -p "$pid" >/dev/null 2>&1; do
+    local now elapsed
+    now="$(date +%s)"
+    elapsed=$((now - start))
+    if (( elapsed >= timeout_secs )); then
+      echo "ERROR: $name (pid=$pid) did not exit within ${timeout_secs}s after SIGTERM." >&2
+      echo "Refusing to SIGKILL (-9) per request; failing the run." >&2
+      return 1
+    fi
+    sleep 2
+  done
+
+  echo "$name stopped cleanly."
+  return 0
+}
+
+start_snarkos_and_wait_for_markers() {
+  # args:
+  #   1: log_file
+  #   2: pid_file
+  #   3: storage_dir
+  # sets globals:
+  #   PID START_TIME END_TIME STARTUP_TIME N
+  local log_file="$1"
+  local pid_file="$2"
+  local storage_dir="$3"
 
   CMD=(
     /usr/bin/snarkos start
@@ -114,23 +147,23 @@ run_once() {
     --metrics
     --rest-rps 1000000000
     --auto-migrate-node-data
-    --storage "${STORAGE_DIR}"
+    --storage "${storage_dir}"
     --network "${NETWORK_CODE}"
   )
 
-  echo "Starting snarkos… (logs: $LOG_FILE)"
-  echo "Using storage: ${STORAGE_DIR}"
+  echo "Starting snarkos… (logs: $log_file)"
+  echo "Using storage: ${storage_dir}"
   START_TIME="$(date +%s)"
-  nohup "${CMD[@]}" >"$LOG_FILE" 2>&1 &
+  nohup setsid "${CMD[@]}" >"$log_file" 2>&1 &
   PID=$!
-  echo "$PID" > "$PID_FILE"
+  echo "$PID" > "$pid_file"
   echo "snarkos PID: $PID"
 
   proc_alive() { ps -p "$PID" >/dev/null 2>&1; }
 
   echo "Waiting for 'Started sync from CDN'…"
   while true; do
-    if grep -q "Started sync from CDN" "$LOG_FILE" 2>/dev/null; then
+    if grep -q "Started sync from CDN" "$log_file" 2>/dev/null; then
       END_TIME="$(date +%s)"
       STARTUP_TIME=$((END_TIME - START_TIME))
       echo "Reached 'Started sync from CDN' in ${STARTUP_TIME}s"
@@ -138,14 +171,14 @@ run_once() {
     fi
     if ! proc_alive; then
       echo "snarkos exited before 'Started sync from CDN' appeared." >&2
-      exit 1
+      return 1
     fi
     sleep 2
   done
 
   echo "Waiting for 'Loading deployments M-K (of N)'…"
   extract_N() {
-    sed -n 's/.*Loading deployments .* (of \([0-9]\+\)).*/\1/p' "$LOG_FILE" | tail -n1
+    sed -n 's/.*Loading deployments .* (of \([0-9]\+\)).*/\1/p' "$log_file" | tail -n1
   }
 
   N=""
@@ -161,6 +194,40 @@ run_once() {
     fi
     sleep 2
   done
+
+  return 0
+}
+
+run_once() {
+  wait_for_downloads
+  stop_snarkos_service_and_wait
+
+  STORAGE_DIR="$(compute_storage_dir)"
+
+  TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+
+  # --- Warm/priming run (no JSON write) ---
+  WARM_LOG_FILE="${LOG_DIR}/snarkos_warm_${TIMESTAMP}.log"
+  WARM_PID_FILE="${LOG_DIR}/snarkos_warm.pid"
+
+  if ! start_snarkos_and_wait_for_markers "$WARM_LOG_FILE" "$WARM_PID_FILE" "$STORAGE_DIR"; then
+    echo "Warm run failed." >&2
+    exit 1
+  fi
+
+  echo "Warm run reached deployments marker (N=${N}). Now stopping snarkos to let it flush/cache..."
+  if ! graceful_stop_pid_and_wait "$PID" "snarkos(warm)" 300; then
+    exit 1
+  fi
+
+  # --- Measured run (old behavior: write JSON) ---
+  MEASURE_LOG_FILE="${LOG_DIR}/snarkos_${TIMESTAMP}.log"
+  MEASURE_PID_FILE="${LOG_DIR}/snarkos.pid"
+
+  if ! start_snarkos_and_wait_for_markers "$MEASURE_LOG_FILE" "$MEASURE_PID_FILE" "$STORAGE_DIR"; then
+    echo "Measured run failed." >&2
+    exit 1
+  fi
 
   # Write stats JSON (include snarkos_network code)
   cat > "$STATS_JSON" <<JSON
@@ -189,17 +256,11 @@ JSON
     echo "Network (code):    ${NETWORK_CODE}"
     echo "Storage dir:       ${STORAGE_DIR}"
     echo "==============================="
-  } >> "$LOG_FILE"
+  } >> "$MEASURE_LOG_FILE"
 
-  echo "Measurement complete — stopping snarkos process..."
-
-  # --- Stop snarkos immediately after writing JSON ---
-  kill "$PID" 2>/dev/null || true
-  sleep 5
-  if pgrep -f "$TARGET_SNARKOS_CMD" >/dev/null; then
-    echo "Force killing remaining snarkos processes..."
-    pkill -f "$TARGET_SNARKOS_CMD" || true
-    sleep 3
+  echo "Measurement complete — gracefully stopping snarkos process..."
+  if ! graceful_stop_pid_and_wait "$PID" "snarkos(measured)" 300; then
+    exit 1
   fi
 
   echo "snarkos stopped. Run complete."
