@@ -19,6 +19,7 @@ Usage:
   tf_stack.sh destroy [--staging|--workspace NAME] [--auto-approve] [--force] [-- ...extra terraform args]
   tf_stack.sh plan [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh output [--staging|--workspace NAME] [-- ...extra terraform args]
+  tf_stack.sh ip [--staging|--workspace NAME] [-- ...extra terraform args]
 
 Notes:
   - default workspace is your current prod stack.
@@ -62,7 +63,7 @@ if [[ "$WORKSPACE" == "default" && "$STRESS_TESTING_BRANCH" != "main" ]]; then
 fi
 
 case "$ACTION" in
-  apply|destroy|plan|output|provision) ;;
+  apply|destroy|plan|output|ip|provision) ;;
   *) usage; die "Unknown action: $ACTION" ;;
 esac
 
@@ -124,5 +125,8 @@ case "$ACTION" in
     ;;
   output)
     terraform output ${EXTRA_TF_ARGS[@]+"${EXTRA_TF_ARGS[@]}"}
+    ;;
+  ip)
+    terraform show ${EXTRA_TF_ARGS[@]+"${EXTRA_TF_ARGS[@]}"} | grep public_ip
     ;;
 esac
