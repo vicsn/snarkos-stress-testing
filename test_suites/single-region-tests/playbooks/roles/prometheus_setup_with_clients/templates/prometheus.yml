@@ -1,5 +1,5 @@
 global:
-  scrape_interval: 15s
+  scrape_interval: 1m
   scrape_timeout: 10s
   evaluation_interval: 1m
   external_labels:
@@ -10,26 +10,9 @@ remote_write:
       username: 1272055
       password: {{ grafana_cloud_api_key }}
 scrape_configs:
-  - job_name: 'snarkos'
-    honor_timestamps: true
-    scrape_interval: 15s
-    scrape_timeout: 10s
-    metrics_path: /metrics
-    scheme: http
-    follow_redirects: true
-    static_configs:
-
-      {% for host in groups.get('snarkos_validator', []) | union(groups.get('snarkos_client', [])) %}
-
-      - targets: ["{{ host }}:9000"]
-        labels:
-          group: "snarkos"
-          instance_type: "{{ hostvars[host]['instance_type'] }}"
-      {% endfor %}
-      
   - job_name: 'Process_Exporter_Validators'
     honor_timestamps: true
-    scrape_interval: 15s
+    scrape_interval: 5m
     scrape_timeout: 10s
     metrics_path: /metrics
     scheme: http
@@ -46,7 +29,7 @@ scrape_configs:
 
   - job_name: 'Node_Exporter_Validators'
     honor_timestamps: true
-    scrape_interval: 15s
+    scrape_interval: 5m
     scrape_timeout: 10s
     metrics_path: /metrics
     scheme: http
@@ -63,7 +46,7 @@ scrape_configs:
 
   - job_name: 'snarkos_validator'
     honor_timestamps: true
-    scrape_interval: 15s
+    scrape_interval: 1m
     scrape_timeout: 10s
     metrics_path: /metrics
     scheme: http
@@ -80,7 +63,7 @@ scrape_configs:
 
   - job_name: 'snarkos_client'
     honor_timestamps: true
-    scrape_interval: 15s
+    scrape_interval: 1m
     scrape_timeout: 10s
     metrics_path: /metrics
     scheme: http
@@ -97,7 +80,7 @@ scrape_configs:
 
   - job_name: 'Process_Exporter_Clients'
     honor_timestamps: true
-    scrape_interval: 15s
+    scrape_interval: 5m
     scrape_timeout: 10s
     metrics_path: /metrics
     scheme: http
@@ -114,7 +97,7 @@ scrape_configs:
 
   - job_name: 'Node_Exporter_Clients'
     honor_timestamps: true
-    scrape_interval: 15s
+    scrape_interval: 5m
     scrape_timeout: 10s
     metrics_path: /metrics
     scheme: http
