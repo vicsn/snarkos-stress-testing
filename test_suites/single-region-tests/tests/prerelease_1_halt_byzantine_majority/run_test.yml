@@ -11,6 +11,14 @@
   roles:
     - choose_bootstrap_client
 
+- name: Gather full validator host list (unaffected by serial batching)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Store all snarkos_validator hosts
+      set_fact:
+        all_validator_hosts: "{{ groups['snarkos_validator'] | list }}"
+
 - name: Check the all the validators are synced
   hosts: snarkos_validator
   remote_user: ubuntu
@@ -25,26 +33,13 @@
       vars:
         node_to_check: "localhost"
 
-    - name: Build ordered host list (inventory order)
+    - name: Build ordered host list (all validators, from localhost)
       set_fact:
-        all_hosts: "{{ groups['snarkos_validator'] | list }}"
+        all_hosts: "{{ hostvars['localhost']['all_validator_hosts'] | list }}"
 
-    - name: Index of current host (ensure int)
+    - name: Hosts not in the current batch (the remaining ~70%)
       set_fact:
-        current_index: "{{ (all_hosts | list).index(inventory_hostname) | int }}"
-
-    - name: Rotate list to start after current (range+extract; fully int-cast)
-      set_fact:
-        rotated_after_current: >-
-          {{
-            (range((current_index | int) + 1, (all_hosts | length | int)) | map('extract', all_hosts) | list)
-            +
-            (range(0, (current_index | int)) | map('extract', all_hosts) | list)
-          }}
-
-    - name: Hosts not in the current batch (the other ~70%)
-      set_fact:
-        non_batch_hosts: "{{ rotated_after_current | difference(ansible_play_batch | default([])) | list }}"
+        non_batch_hosts: "{{ all_hosts | difference(ansible_play_batch | default([])) | list }}"
 
     - name: Choose the next host outside the batch
       set_fact:
@@ -56,3 +51,5 @@
       vars:
         node_to_check: localhost
         node_to_compare: "{{ next_host }}"
+        retries_var: 10
+        delay_var: 30

@@ -1,8 +1,8 @@
-- name: Wait until node is within ±{{ _tol }} blocks of compare node
+- name: Wait until node is within ±{{ _tolerance }} blocks of compare node
   vars:
-    _tol: "{{ (tolerance | default(50)) | int }}"
-    _retries: "{{ (max_attempts | default(80)) | int }}"
-    _delay: "{{ (delay_secs | default(30)) | int }}"
+    _tolerance: "{{ (tolerance | default(15)) | int }}"
+    _retries: "{{ (retries_var | default(80)) | int }}"
+    _delay: "{{ (delay_var | default(30)) | int }}"
   ansible.builtin.shell: |
     set -euo pipefail
     python3 - <<'PY'
@@ -11,7 +11,7 @@
     b = int(json.load(urllib.request.urlopen("http://{{ node_to_compare }}:3030/{{ snarkos_network }}/block/latest"))["header"]["metadata"]["height"])
     diff = b - a
     print(f"A={a}  B={b}  diff={diff}")
-    sys.exit(0 if -{{ _tol }} <= diff <= {{ _tol }} else 1)
+    sys.exit(0 if -{{ _tolerance }} <= diff <= {{ _tolerance }} else 1)
     PY
   args:
     executable: /bin/bash

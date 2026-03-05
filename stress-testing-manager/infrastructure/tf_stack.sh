@@ -22,8 +22,8 @@ Usage:
   tf_stack.sh ip [--staging|--workspace NAME] [-- ...extra terraform args]
 
 Notes:
-  - default workspace is your current prod stack.
-  - --staging maps to workspace "staging".
+  - default workspace is production, --staging maps to workspace "staging".
+  - you may want to set TF_VAR_PUBLIC_KEY_PATH when provisioning.
   - destroy on default is blocked unless --force is provided.
   - pass extra terraform args after -- (e.g. -- -var-file=staging.tfvars)
 EOF

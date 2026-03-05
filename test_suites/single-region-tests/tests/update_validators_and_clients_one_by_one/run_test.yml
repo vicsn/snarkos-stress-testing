@@ -96,6 +96,8 @@
       vars:
         node_to_check: localhost
         node_to_compare: "{{ test_network_url }}"
+        retries: 10
+        delay: 30
 
   tags: snarkos_update
 
@@ -170,5 +172,7 @@
       vars:
         node_to_check: localhost
         node_to_compare: "{{ test_network_url }}"
+        retries: 10
+        delay: 30
 
   tags: snarkos_update

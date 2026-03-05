@@ -91,3 +91,5 @@
       vars:
         node_to_check: "localhost"
         node_to_compare: "{{ next_host }}"
+        retries_var: 10
+        delay_var: 30

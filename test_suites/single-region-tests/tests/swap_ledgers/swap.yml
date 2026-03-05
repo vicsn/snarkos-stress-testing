@@ -116,6 +116,8 @@
   vars:
     node_to_check: "{{ node }}"
     node_to_compare: "{{ source_node }}"
+    retries: 10
+    delay: 30
   loop: "{{ current_group }}"
   loop_control:
     loop_var: node
