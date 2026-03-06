@@ -34,16 +34,12 @@
       ignore_errors: yes # in case we never deployed malice
 
     - name: Remove existing ledgers on validators
+      # Also remove the proposal cache, so it is not out of sync with the ledger
       ansible.builtin.shell: |
         set -euo pipefail
         shopt -s nullglob dotglob
-        for d in /home/ubuntu/.ledger-*; do
-          [ -d "$d" ] || continue
-          find "$d" -mindepth 1 -maxdepth 1 \
-            ! -name 'cached_router_peers' \
-            ! -name 'cached_gateway_peers' \
-            -exec rm -rf {} +
-        done
+        rm -rf .ledger-*
+        rm -rf .node-data-*/current-proposal-cache
       args:
         executable: /bin/bash
 
@@ -70,7 +66,7 @@
     # restart the next node. The set of (stopped+syncing) nodes is at most f.
     # Moreover, syncing nodes should be able to sync up to MAX_BLOCKS_BEHIND
     # to participate in consensus again.
-- name: Check if the node is synced.
+    - name: Check if the node is synced.
       include_tasks: ../../playbooks/is_synced.yml
       when: next_host != 'none'
       vars:
