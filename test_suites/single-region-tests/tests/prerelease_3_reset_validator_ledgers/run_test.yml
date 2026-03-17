@@ -87,7 +87,7 @@
       vars:
         node_to_check: localhost
         node_to_compare: "{{ next_host }}"
-        retries_var: 20
+        retries_var: 30
         delay_var: 30
 
   roles:
