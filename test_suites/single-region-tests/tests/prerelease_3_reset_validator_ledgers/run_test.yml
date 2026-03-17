@@ -57,6 +57,21 @@
       set_fact:
         non_batch_hosts: "{{ all_hosts | difference(ansible_play_batch | default([])) | list }}"
 
+    # Print the non_batch_hosts
+    - name: Print non_batch_hosts
+      debug:
+        msg: "non_batch_hosts: {{ non_batch_hosts }}"
+  
+    # Print the all_hosts
+    - name: Print all_hosts
+      debug:
+        msg: "all_hosts: {{ all_hosts }}"
+
+    # Print the ansible_play_batch
+    - name: Print ansible_play_batch
+      debug:
+        msg: "ansible_play_batch: {{ ansible_play_batch }}"
+
     - name: Choose the next host outside the batch
       set_fact:
         next_host: "{{ non_batch_hosts | first | default('none') }}"
@@ -72,7 +87,7 @@
       vars:
         node_to_check: localhost
         node_to_compare: "{{ next_host }}"
-        retries_var: 10
+        retries_var: 20
         delay_var: 30
 
   roles:
