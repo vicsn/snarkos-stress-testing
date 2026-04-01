@@ -122,24 +122,20 @@
           }}
       when: not s3_binary_exists
 
-    - name: Enable locktick build features in Cargo.toml
-      become_user: ubuntu
-      shell: |
-        tmp="$(mktemp)"
-        sed 's/^# debug = "line-tables-only"/debug = "line-tables-only"/' Cargo.toml > "$tmp"
-        mv "$tmp" Cargo.toml
-        sed 's/^# strip = "none"/strip = "none"/' Cargo.toml > "$tmp"
-        mv "$tmp" Cargo.toml
-      args:
-        executable: /bin/bash
-        chdir: /home/ubuntu/snarkOS
+    - name: Set profile flag
+      set_fact:
+        profileflags: >-
+          {{
+            "--profile release-locktick" if (features is defined and 'locktick' in features)
+            else ""
+          }}
       when:
         - features is defined and 'locktick' in features
         - not s3_binary_exists
 
     - name: Source cargo env and install snarkOS with git CLI
       become_user: ubuntu
-      ansible.builtin.shell: source /home/ubuntu/.cargo/env && cargo install --force --locked --path . {{ featureflags }}
+      ansible.builtin.shell: source /home/ubuntu/.cargo/env && cargo install --force --locked --path . {{ featureflags }} {{ profileflags }}
       args:
         executable: /bin/bash
         chdir: /home/ubuntu/snarkOS
