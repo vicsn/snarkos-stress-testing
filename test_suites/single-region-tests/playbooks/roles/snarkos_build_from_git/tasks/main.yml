@@ -130,7 +130,6 @@
             else ""
           }}
       when:
-        - features is defined and 'locktick' in features
         - not s3_binary_exists
 
     - name: Source cargo env and install snarkOS with git CLI
