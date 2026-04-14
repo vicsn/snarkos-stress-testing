@@ -27,9 +27,17 @@
         state: stopped
       ignore_errors: true # in case we never deployed malice
 
-    - name: Remove existing ledger and batch proposal directories on validators
+    - name: Remove existing ledger and node data directories on validators
       ansible.builtin.shell:
-        cmd: "rm -rf /home/ubuntu/.ledger-* && rm -rf /home/ubuntu/.current-proposal-cache* && rm /tmp/snarkos.log && rm /home/ubuntu/consensus_timing_block_*.json"
+        cmd: |
+          rm -rf /home/ubuntu/.ledger-* || true
+          rm -rf /home/ubuntu/.node-data* || true
+
+    - name: Remove existing log files
+      ansible.builtin.shell:
+        cmd: |
+          rm /tmp/snarkos.log || true
+          rm /home/ubuntu/consensus_timing_block_*.json || true
   roles:
     - snarkos_service
   tags: snarkos

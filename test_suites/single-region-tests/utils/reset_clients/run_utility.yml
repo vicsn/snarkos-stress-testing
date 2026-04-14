@@ -21,9 +21,11 @@
         name: snarkos
         state: stopped
 
-    - name: Remove existing .ledger-* directories on clients
+    - name: Remove existing ledger and node data directories on clients
       ansible.builtin.shell:
-        cmd: "rm -rf /home/ubuntu/.ledger-*"
+        cmd: |
+          rm -rf /home/ubuntu/.ledger-* || true
+          rm -rf /home/ubunuu/.node-data-* || true
 
     # - name: Reinstall snarkOS from a specific branch
     #   include_tasks: ../../playbooks/reinstall_with_branch.yml
