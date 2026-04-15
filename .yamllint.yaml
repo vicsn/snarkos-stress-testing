@@ -13,8 +13,13 @@ rules:
     level: warning
   commas:
     level: warning
-  comments: disable
+  comments:
+    min-spaces-from-content: 1
+    require-starting-space: false
   comments-indentation: disable
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
   document-start: disable
   empty-lines:
     level: warning

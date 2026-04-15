@@ -25,7 +25,7 @@
       ansible.builtin.shell:
         cmd: |
           rm -rf /home/ubuntu/.ledger-* || true
-          rm -rf /home/ubunuu/.node-data-* || true
+          rm -rf /home/ubuntu/.node-data-* || true
 
     # - name: Reinstall snarkOS from a specific branch
     #   include_tasks: ../../playbooks/reinstall_with_branch.yml

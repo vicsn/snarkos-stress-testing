@@ -101,7 +101,7 @@
       pause:
         prompt: "How many validators do you expect in the target network?"
       register: num_validators
-      when: num_validators_value == ""
+      when: not num_validators_value
 
     - name: Set unified num_validators_fact from pause or env
       set_fact:

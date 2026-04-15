@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ansible-lint
+        name: Ansible Lint
+        entry: ./lint.sh
+        language: script
+        pass_filenames: false
+        always_run: true

@@ -61,7 +61,7 @@
     - name: Print non_batch_hosts
       debug:
         msg: "non_batch_hosts: {{ non_batch_hosts }}"
-  
+
     # Print the all_hosts
     - name: Print all_hosts
       debug:
