@@ -3,8 +3,6 @@
 ulimit -n 2048
 
 PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
-bold=$(tput bold)
-normal=$(tput sgr0)
 
 STACK_NAME="client-sync-tests"
 DEVNET_NAME_VALUE="network-sync-tests"
@@ -108,7 +106,7 @@ check_snapshot_freshness() {
 
         if [[ -z "${TF_APPLY_ARGS}" ]]; then
           while true; do
-              read -p "Do you want to continue anyway? (y/n) " response
+              read -r -p "Do you want to continue anyway? (y/n) " response
               case "$response" in
                   [Yy]* ) return 0;;
                   [Nn]* ) return 1;;
@@ -140,14 +138,15 @@ cleanup() {
     echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
 
     if [[ -z "${TF_APPLY_ARGS}" ]]; then
-      read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+      read -r -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
     fi
 
     destroy_infrastructure
 }
 
 set_devnet_vars() {
-  export DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+  DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+  export DEVNET_NAME
 
   echo "devnet_name : $DEVNET_NAME"
 }
@@ -205,7 +204,7 @@ fi
 if [[ -z "$NETWORK" ]]; then
   # Ask the user which network they want to run or if they want to skip
   while true; do
-      read -p "Do you want to run the network for canary(c), testnet (t), mainnet (m), or skip and destroy (s)? " NETWORK_TYPE
+      read -r -p "Do you want to run the network for canary(c), testnet (t), mainnet (m), or skip and destroy (s)? " NETWORK_TYPE
       if [[ "$NETWORK_TYPE" == "c" || "$NETWORK_TYPE" == "t" || "$NETWORK_TYPE" == "m" || "$NETWORK_TYPE" == "s" ]]; then
           break
       else
@@ -216,7 +215,7 @@ if [[ -z "$NETWORK" ]]; then
   # Check if the user wants to skip
   if [ "$NETWORK_TYPE" == "s" ]; then
       echo "Skipping network setup and proceeding to infrastructure destruction..."
-      read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+      read -r -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
       destroy_infrastructure
       exit 0
   fi
@@ -298,7 +297,7 @@ echo "Updated variables.tf with $SNAPSHOT_COUNT clients."
 init_and_apply_terraform
 
 # Read the load balancer DNS name from lb_url.txt
-LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
 
 set_devnet_vars || exit 1
 
@@ -317,7 +316,7 @@ fi
 
 if [[ -z "${TF_APPLY_ARGS}" ]]; then
   # Wait for user input before destroying the infrastructure
-  read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+  read -r -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
 
   # Call destroy_infrastructure function directly instead of cleanup
   destroy_infrastructure

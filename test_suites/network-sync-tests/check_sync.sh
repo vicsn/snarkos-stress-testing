@@ -112,6 +112,7 @@ get_keys() { jq -r 'keys[]' "$JSON_FILE"; }
 # Ensure required fields exist so we can resume cleanly.
 init_key() {
   local h="$1"
+  # shellcheck disable=SC2016
   jq_inplace \
     --arg h "$h" \
     --argjson init "$h" \
@@ -162,7 +163,9 @@ one_iteration() {
     prev="$(get_field "$h" '.previous_height')"
     ts_iso="$(get_field "$h" '.timestamp')"
     ts_epoch=""
-    [[ -n "$ts_iso" ]] && ts_epoch="$(iso_to_epoch "$ts_iso")" || true
+    if [[ -n "$ts_iso" ]]; then
+        ts_epoch="$(iso_to_epoch "$ts_iso")"
+    fi
     init=$((10#$h))
     prev=${prev:-$init}
     the=$((init + SUCCESS_DELTA))

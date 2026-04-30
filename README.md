@@ -21,3 +21,10 @@ Then, activate the hook.
 ```bash
 pre-commit install
 ```
+
+You may also need to install a newer version of bash and shellcheck if you are on MacOS.
+
+For example, you can install them through homebrew using this command.
+```
+brew install bash shellcheck
+```

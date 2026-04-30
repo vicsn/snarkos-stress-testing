@@ -16,7 +16,6 @@ export TF_VAR_devnet_name="${DEVNET_NAME:-single-region-tests}"
 
 # Bucket for the logs:
 RESULTS_AND_LOGS_BUCKET="${RESULTS_AND_LOGS_BUCKET:-provable-logs-results}"
-TEST_RUNNER="${STRESS_TEST_RUNNER:-$USER}"
 DATE_OF_RUN=$(date -u '+%Y%m%dT%H%M%SZ')
 BASE_BUCKET_PATH="manual_test_runs/$USER/$DATE_OF_RUN"
 
@@ -62,23 +61,25 @@ download_and_upload_logs() {
 
   echo "Uploading test logs to S3..."
 
-  if test -d $PARENT_DIR/log_files; then
-    for log_file in $PARENT_DIR/log_files/*
+  if test -d "$PARENT_DIR/log_files"; then
+    for log_file in "$PARENT_DIR/log_files/"*
     do
         if test -f "$log_file"
         then
-          local destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/$(basename ${log_file})"
+          local destination
+          destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/$(basename "$log_file")"
           echo "Copying $log_file to $destination ..."
-          aws s3 cp $log_file $destination --profile ephnet
+          aws s3 cp "$log_file" "$destination" --profile ephnet
         fi
     done
   fi
 
-  if test -f $PARENT_DIR/observability_runner.log; then
-    local destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/observability_runner.log"
-    aws s3 cp "$PARENT_DIR/observability_runner.log" $destination --profile ephnet
+  if test -f "$PARENT_DIR/observability_runner.log"; then
+    local destination
+    destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/observability_runner.log"
+    aws s3 cp "$PARENT_DIR/observability_runner.log" "$destination" --profile ephnet
 
-    rm -f $PARENT_DIR/observability_runner.log
+    rm -f "$PARENT_DIR/observability_runner.log"
   fi
 
   echo "Log files uploaded to https://console.aws.amazon.com/s3/buckets/$RESULTS_AND_LOGS_BUCKET?prefix=$BASE_BUCKET_PATH/$test_ran/"
@@ -92,21 +93,24 @@ react_on_exit() {
 }
 
 set_network_vars() {
-  export NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+  NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+  export NETWORK
 
   if [[ -z "${NETWORK}" || "$NETWORK" == *"No outputs found"* ]]; then
     echo "Output 'snarkos_network' not found. Applying noop target to generate it..."
 
-    cp $PARENT_DIR/terraform/variables.tf.light $PARENT_DIR/terraform/variables.tf
+    cp "$PARENT_DIR/terraform/variables.tf.light" "$PARENT_DIR/terraform/variables.tf"
 
     cd "$PARENT_DIR/terraform"
     terraform init > /dev/null
     terraform apply -target=null_resource.noop -var="owner=$OWNER" -auto-approve > /dev/null
-    export NETWORK=$(TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
-    cd $PARENT_DIR
+    NETWORK=$(TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
+    export NETWORK
+    cd "$PARENT_DIR"
   fi
 
-  export DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+  DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+  export DEVNET_NAME
 
   echo "devnet_name : $DEVNET_NAME"
 
@@ -129,13 +133,13 @@ set_network_vars() {
 
 # Function to init and apply Terraform
 init_and_apply_terraform() {
-    cd $PARENT_DIR/terraform
+    cd "$PARENT_DIR/terraform"
     terraform init
 
     terraform apply -var="owner=$OWNER"
     # Save the load balancer DNS name
-    terraform output -raw snarkos_lb_dns_name > $PARENT_DIR/lb_url.txt
-    LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+    terraform output -raw snarkos_lb_dns_name > "$PARENT_DIR/lb_url.txt"
+    LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
     set_network_vars || exit 1
 
     # Save updated IP addresses
@@ -175,7 +179,7 @@ run_test() {
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
         cd "$PARENT_DIR/tests/$SELECTED/"
-        ./check.sh $NETWORK
+        ./check.sh "$NETWORK"
     fi
 
     # Run any post-test script
@@ -218,7 +222,7 @@ run_utility() {
     # Run a check script if available
     if [ -x "$PARENT_DIR/utils/$SELECTED/check.sh" ]; then
         cd "$PARENT_DIR/utils/$SELECTED/"
-        ./check.sh $NETWORK
+        ./check.sh "$NETWORK"
     fi
 
     # Run any post-utility script
@@ -245,6 +249,7 @@ if [[ "${1:-}" == "destroy" ]]; then
   RUN_UTILITIES="n"
 
   cd "$SCRIPT_DIR"
+  # shellcheck source=./destroy_infra.sh
   source destroy_infra.sh
 
   # Exit without running the rest of the script
@@ -275,36 +280,37 @@ else
 fi
 
 # Ask if terraform should be run
-read -p "Do you want to provision machines? (h)eavy / (l)ight / (pr)erelease / (n)o ): " RUN_TERRAFORM
+read -r -p "Do you want to provision machines? (h)eavy / (l)ight / (pr)erelease / (n)o ): " RUN_TERRAFORM
 # Ask if the nodes should be setup.
-read -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
+read -r -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
 # Ask if any tests should be run
-read -p "Do you want to select a test to run? (y/n): " RUN_TESTS
+read -r -p "Do you want to select a test to run? (y/n): " RUN_TESTS
 # Ask if any tests should be run
-read -p "Do you want to select a utility to run? (y/n): " RUN_UTILITIES
+read -r -p "Do you want to select a utility to run? (y/n): " RUN_UTILITIES
 
 # Find and list all tests
-TESTS=($(find tests -maxdepth 1 -mindepth 1 -type d | while read f; do basename "$f"; done | sort))
+mapfile -t TESTS < <(find tests -maxdepth 1 -mindepth 1 -type d | while read -r f; do basename "$f"; done | sort)
 export TESTS
 
-UTILITIES=($(find utils -maxdepth 1 -mindepth 1 -type d | while read f; do basename "$f"; done | sort))
+mapfile -t UTILITIES < <(find utils -maxdepth 1 -mindepth 1 -type d | while read -r f; do basename "$f"; done | sort)
 export UTILITIES
 
 # Optionally select test to run
 if [ "$RUN_TESTS" == "y" ]; then
     # first select the test to run
+    # shellcheck source=./select_test.sh
     source select_test.sh
 fi
 
 # Optionally initialize and apply Terraform
 if [ "$RUN_TERRAFORM" == "h" ]; then
-    cp $PARENT_DIR/terraform/variables.tf.heavy $PARENT_DIR/terraform/variables.tf
+    cp "$PARENT_DIR/terraform/variables.tf.heavy" "$PARENT_DIR/terraform/variables.tf"
     init_and_apply_terraform
 elif [ "$RUN_TERRAFORM" == "l" ]; then
-    cp $PARENT_DIR/terraform/variables.tf.light $PARENT_DIR/terraform/variables.tf
+    cp "$PARENT_DIR/terraform/variables.tf.light" "$PARENT_DIR/terraform/variables.tf"
     init_and_apply_terraform
 elif [ "$RUN_TERRAFORM" == "pr" ]; then
-    cp $PARENT_DIR/terraform/variables.tf.prerelease $PARENT_DIR/terraform/variables.tf
+    cp "$PARENT_DIR/terraform/variables.tf.prerelease" "$PARENT_DIR/terraform/variables.tf"
     init_and_apply_terraform
 elif [ "$RUN_TERRAFORM" == "n" ]; then
     echo "Skipping Terraform..."
@@ -314,7 +320,7 @@ else
 fi
 
 # Read the load balancer DNS name from lb_url.txt
-LB_URL=$(cat $PARENT_DIR/lb_url.txt)
+LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
 
 # Optionally run Ansible playbook to setup services
 if [ "$RUN_SETUP" == "y" ]; then
@@ -359,7 +365,7 @@ if [ "$RUN_TESTS" == "y" ]; then
     elif [ "$SELECTED" == "prerelease" ]; then
         echo Running prerelease tests...
 
-        PRERELEASE_TESTS=($(printf "%s\n" "${TESTS[@]}" | grep '^prerelease_'))
+        mapfile -t PRERELEASE_TESTS < <(printf "%s\n" "${TESTS[@]}" | grep '^prerelease_')
         for test in "${PRERELEASE_TESTS[@]}"; do
             export SELECTED=$test
             run_test
@@ -376,7 +382,8 @@ fi
 # Optionally select test to run
 if [ "$RUN_UTILITIES" == "y" ]; then
     # first select the test to run
-    source $PARENT_DIR/select_utility.sh
+    # shellcheck source=./select_utility.sh
+    source "$PARENT_DIR/select_utility.sh"
 fi
 
 # Optionally run utilities

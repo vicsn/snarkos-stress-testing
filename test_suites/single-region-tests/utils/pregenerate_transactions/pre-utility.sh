@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd ../../terraform_tx_cannon
+cd ../../terraform_tx_cannon || exit
 # Add tx-cannon nodes.
 echo "Adding transaction sender nodes"
 terraform init

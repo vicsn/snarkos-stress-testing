@@ -59,17 +59,17 @@ while IFS= read -r ip
 do
     # Fetch the block for the maxBlockHeight
     response=$(curl -s "http://$ip:3030/$network/block/$maxBlockHeight")
-    blockHash=$(echo $response | jq -r '.block_hash')
+    blockHash=$(echo "$response" | jq -r '.block_hash')
 
     # Append the block hash to the blockHashes string
     blockHashes+="$blockHash "
 done < "$ipFile"
 
 # Use unique sorting of hashes to check if all are identical
-uniqueHash=$(echo $blockHashes | tr ' ' '\n' | sort -u | tr '\n' ' ')
+uniqueHash=$(echo "$blockHashes" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
 # Count unique hashes
-uniqueCount=$(echo $uniqueHash | wc -w)
+uniqueCount=$(echo "$uniqueHash" | wc -w)
 
 # Compare the number of unique hashes to determine if a fork has occurred
 if [ "$uniqueCount" -eq 1 ]; then

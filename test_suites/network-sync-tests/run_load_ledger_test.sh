@@ -3,8 +3,6 @@
 ulimit -n 2048
 
 PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
-bold=$(tput bold)
-normal=$(tput sgr0)
 
 STACK_NAME="load-ledger-tests"
 LB_FILE="$PARENT_DIR/lb_url_${STACK_NAME}.txt"
@@ -124,13 +122,14 @@ fi
 cleanup() {
   echo "An error occurred or finished. Destroying infrastructure to avoid unnecessary costs..."
   if [[ -z "${TF_APPLY_ARGS}" ]]; then
-    read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+    read -r -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
   fi
   destroy_infrastructure
 }
 
 set_devnet_vars() {
-  export DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+  DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+  export DEVNET_NAME
   echo "devnet_name : $DEVNET_NAME"
 }
 
@@ -273,7 +272,7 @@ rm -f "$tmp_json" "$tmp_list"
 EXPECTED="${#NETWORKS[@]}"
 if [ "${#CLIENTS[@]}" -lt "${EXPECTED}" ]; then
   echo "Waiting for snarkos_client hosts to appear in inventory… (need ${EXPECTED})"
-  for attempt in {1..10}; do
+  for _ in {1..10}; do
     sleep 6
     tmp_json="$(mktemp)"
     tmp_list="$(mktemp)"
@@ -360,6 +359,6 @@ if [ "$(uname)" == "Darwin" ]; then
 fi
 
 if [[ -z "${TF_APPLY_ARGS}" ]]; then
-  read -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
+  read -r -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
   destroy_infrastructure
 fi

@@ -2,7 +2,7 @@
 
 # We should be cd-ed into the test folder
 
-cd ../../terraform_tx_cannon
+cd ../../terraform_tx_cannon || exit
 # Add tx-cannon nodes.
 echo "Adding tx-cannon nodes"
 terraform init -migrate-state

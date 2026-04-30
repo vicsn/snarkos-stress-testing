@@ -29,7 +29,7 @@ function select_utility() {
       # Only print error message if this is not the first iteration
       [[ -n "$UTILITY_NUM" ]] && echo "Invalid input. Please enter a number from 0 to $NUM_OPTIONS." >&2
 
-      read -p "Enter the number of the utility to run: " UTILITY_NUM
+      read -r -p "Enter the number of the utility to run: " UTILITY_NUM
     else
       break
     fi

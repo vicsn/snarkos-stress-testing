@@ -3,8 +3,6 @@
 isuint() { [[ "$1" =~ ^[0-9]+$ ]]; }
 
 function select_test() {
-  NUM_TESTS=${#TESTS[@]}
-
   echo "" >&2
   echo "=============================" >&2
   echo "Select group of tests to run:" >&2
@@ -35,7 +33,7 @@ function select_test() {
       # Only print error message if this is not the first iteration
       [[ -n "$TEST_NUM" ]] && echo "Invalid input. Please enter a number from 0 to $NUM_OPTIONS." >&2
 
-      read -p "Enter the number of the test to run: " TEST_NUM
+      read -r -p "Enter the number of the test to run: " TEST_NUM
     else
       break
     fi

@@ -26,19 +26,19 @@ create_or_update_secret() {
 }
 
 # Set GitHub token
-read -p "Enter GitHub token: " github_token
+read -r -p "Enter GitHub token: " github_token
 create_or_update_secret "github_token" "$github_token"
 
 # Set cloud ID
-read -p "Enter cloud ID: " cloud_id
+read -r -p "Enter cloud ID: " cloud_id
 create_or_update_secret "cloud_id" "$cloud_id"
 
 # Set Elastic API key
-read -p "Enter Elastic API key: " elastic_api_key
+read -r -p "Enter Elastic API key: " elastic_api_key
 create_or_update_secret "elastic_api_key" "$elastic_api_key"
 
 # Set Grafana Cloud API key
-read -p "Enter Grafana Cloud API key: " grafana_cloud_api_key
+read -r -p "Enter Grafana Cloud API key: " grafana_cloud_api_key
 create_or_update_secret "grafana_cloud_api_key" "$grafana_cloud_api_key"
 
 echo "All secrets have been set in AWS Secrets Manager using the $AWS_PROFILE profile."
