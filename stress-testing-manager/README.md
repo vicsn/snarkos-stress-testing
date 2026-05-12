@@ -80,7 +80,7 @@ Navigate to `infrastructure` and run:
 ./tf_stack.sh plan
 
 # Apply stress test manager infrastructure (no staging)
-./tf_stack.sh apply --auto-approve
+./tf_stack.sh provision --auto-approve
 ```
 
 This will create the Stress Testing Manager using the base image from the previous section as base.
@@ -99,12 +99,12 @@ This creates a second, isolated copy of the stack in the same AWS account/region
 
 ```
 ./tf_stack.sh plan --staging
-./tf_stack.sh apply --staging --auto-approve
+./tf_stack.sh provision --staging --auto-approve
 ```
 
 Staging uses a separate Terraform workspace (staging) and resource names are suffixed so it does not collide with the main (default) Stress Testing Manager.
 
-### Provisioning with Ansible
+### Setup with Ansible
 
 Before running anything modify the `env-default` or `env-staging` with the right environment variable values and source it:
 
@@ -117,17 +117,18 @@ vim .env # modify values
 source .env
 ```
 
-Provisioning is done by Ansible (infrastructure/ansible/playbook.yml) and is triggered via the wrapper script.
-To (re)run provisioning against the existing manager instance:
+Setup is done by Ansible (`infrastructure/ansible/playbook.yml`). Terraform only manages infrastructure; the wrapper script runs `ansible-playbook` locally (it reads the manager IP from `terraform output`).
+
+To (re)run Ansible setup against the existing manager instance:
 
 ```
-./tf_stack.sh provision
+./tf_stack.sh setup
 ```
 
 or for staging:
 
 ```
-./tf_stack.sh provision --staging
+./tf_stack.sh setup --staging
 ```
 
 It does:
@@ -148,12 +149,12 @@ By default:
 To deploy staging using specific branches:
 
 ```
-./tf_stack.sh apply --staging --auto-approve \
+./tf_stack.sh provision --staging --auto-approve \
   --talisker-branch your-talisker-branch \
   --stress-testing-branch your-stress-testing-branch
 
-# then provision (or just provision if infra already exists)
-./tf_stack.sh provision --staging \
+# then setup (or just setup if infra already exists)
+./tf_stack.sh setup --staging \
   --talisker-branch your-talisker-branch \
   --stress-testing-branch your-stress-testing-branch
 ```
@@ -182,19 +183,19 @@ For staging, in similar fashion:
 Just run:
 
 ```
-./tf_stack.sh provision
+./tf_stack.sh setup
 ```
 
 or for staging
 
 ```
-./tf_stack.sh provision --staging
+./tf_stack.sh setup --staging
 ```
 
 in the `infrastructure` folder.
 
 This will re-run the Ansible playbook against the existing instance.
-No infrastructure changes are applied unless explicitly requested via apply.
+No infrastructure changes are applied unless explicitly requested via provision.
 
 ## The stress-testing-manager logic
 

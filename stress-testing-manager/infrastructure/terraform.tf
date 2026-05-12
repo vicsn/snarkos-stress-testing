@@ -18,7 +18,7 @@ variable "RESULTS_BUCKET" {
   default = "provable-logs-results"
 }
 
-# Can be overwritten with setting `TF_VAR_PUBLIC_KEY_PATH=...` before `terraform apply`
+# Can be overwritten with setting `TF_VAR_PUBLIC_KEY_PATH=...` before `./tf_stack.sh provision` (or any terraform apply)
 variable "PUBLIC_KEY_PATH" {
   default = "~/.ssh/id_ed25519.pub"
 }
@@ -49,11 +49,6 @@ variable "STRESS_TESTING_BRANCH" {
   default = "main"
 }
 
-variable "PROVISION_RUN_ID" {
-  type    = string
-  default = ""
-}
-
 variable "PRE_RELEASE_PREFIX" {
   type    = string
   default = "prerelease"
@@ -69,8 +64,10 @@ variable "LOAD_LEDGER_PREFIX" {
   default = "load-ledger"
 }
 
-variable github_token {
-  sensitive = true
+variable "github_token" {
+  sensitive   = true
+  default     = ""
+  description = "Not used by Terraform resources. Set TF_VAR_github_token so ./tf_stack.sh setup can pass it to the playbook."
 }
 
 terraform {

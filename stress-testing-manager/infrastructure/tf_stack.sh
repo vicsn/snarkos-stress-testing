@@ -14,16 +14,17 @@ STRESS_TESTING_BRANCH="main"
 usage() {
   cat <<'EOF'
 Usage:
-  tf_stack.sh apply [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
-  tf_stack.sh provision [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
+  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh provision [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
+  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh setup [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [-- ...extra terraform args]
   tf_stack.sh destroy [--staging|--workspace NAME] [--auto-approve] [--force] [-- ...extra terraform args]
   tf_stack.sh plan [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh output [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh ip [--staging|--workspace NAME] [-- ...extra terraform args]
 
 Notes:
+  - provision runs terraform apply only. setup runs Ansible against the instance IP from terraform output (no terraform apply).
   - default workspace is production, --staging maps to workspace "staging".
-  - you may want to set TF_VAR_PUBLIC_KEY_PATH when provisioning.
+  - set TF_VAR_github_token and other TF_VAR_* the same way as for terraform (e.g. when running provision); see env-default / env-staging.
   - destroy on default is blocked unless --force is provided.
   - pass extra terraform args after -- (e.g. -- -var-file=staging.tfvars)
 EOF
@@ -54,6 +55,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "$ACTION" in
+  provision|destroy|plan|output|ip|setup) ;;
+  *) usage; die "Unknown action: $ACTION" ;;
+esac
+
 if [[ "$WORKSPACE" == "default" && "$TALISKER_BRANCH" != "master" ]]; then
   die "--talisker-branch is only allowed with --staging/--workspace (non-default)"
 fi
@@ -62,12 +68,50 @@ if [[ "$WORKSPACE" == "default" && "$STRESS_TESTING_BRANCH" != "main" ]]; then
   die "--stress-testing-branch is only allowed with --staging/--workspace (non-default)"
 fi
 
-case "$ACTION" in
-  apply|destroy|plan|output|ip|provision) ;;
-  *) usage; die "Unknown action: $ACTION" ;;
-esac
-
 cd "$TF_DIR"
+
+# Run Ansible against the manager instance (reads IP from terraform output). Does not run terraform apply.
+run_ansible_playbook() {
+  : "${TF_VAR_github_token:?Set TF_VAR_github_token (e.g. source your .env)}"
+  local manager_ip
+  manager_ip="$(terraform output -raw stress_testing_manager_public_ip)"
+
+  echo "==> waiting for SSH on $manager_ip"
+  until nc -z -v -w5 "$manager_ip" 22; do
+    echo "Waiting for $manager_ip to be ready..."
+    sleep 2
+  done
+  ssh-keyscan -H "$manager_ip" >> ~/.ssh/known_hosts
+
+  local pre_release_prefix="${TF_VAR_PRE_RELEASE_PREFIX:-prerelease}"
+  local sync_prefix="${TF_VAR_SYNC_PREFIX:-sync}"
+  local load_ledger_prefix="${TF_VAR_LOAD_LEDGER_PREFIX:-load-ledger}"
+  local releases_bucket="${TF_VAR_RELEASES_BUCKET:-provable-binaries-releases}"
+  local results_bucket="${TF_VAR_RESULTS_BUCKET:-provable-logs-results}"
+  local elastic_cloud_id="${TF_VAR_ELASTIC_CLOUD_ID:-your_elastic_cloud_id_here}"
+  local elastic_api_key="${TF_VAR_ELASTIC_API_KEY:-your_elastic_api_key_here}"
+  local grafana_cloud_api_key="${TF_VAR_GRAFANA_CLOUD_API_KEY:-your_grafana_cloud_api_key_here}"
+
+  echo "==> ansible-playbook (inventory $manager_ip)"
+  (
+    cd "${TF_DIR}/ansible"
+    ansible-playbook \
+      --extra-vars "github_token=${TF_VAR_github_token}" \
+      --extra-vars "stress_testing_branch=${STRESS_TESTING_BRANCH}" \
+      --extra-vars "talisker_branch=${TALISKER_BRANCH}" \
+      --extra-vars "pre_release_prefix=${pre_release_prefix}" \
+      --extra-vars "sync_prefix=${sync_prefix}" \
+      --extra-vars "load_ledger_prefix=${load_ledger_prefix}" \
+      --extra-vars "slack_channel_id=${TF_VAR_SLACK_CHANNEL_ID:-}" \
+      --extra-vars "slack_token=${TF_VAR_SLACK_TOKEN:-}" \
+      --extra-vars "releases_bucket=${releases_bucket}" \
+      --extra-vars "results_bucket=${results_bucket}" \
+      --extra-vars "elastic_cloud_id=${elastic_cloud_id}" \
+      --extra-vars "elastic_api_key=${elastic_api_key}" \
+      --extra-vars "grafana_cloud_api_key=${grafana_cloud_api_key}" \
+      -i "${manager_ip}," playbook.yml
+  )
+}
 
 echo "==> terraform init"
 terraform init -upgrade
@@ -101,32 +145,33 @@ if ((${#APPROVE_ARGS[@]})); then
   TF_APPLY_ARGS+=("${APPROVE_ARGS[@]}")
 fi
 
-echo "==> terraform $ACTION (workspace=$WORKSPACE)"
 case "$ACTION" in
   plan)
+    echo "==> terraform plan (workspace=$WORKSPACE)"
     terraform plan "${TF_COMMON_ARGS[@]}"
     ;;
-  provision)
-    terraform apply \
-      ${TF_APPLY_ARGS[@]+"${TF_APPLY_ARGS[@]}"} \
-      -target=null_resource.ansible_provisioner \
-      -var="PROVISION_RUN_ID=$(date +%s)" \
-      "${TF_COMMON_ARGS[@]}"
+  setup)
+    echo "==> setup: ansible-playbook (workspace=$WORKSPACE)"
+    run_ansible_playbook
     ;;
-  apply)
+  provision)
+    echo "==> terraform apply via provision (workspace=$WORKSPACE)"
     terraform apply \
       ${TF_APPLY_ARGS[@]+"${TF_APPLY_ARGS[@]}"} \
       "${TF_COMMON_ARGS[@]}"
     ;;
   destroy)
+    echo "==> terraform destroy (workspace=$WORKSPACE)"
     terraform destroy \
       ${TF_APPLY_ARGS[@]+"${TF_APPLY_ARGS[@]}"} \
       "${TF_COMMON_ARGS[@]}"
     ;;
   output)
+    echo "==> terraform output (workspace=$WORKSPACE)"
     terraform output ${EXTRA_TF_ARGS[@]+"${EXTRA_TF_ARGS[@]}"}
     ;;
   ip)
-    terraform show ${EXTRA_TF_ARGS[@]+"${EXTRA_TF_ARGS[@]}"} | grep public_ip
+    echo "==> stress_testing_manager_public_ip (workspace=$WORKSPACE)"
+    terraform output -raw stress_testing_manager_public_ip
     ;;
 esac
