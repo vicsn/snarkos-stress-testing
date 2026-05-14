@@ -23,7 +23,7 @@
     - name: Clone the stress-testing repository
       git:
         repo: "https://{{ github_token }}@github.com/ProvableHQ/snarkos-stress-testing.git"
-        dest: "/home/ubuntu/stress_testing"
+        dest: "/home/ubuntu/snarkos-stress-testing"
         version: "{{ stress_testing_branch | default('main') }}"
         force: true
 
@@ -201,22 +201,15 @@
     - name: Set up testing ansible vars
       template:
         src: ansible_vars.yml
-        dest: /home/ubuntu/stress_testing/test_suites/single-region-tests/playbooks/vars.yml
+        dest: /home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests/playbooks/vars.yml
         mode: '0600'
       become: true
 
     - name: Set up sync network testing ansible vars
       template:
         src: sync_network_test_ansible_vars.yml
-        dest: /home/ubuntu/stress_testing/test_suites/network-sync-tests/playbooks/vars.talisker.yml
+        dest: /home/ubuntu/snarkos-stress-testing/test_suites/network-sync-tests/playbooks/vars.talisker.yml
         mode: '0600'
-      become: true
-
-    - name: Set up the auto-run script
-      template:
-        src: auto_run_test_suite.sh
-        dest: /home/ubuntu/stress_testing/test_suites/single-region-tests/auto_run_test_suite.sh
-        mode: '0755'
       become: true
 
     - name: Set up the talisker control script
