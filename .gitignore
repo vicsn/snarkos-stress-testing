@@ -23,7 +23,6 @@
 /test_suites/single-region-tests/playbooks/.last_snarkos_hash
 /test_suites/single-region-tests/tests/_save_deployments/snarkos-shallow/
 /test_suites/single-region-tests/prometheus_server_data/
-/test_suites/single-region-tests/auto_run_test_suite.sh
 /test_suites/single-region-tests/transaction_files/
 /test_suites/single-region-tests/tests/load_saved_transactions/transactions_to_send/
 /test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/target

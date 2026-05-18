@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /usr/bin/env bash
 
 ulimit -n 4096
 
@@ -9,10 +9,17 @@ bold=$(tput bold)
 normal=$(tput sgr0)
 
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
+export TF_STATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
+export TF_VAR_state_bucket="$TF_STATE_BUCKET"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 export OWNER=$USER
+export ANSIBLE_ENABLE_PLUGINS=amazon.aws.aws_ec2
 export TF_VAR_devnet_name="${DEVNET_NAME:-single-region-tests}"
+INVENTORY_FILE="$PARENT_DIR/inventory/dynamic_inventory.aws_ec2.yml"
+
+# Sanitize for Ansible dynamic inventory
+export ANSIBLE_OWNER_GROUP="${OWNER//-/_}"
 
 # Bucket for the logs:
 RESULTS_AND_LOGS_BUCKET="${RESULTS_AND_LOGS_BUCKET:-provable-logs-results}"
@@ -31,7 +38,7 @@ download_and_upload_logs() {
 
   # Cleanup old logs:
   if [ -d "$PARENT_DIR/log_files" ]; then
-    read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans
+    read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans || _ans="n"
     case "$_ans" in
       [yY])
         rm -rf "$PARENT_DIR/log_files"
@@ -89,6 +96,12 @@ react_on_exit() {
   rc=$?
   echo "EXIT (rc: $rc)"
 
+  # If the exit code is not 0 (i.e. an error occurred), grab the logs
+  if [ $rc -ne 0 ]; then
+      echo "Error detected! Downloading and uploading logs before exiting..."
+      download_and_upload_logs
+  fi
+
   exit $rc
 }
 
@@ -111,6 +124,12 @@ set_network_vars() {
 
   DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
   export DEVNET_NAME
+
+  # Sanitize for Ansible dynamic inventory
+  export ANSIBLE_DEVNET_GROUP="${DEVNET_NAME//-/_}"
+
+  export TARGET_PATTERN="devnet_${ANSIBLE_DEVNET_GROUP}:&owner_${ANSIBLE_OWNER_GROUP}"
+  export LIMIT="localhost,${TARGET_PATTERN}"
 
   echo "devnet_name : $DEVNET_NAME"
 
@@ -136,15 +155,54 @@ init_and_apply_terraform() {
     cd "$PARENT_DIR/terraform"
     terraform init
 
-    terraform apply -var="owner=$OWNER"
+    terraform apply -auto-approve -var="owner=$OWNER"
     # Save the load balancer DNS name
     terraform output -raw snarkos_lb_dns_name > "$PARENT_DIR/lb_url.txt"
     LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
     set_network_vars || exit 1
 
+    echo "Terraform finished; giving the AWS API some time to sync the tags..."
+
+    MAX_RETRIES=20
+    SLEEP_INTERVAL=5
+    RETRY_COUNT=0
+
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        # Use Ansible to count matched hosts.
+        # (Redirects stderr to /dev/null to hide the noisy warnings while it fails)
+        HOST_COUNT=$(ansible -i "$INVENTORY_FILE" "$TARGET_PATTERN" --list-hosts 2>/dev/null | grep -o 'hosts ([0-9]*)' | grep -o '[0-9]*')
+
+        # If we got a valid number back and it's greater than 0, the tags are synced!
+        if [[ -n "$HOST_COUNT" ]] && [[ "$HOST_COUNT" -gt 0 ]]; then
+            echo "Success! AWS synced the tags. Ansible sees $HOST_COUNT matching hosts."
+            break
+        fi
+
+        echo "Waiting for tags to sync... (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES)"
+        sleep $SLEEP_INTERVAL
+        RETRY_COUNT=$((RETRY_COUNT+1))
+    done
+
+    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+        echo "ERROR: Timeout waiting for AWS tags to propagate. Ansible cannot find the target hosts."
+        exit 1 # Abort the script so we don't run empty playbooks
+    fi
+
+    echo "AWS and Ansible vars:"
+    env | grep -iE "aws|ansible|profile"
+
+    echo "Ansible inventory graph:"
+    ansible-inventory -i "$PARENT_DIR/inventory/dynamic_inventory.aws_ec2.yml" --graph
+
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook ips.yml --extra-vars="devnet_name=${DEVNET_NAME}" --extra-vars="snarkos_network=${NETWORK}" --extra-vars="snarkos_network_int=${NETWORK_INT}" --extra-vars "test_network_url=${LB_URL}" --extra-vars="@vars.yml"
+    ansible-playbook -i "$INVENTORY_FILE" ips.yml \
+      --limit "$LIMIT" \
+      --extra-vars="devnet_name=${DEVNET_NAME}" \
+      --extra-vars="snarkos_network=${NETWORK}" \
+      --extra-vars="snarkos_network_int=${NETWORK_INT}" \
+      --extra-vars "test_network_url=${LB_URL}" \
+      --extra-vars="@${VARS}.yml"
 
     # Tell it like it is
     if [ "$(uname)" == "Darwin" ]; then
@@ -167,14 +225,15 @@ run_test() {
 
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_test.yml \
+    ansible-playbook -i "$INVENTORY_FILE" run_test.yml \
+      --limit "$LIMIT" \
       --extra-vars="devnet_name=${DEVNET_NAME}" \
       --extra-vars="snarkos_network=${NETWORK}" \
       --extra-vars="snarkos_network_int=${NETWORK_INT}" \
       --extra-vars="test_name=$SELECTED" \
       --extra-vars="test_network_url=${LB_URL}" \
       --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
-      --extra-vars="@vars.yml"
+      --extra-vars="@${VARS}.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/tests/$SELECTED/check.sh" ]; then
@@ -210,14 +269,15 @@ run_utility() {
 
     # Run the utility
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook run_utility.yml \
+    ansible-playbook -i "$INVENTORY_FILE" run_utility.yml \
+      --limit "$LIMIT" \
       --extra-vars="devnet_name=${DEVNET_NAME}" \
       --extra-vars="snarkos_network=${NETWORK}" \
       --extra-vars="snarkos_network_int=${NETWORK_INT}" \
       --extra-vars="utility_name=$SELECTED" \
       --extra-vars="test_network_url=${LB_URL}" \
       --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
-      --extra-vars="@vars.yml"
+      --extra-vars="@${VARS}.yml"
 
     # Run a check script if available
     if [ -x "$PARENT_DIR/utils/$SELECTED/check.sh" ]; then
@@ -238,24 +298,94 @@ run_utility() {
     fi
 }
 
-# ---- Cleanup, if provided does a cleanup and exits ----
-if [[ "${1:-}" == "destroy" ]]; then
-  echo "Destroying infrastructure..."
+# ---- Parse command line arguments ----
+ARG_PROVISION=""
+ARG_RUN_SETUP=""
+ARG_NO_SETUP=""
+ARG_NO_UTILITY=""
+ARG_TEST=""
+ARG_NO_TEST=""
+ARG_UTILITY=""
+ARG_VARS=""
 
-  # Ensure non-interactive behavior
-  RUN_TERRAFORM="n"
-  RUN_SETUP="n"
-  RUN_TESTS="n"
-  RUN_UTILITIES="n"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h)
+            echo "Usage: $(basename "$0") [COMMAND] [OPTIONS]"
+            echo ""
+            echo "Commands:"
+            echo "  destroy                    Destroy provisioned infrastructure"
+            echo ""
+            echo "Options:"
+            echo "  --provision-machines=MODE  Provision machines (light, heavy, prerelease)"
+            echo "  --no-provision             Skip provisioning"
+            echo "  --run-setup                Run setup for validators and clients"
+            echo "  --no-setup                 Skip setup"
+            echo "  --test=NAME                Run a specific test, comma-separated list, 'all', or 'prerelease'"
+            echo "  --no-test                  Skip tests"
+            echo "  --utility=NAME             Run a specific utility"
+            echo "  --no-utility               Skip utilities"
+            echo "  --vars=NAME                Ansible vars file name without extension (default: vars)"
+            echo "  -h, --help                 Show this help message"
+            exit 0
+            ;;
+        destroy)
+            echo "Destroying infrastructure..."
+            RUN_TERRAFORM="n"
+            RUN_SETUP="n"
+            RUN_TESTS="n"
+            RUN_UTILITIES="n"
+            cd "$SCRIPT_DIR"
+            # shellcheck source=/dev/null
+            source destroy_infra.sh
+            exit $?
+            ;;
+        --provision-machines=*)
+            ARG_PROVISION="${1#*=}"
+            shift
+            ;;
+        --no-provision)
+            ARG_PROVISION="n"
+            shift
+            ;;
+        --run-setup)
+            ARG_RUN_SETUP="y"
+            shift
+            ;;
+        --no-setup)
+            ARG_NO_SETUP="y"
+            shift
+            ;;
+        --no-utility)
+            ARG_NO_UTILITY="y"
+            shift
+            ;;
+        --utility=*)
+            ARG_UTILITY="${1#*=}"
+            shift
+            ;;
+        --test=*)
+            ARG_TEST="${1#*=}"
+            shift
+            ;;
+        --no-test)
+            ARG_NO_TEST="y"
+            shift
+            ;;
+        --vars=*)
+            ARG_VARS="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            exit 1
+            ;;
+    esac
+done
+# ---- End argument parsing ----
 
-  cd "$SCRIPT_DIR"
-  # shellcheck source=./destroy_infra.sh
-  source destroy_infra.sh
-
-  # Exit without running the rest of the script
-  exit 0
-fi
-# ---- Cleanup ----
+# Set vars file name (defaults to "vars")
+VARS="${ARG_VARS:-vars}"
 
 echo "About to run setup/tests for user $OWNER"
 
@@ -280,13 +410,54 @@ else
 fi
 
 # Ask if terraform should be run
-read -r -p "Do you want to provision machines? (h)eavy / (l)ight / (pr)erelease / (n)o ): " RUN_TERRAFORM
+if [[ -n "$ARG_PROVISION" ]]; then
+    RUN_TERRAFORM="$ARG_PROVISION"
+else
+    read -r -p "Do you want to provision machines? (h)eavy / (l)ight / (pr)erelease / (n)o ): " RUN_TERRAFORM
+fi
+
+# Normalize full-length provision values to short form
+case "$RUN_TERRAFORM" in
+    heavy)      RUN_TERRAFORM="h"  ;;
+    light)      RUN_TERRAFORM="l"  ;;
+    prerelease) RUN_TERRAFORM="pr" ;;
+    no)         RUN_TERRAFORM="n"  ;;
+esac
+
+[[ -n "$ARG_PROVISION" ]] && echo "Will provision machines in \"$ARG_PROVISION\" configuration."
+
 # Ask if the nodes should be setup.
-read -r -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
+if [[ -n "$ARG_NO_SETUP" ]]; then
+    RUN_SETUP="n"
+    echo "Will skip setup."
+elif [[ -n "$ARG_RUN_SETUP" ]]; then
+    RUN_SETUP="y"
+    echo "Will run setup for validators and clients."
+else
+    read -r -p "Do you want to run setup for validators and clients? (y/n): " RUN_SETUP
+fi
+
 # Ask if any tests should be run
-read -r -p "Do you want to select a test to run? (y/n): " RUN_TESTS
-# Ask if any tests should be run
-read -r -p "Do you want to select a utility to run? (y/n): " RUN_UTILITIES
+if [[ -n "$ARG_NO_TEST" ]]; then
+    RUN_TESTS="n"
+    echo "Will skip tests."
+elif [[ -n "$ARG_TEST" ]]; then
+    RUN_TESTS="y"
+    echo "Will run test \"$ARG_TEST\"."
+else
+    read -r -p "Do you want to select a test to run? (y/n): " RUN_TESTS
+fi
+
+# Ask if any utility should be run
+if [[ -n "$ARG_NO_UTILITY" ]]; then
+    RUN_UTILITIES="n"
+    echo "Will skip utilities."
+elif [[ -n "$ARG_UTILITY" ]]; then
+    RUN_UTILITIES="y"
+    echo "Will run utility \"$ARG_UTILITY\"."
+else
+    read -r -p "Do you want to select a utility to run? (y/n): " RUN_UTILITIES
+fi
 
 # Find and list all tests
 mapfile -t TESTS < <(find tests -maxdepth 1 -mindepth 1 -type d | while read -r f; do basename "$f"; done | sort)
@@ -297,9 +468,12 @@ export UTILITIES
 
 # Optionally select test to run
 if [ "$RUN_TESTS" == "y" ]; then
-    # first select the test to run
-    # shellcheck source=./select_test.sh
-    source select_test.sh
+    if [[ -n "$ARG_TEST" ]]; then
+        export SELECTED="$ARG_TEST"
+    else
+        # shellcheck source=./select_test.sh
+        source select_test.sh
+    fi
 fi
 
 # Optionally initialize and apply Terraform
@@ -327,13 +501,14 @@ if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
     set_network_vars || exit 1
 
-    ansible-playbook setup.yml \
+    ansible-playbook -i "$INVENTORY_FILE" setup.yml \
+      --limit "$LIMIT" \
       --extra-vars="devnet_name=${DEVNET_NAME}" \
       --extra-vars="snarkos_network=${NETWORK}" \
       --extra-vars="snarkos_network_int=${NETWORK_INT}" \
       --extra-vars "test_network_url=${LB_URL}" \
       --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
-      --extra-vars="@vars.yml"
+      --extra-vars="@${VARS}.yml"
 
     if [ "$(uname)" == "Darwin" ]; then
         say "Finished running setup"
@@ -373,17 +548,31 @@ if [ "$RUN_TESTS" == "y" ]; then
             echo "Test finished successfully : $test"
         done
 
+    # Run a comma-separated list of tests in sequence
+    elif [[ "$SELECTED" == *,* ]]; then
+        echo "Running tests in sequence: $SELECTED"
+        IFS=',' read -ra SELECTED_TESTS <<< "$SELECTED"
+        for test in "${SELECTED_TESTS[@]}"; do
+            # Trim surrounding whitespace so "test1, test2" works as well as "test1,test2"
+            test=$(echo "$test" | xargs)
+            export SELECTED=$test
+            run_test | tee -a "$PARENT_DIR/observability_runner.log"
+        done
+
     # Else run the selected test
     else
         run_test | tee -a "$PARENT_DIR/observability_runner.log"
     fi
 fi
 
-# Optionally select test to run
+# Optionally select utility to run
 if [ "$RUN_UTILITIES" == "y" ]; then
-    # first select the test to run
-    # shellcheck source=./select_utility.sh
-    source "$PARENT_DIR/select_utility.sh"
+    if [[ -n "$ARG_UTILITY" ]]; then
+        export SELECTED="$ARG_UTILITY"
+    else
+        # shellcheck source=./select_utility.sh
+        source "$PARENT_DIR/select_utility.sh"
+    fi
 fi
 
 # Optionally run utilities
@@ -401,7 +590,7 @@ if [ "$RUN_UTILITIES" == "y" ]; then
     else
         if [[ "$SELECTED" == download_* ]]; then
             if [ -d "$PARENT_DIR/log_files" ]; then
-                read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans
+                read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans || _ans="n"
                 case "$_ans" in
                   [yY])
                       rm -rf "$PARENT_DIR/log_files"

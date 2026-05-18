@@ -235,5 +235,5 @@ For every repository a list of tests can be configured. This tests are run in th
 To cancel a Talisker run, just:
 1. Stop talisker `sudo service talisker stop`
 2. Remove the current run log file, as it can be added to in a next run, resulting in dirty log (and also it is used as a lock to not try and run another test).
-3. Do a manual cleanup `cd stress_testing/test_suites/single-region-tests/` and then `./auto_run_test_suite.sh cleanup`
+3. Destroy infrastructure manually: `cd stress_testing/test_suites/single-region-tests/` and then `./run_test_suite.sh destroy`
 4. After you are done with manually running tests or other things, start Talisker.

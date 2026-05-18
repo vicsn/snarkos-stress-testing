@@ -19,8 +19,8 @@ export TF_RELEASE_BUCKET=$RELEASE_BUCKET
 
 # --- Configuration specific to load_ledger test ---
 # Canonical order for mapping IPs to networks: canary, testnet, mainnet
-CANONICAL_NETWORKS=("canary" "testnet" "mainnet")
-NETWORKS=("${CANONICAL_NETWORKS[@]}")  # default: all three, in canonical order
+CANONICAL_NETWORKS=("testnet" "mainnet")
+NETWORKS=("${CANONICAL_NETWORKS[@]}")  # default: all, in canonical order
 
 TERRAFORM_NETWORK_FOR_TEMPLATE="mainnet"  # used just to fill the NETWORK placeholder
 VOLUME_SIZE=5000

@@ -1,32 +1,36 @@
 plugin: amazon.aws.aws_ec2
 
-regions: us-west-2,eu-central-1
+strict: true
+
+cache: false
+
+regions:
+  - us-west-2
+  - eu-central-1
 
 profile: ephnet
 
 keyed_groups:
+  # Create strict groups matching setup.yml (e.g., snarkos_validator, tx_runner)
   - key: tags.Role
     prefix: ""
     separator: ""
-  - key: tags.Role
-    prefix: ""
-    separator: ""
-    value: "tx-cannon-node"
-  - key: tags.Role
-    prefix: ""
-    separator: ""
-    value: "tx-sender-node"
-  - key: tags.Name
-    prefix: ""
-    separator: ""
+
+  # Create intersection groups for the script limits
+  - key: tags.Devnet
+    prefix: devnet
+  - key: tags.Owner
+    prefix: owner
+
+  # Creates specific client mapping groups
   - key: tags.Validator
     prefix: "clients_on_validator_"
     separator: ""
 
 filters:
-  instance-state-name: running
-  "tag:Devnet": "{{ lookup('env', 'DEVNET_NAME') }}"
-  "tag:Owner": "{{ lookup('env', 'USER') }}"
+  instance-state-name:
+    - running
+    - pending
   "tag:Role":
     - "snarkos-validator"
     - "prometheus-server"
@@ -35,6 +39,10 @@ filters:
     - "tx-cannon-node"
     - "tx-sender-node"
     - "tx-runner"
+
+# Tell Ansible to use the EC2 Name tag as the server's name in the terminal
+hostnames:
+  - tag:Name
 
 compose:
   ansible_host: public_ip_address
