@@ -26,19 +26,28 @@ RESULTS_AND_LOGS_BUCKET="${RESULTS_AND_LOGS_BUCKET:-provable-logs-results}"
 DATE_OF_RUN=$(date -u '+%Y%m%dT%H%M%SZ')
 BASE_BUCKET_PATH="manual_test_runs/$USER/$DATE_OF_RUN"
 
-download_and_upload_logs() {
-  echo "Downloading test logs..."
+# When set (e.g. by the Rust harness via `RUNNER_MANAGES_LOGS=1`), the external
+# caller owns log collection and S3: it downloads logs itself (one
+# `--utility=download_logs_*` per call, accumulating in log_files/), runs
+# analysis itself (`--utility=analyze_logs`), and uploads to S3 itself. In this
+# mode the script must NOT auto-collect logs after each test, must NOT upload to
+# S3, and must NOT wipe log_files between the caller's separate download calls.
+runner_manages_logs() { [ "${RUNNER_MANAGES_LOGS:-}" = "1" ]; }
 
-  # If no tests were ran:
-  if [ -z "${SELECTED+x}" ]; then
-    SELECTED=""
-  fi
-
-  local test_ran="${SELECTED:-download_and_upload_logs}"
-
-  # Cleanup old logs:
+# Prepares a clean "$PARENT_DIR/log_files" directory.
+# Interactive runs are prompted before overwriting; non-interactive runs
+# (e.g. invoked by the Rust runner, where stdin is not a TTY) default to
+# overwriting so that analysis always runs against a fresh set of logs.
+# Set OVERWRITE_LOG_FILES=n to force keeping existing logs in that case.
+prepare_log_files_dir() {
   if [ -d "$PARENT_DIR/log_files" ]; then
-    read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans || _ans="n"
+    local _ans
+    if [ -t 0 ]; then
+      read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans || _ans="n"
+    else
+      _ans="${OVERWRITE_LOG_FILES:-y}"
+      echo "Non-interactive run: log_files overwrite = $_ans"
+    fi
     case "$_ans" in
       [yY])
         rm -rf "$PARENT_DIR/log_files"
@@ -49,6 +58,28 @@ download_and_upload_logs() {
     esac
   fi
   mkdir -p "$PARENT_DIR/log_files"
+}
+
+download_and_upload_logs() {
+  # The external runner downloads logs, runs analysis, and uploads to S3 itself,
+  # so this bundled CLI helper must do nothing under it (avoids redundant
+  # downloads during `--test=...` and any S3 upload).
+  if runner_manages_logs; then
+    echo "RUNNER_MANAGES_LOGS set: external caller handles log download, analysis, and S3; skipping bundled collection."
+    return 0
+  fi
+
+  echo "Downloading test logs..."
+
+  # If no tests were ran:
+  if [ -z "${SELECTED+x}" ]; then
+    SELECTED=""
+  fi
+
+  local test_ran="${SELECTED:-download_and_upload_logs}"
+
+  # Cleanup old logs:
+  prepare_log_files_dir
 
   # Download client logs:
   export SELECTED=download_logs_clients
@@ -65,6 +96,13 @@ download_and_upload_logs() {
   # Download tx_runner logs:
   export SELECTED=download_logs_tx_runner
   run_utility
+
+  # Analyse the downloaded prover/tx_runner logs to produce landing_stats.json.
+  # This is best-effort: a failure here (e.g. a missing archive because an
+  # upstream download failed, or while running from the EXIT trap) must not
+  # abort the run or mask the real exit code, hence the explicit guard.
+  export SELECTED=analyze_logs
+  run_utility || echo "WARNING: analyze_logs utility failed; continuing without landing stats."
 
   echo "Uploading test logs to S3..."
 
@@ -96,10 +134,11 @@ react_on_exit() {
   rc=$?
   echo "EXIT (rc: $rc)"
 
-  # If the exit code is not 0 (i.e. an error occurred), grab the logs
-  if [ $rc -ne 0 ]; then
+  # If the exit code is not 0 (i.e. an error occurred), grab the logs.
+  # When the external runner manages logs it does its own collection, so skip.
+  if [ $rc -ne 0 ] && ! runner_manages_logs; then
       echo "Error detected! Downloading and uploading logs before exiting..."
-      download_and_upload_logs
+      download_and_upload_logs || echo "WARNING: failed to collect/upload logs during EXIT trap; preserving original rc=$rc"
   fi
 
   exit $rc
@@ -534,6 +573,11 @@ if [ "$RUN_TESTS" == "y" ]; then
             export SELECTED=$test
 
             run_test | tee -a "$PARENT_DIR/observability_runner.log"
+            rc=${PIPESTATUS[0]}
+
+            # Download + analyse this test's logs (as the old script did per test)
+            download_and_upload_logs
+            (( rc == 0 )) || exit "$rc"
         done
 
     # We have a special case for the prerelease ones too:
@@ -546,6 +590,9 @@ if [ "$RUN_TESTS" == "y" ]; then
             run_test
 
             echo "Test finished successfully : $test"
+
+            # Download + analyse this test's logs (as the old script did per test)
+            download_and_upload_logs
         done
 
     # Run a comma-separated list of tests in sequence
@@ -557,11 +604,21 @@ if [ "$RUN_TESTS" == "y" ]; then
             test=$(echo "$test" | xargs)
             export SELECTED=$test
             run_test | tee -a "$PARENT_DIR/observability_runner.log"
+            rc=${PIPESTATUS[0]}
+
+            # Download + analyse this test's logs (as the old script did per test)
+            download_and_upload_logs
+            (( rc == 0 )) || exit "$rc"
         done
 
     # Else run the selected test
     else
         run_test | tee -a "$PARENT_DIR/observability_runner.log"
+        rc=${PIPESTATUS[0]}
+
+        # Download + analyse this test's logs (as the old script did per test)
+        download_and_upload_logs
+        (( rc == 0 )) || exit "$rc"
     fi
 fi
 
@@ -589,18 +646,14 @@ if [ "$RUN_UTILITIES" == "y" ]; then
         fi
     else
         if [[ "$SELECTED" == download_* ]]; then
-            if [ -d "$PARENT_DIR/log_files" ]; then
-                read -r -p "The folder '$PARENT_DIR/log_files' exists. Delete and overwrite it? [y/N]: " _ans || _ans="n"
-                case "$_ans" in
-                  [yY])
-                      rm -rf "$PARENT_DIR/log_files"
-                      ;;
-                  *)
-                      echo "Keeping existing 'log_files' (new logs may merge with old ones)."
-                      ;;
-                esac
+            if runner_manages_logs; then
+                # The external runner issues one download utility per invocation
+                # and expects them to accumulate, so never wipe between calls;
+                # it clears/rotates log_files itself between test cases.
+                mkdir -p "$PARENT_DIR/log_files"
+            else
+                prepare_log_files_dir
             fi
-            mkdir -p "$PARENT_DIR/log_files"
         fi
 
 

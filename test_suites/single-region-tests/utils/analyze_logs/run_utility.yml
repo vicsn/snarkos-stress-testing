@@ -2,14 +2,21 @@
   hosts: localhost
   gather_facts: yes
   tasks:
-    - name: Create Python virtual environment
+    - name: Create Python virtual environment (with pip bootstrapped)
+      command: python3 -m venv --clear --upgrade-deps .venv
       args:
         chdir: "{{ playbook_dir }}"
-        creates: "{{ playbook_dir }}/.venv/bin/activate"
-      command: python3 -m venv .venv
+        # Guard on pip, not activate: a venv that has activate but no pip is a
+        # half-built venv (ensurepip failed previously). Keying off activate made
+        # that broken state sticky; keying off pip forces a clean --clear rebuild.
+        creates: "{{ playbook_dir }}/.venv/bin/pip"
 
     - name: Install script dependencies into virtualenv
-      command: "{{ playbook_dir }}/.venv/bin/pip install -r requirements.txt"
+      # Invoke pip via the venv's python (`-m pip`) rather than the bin/pip
+      # wrapper, so this still works even if the wrapper script is missing.
+      command: "{{ playbook_dir }}/.venv/bin/python -m pip install -r requirements.txt"
+      args:
+        chdir: "{{ playbook_dir }}"
       environment:
         PIP_BREAK_SYSTEM_PACKAGES: "1"
 
@@ -19,6 +26,10 @@
           - "{{ playbook_dir }}/.venv/bin/python"
           - analyze_logs.py
           #- --include-client-connectivity # Uncomment to include client connectivity times. Commented by default to not break Talisker's parsing
+      args:
+        # chdir so analyze_logs.py is found and its "../../log_files" paths
+        # resolve relative to utils/analyze_logs (i.e. to single-region-tests/log_files).
+        chdir: "{{ playbook_dir }}"
       register: out
 
     - name: Print the output
