@@ -58,6 +58,7 @@
           - curl
           - lld
           - clang
+          - libclang-dev
           - gcc
           - libssl-dev
           - llvm
