@@ -4,7 +4,7 @@ elastic_api_key: "{{ elastic_api_key }}"
 grafana_cloud_api_key: "{{ grafana_cloud_api_key }}"
 
 # Your own github access token.
-github_token: "your_github_token_here" # link to generate: https://github.com/settings/tokens/new?scopes=repo&description=burn-in-testing-snarkos
+github_token: "{{ github_token }}" # link to generate: https://github.com/settings/tokens/new?scopes=repo&description=burn-in-testing-snarkos
 
 # Observability infra vars
 create_flamegraph: false
