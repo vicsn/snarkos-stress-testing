@@ -1,4 +1,3 @@
-
 s3://aleo-snapshots/mainnet/checkpoint_1000000.zip
 s3://aleo-snapshots/mainnet/checkpoint_2000000.zip
 s3://aleo-snapshots/mainnet/checkpoint_3000000.zip
@@ -6,3 +5,6 @@ s3://aleo-snapshots/mainnet/checkpoint_4000000.zip
 s3://aleo-snapshots/mainnet/checkpoint_5000000.zip
 s3://aleo-snapshots/mainnet/checkpoint_6000000.zip
 s3://aleo-snapshots/mainnet/checkpoint_7000000.zip
+gs://snarkos-mainnet/monthly/2025-12-31_00-00-01.tar
+gs://snarkos-mainnet/monthly/2026-01-31_00-00-01.tar
+gs://snarkos-mainnet/monthly/2026-02-26_00-00-01.tar

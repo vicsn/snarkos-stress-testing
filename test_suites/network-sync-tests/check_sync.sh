@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Periodically check sync progress for each URL in network_info.json and persist state.
-# Usage: check_sync.sh [-f JSON_FILE] [-i MINUTES] [-t TIMEOUT] [-w SECONDS] [-S SECONDS] [-D DELTA] [-O] [-v]
+# Usage: check_sync.sh [-n NETWORK] [-f JSON_FILE] [-i MINUTES] [-t TIMEOUT] [-w SECONDS] [-S SECONDS] [-D DELTA] [-O] [-v]
+#   -n network (mainnet|testnet|canary); default: from playbooks/.network if set by run_client_sync_test.sh, else testnet
 #   -f path to JSON (default: ./playbooks/network_info.json)
 #   -i minutes between checks (default: 1)
 #   -t curl max-time seconds (default: 6) [connect timeout is 3s]
@@ -12,6 +13,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 JSON_FILE="./playbooks/network_info.json"
 INTERVAL_MIN=1
 CURL_TIMEOUT=6
@@ -21,7 +23,11 @@ STALL_FAIL_SECS=600
 SUCCESS_DELTA=1000000
 RUN_ONCE=0
 VERBOSE=0
-NETWORK=testnet
+# Default NETWORK: from playbooks/.network (set by run_client_sync_test.sh) or testnet
+if [[ -f "${SCRIPT_DIR}/playbooks/.network" ]]; then
+  NETWORK="$(tr -d '[:space:]' < "${SCRIPT_DIR}/playbooks/.network")"
+fi
+[[ -z "${NETWORK:-}" ]] && NETWORK=testnet
 
 while getopts ":n:f:i:t:w:S:D:Ovh" opt; do
   case "$opt" in

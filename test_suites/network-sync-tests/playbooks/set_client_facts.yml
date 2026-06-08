@@ -6,5 +6,6 @@
         --verbosity {{ snarkos_verbosity }} --metrics \
         --rest-rps {{ rest_rps }} \
         --auto-migrate-node-data \
-        --storage /home/ubuntu/.aleo/storage/ledger-0 \
+        --storage /home/ubuntu/.aleo/storage/ledger-{{ snarkos_network_int }} \
+        --logfile /home/ubuntu/snarkos.log \
         --network {{ snarkos_network_int }}

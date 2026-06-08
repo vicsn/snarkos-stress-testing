@@ -2,10 +2,20 @@
 - name: Provision remote host with GitHub SSH agent forwarding support
   hosts: all
   become: true
+  vars:
+    snarkos_rev: origin/staging
+    snarkos_user: "{{ ansible_user }}"
+    snarkos_dir: "{{ ('/root' if snarkos_user == 'root' else '/home/' + snarkos_user) }}/snarkOS"
   tasks:
     - name: Ensure git is installed
       apt:
         name: git
+        state: present
+        update_cache: yes
+
+    - name: Ensure unzip is installed
+      apt:
+        name: unzip
         state: present
         update_cache: yes
 
@@ -32,6 +42,48 @@
     - name: Show GitHub SSH test result
       debug:
         var: github_test.stdout_lines
+
+    - name: Clone snarkOS repository
+      become: false
+      git:
+        repo: git@github.com:ProvableHQ/snarkOS.git
+        dest: "{{ snarkos_dir }}"
+        version: "{{ snarkos_rev }}"
+        update: yes
+
+    - name: Run build_ubuntu.sh
+      become: false
+      shell: ./build_ubuntu.sh
+      args:
+        chdir: "{{ snarkos_dir }}"
+        executable: /bin/bash
+
+    - name: Create snarkos systemd service
+      copy:
+        dest: /etc/systemd/system/snarkos.service
+        content: |
+          [Unit]
+          Description=snarkOS client node
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User={{ snarkos_user }}
+          ExecStart={{ (snarkos_dir | dirname) }}/.cargo/bin/snarkos start --client --nodisplay
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+
+    - name: Reload systemd and enable snarkos service
+      systemd:
+        name: snarkos
+        state: started
+        enabled: yes
+        daemon_reload: yes
 
     - name: Print SSH example command
       debug:

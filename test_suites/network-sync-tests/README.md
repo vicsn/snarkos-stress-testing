@@ -1,5 +1,9 @@
 # Client Node Sync Runner
 
+## Design
+
+The network sync tests were built with the following principles in mind. We want to be able to process or verify transactions and blocks from genesis to tip with a new snarkOS version. We want the tests to complete in about a day at most. Given that block insertion is a partially serial process, our main trick to achieve the faster runtime is by starting various nodes from different snapshot heights, letting them each sync only a portion of the network's blocks.
+
 ## Prerequisites
 
 - [Install Terraform](https://developer.hashicorp.com/terraform/downloads?product_intent=terraform)

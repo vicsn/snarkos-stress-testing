@@ -42,7 +42,7 @@ resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
 
 resource "aws_instance" "single_machine_with_ssh_forwarding" {
   ami                         = data.aws_ami.ubuntu_ami.id
-  instance_type               = "m7i.16xlarge"
+  instance_type               = "c7i-flex.16xlarge"
   associate_public_ip_address = true
   key_name                    = aws_key_pair.main_key.key_name
 

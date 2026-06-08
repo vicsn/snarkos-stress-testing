@@ -24,6 +24,7 @@ SNAPSHOT_URL="{{ (snapshot_url | default('') | regex_replace('\r',''))
                  | first
                  | regex_replace('^\\s+|\\s+$','') }}"
 LOAD_LEDGER_TESTING="{{ (load_ledger_testing | default(false) | bool) | ternary('true','false') }}"
+LEDGER_DIR="ledger-{{ snarkos_network_int | default(1) }}"
 {% raw %}
 DOWNLOAD_DIR="/tmp/snapshot_download"
 EXTRACT_DIR="/tmp/snapshot_extract"
@@ -32,13 +33,136 @@ STORAGE_DIR="${ALEO_DIR}/storage"
 
 TAR_COMMON_OPTS=(--no-same-owner --no-same-permissions --numeric-owner)
 
-# How we populated EXTRACT_DIR:
-#   archive   -> we downloaded a single archive and extracted it into EXTRACT_DIR
-#   directory -> we synced a tree (e.g., gs://...) directly into EXTRACT_DIR
-DOWNLOAD_MODE="archive"
+# Clear EXTRACT_DIR at exit only after a successful ledger install (see cleanup section).
+CLEANUP_EXTRACT_DIR=false
 
 # Make gsutil visible (installed via /usr/local/google-cloud-sdk)
 export PATH=/usr/local/google-cloud-sdk/bin:$PATH
+
+# --- snarkOS helpers ---
+report_snarkos_status() {
+  local lines="${1:-50}"
+  log "snarkOS service status:"
+  systemctl status snarkos | tee -a "$LOG_FILE" || true
+  if systemctl is-active --quiet snarkos; then
+    log "snarkOS service is running successfully"
+  else
+    log "WARNING: snarkOS service failed to start, showing recent logs:"
+    journalctl -u snarkos --no-pager -n "$lines" | tee -a "$LOG_FILE" || true
+  fi
+}
+
+restart_snarkos_and_report() {
+  log "Restarting snarkOS service..."
+  systemctl restart snarkos || true
+  sleep 5
+  report_snarkos_status 50
+}
+
+# --- Archive helpers (classify → extract; used for download and nested unwrap) ---
+classify_archive_by_magic() {
+  local path="$1"
+  local fd
+  fd=$(file -b "$path")
+  if echo "$fd" | grep -qi 'zip archive'; then echo zip
+  elif echo "$fd" | grep -qi 'gzip compressed data'; then echo gzip
+  elif echo "$fd" | grep -qi 'xz compressed data'; then echo xz
+  elif echo "$fd" | grep -qi 'bzip2 compressed data'; then echo bzip2
+  elif echo "$fd" | grep -qi 'zstandard compressed data'; then echo zstd
+  elif echo "$fd" | grep -qi 'tar archive'; then echo tar
+  else echo unknown
+  fi
+}
+
+classify_archive() {
+  local path="$1"
+  local lc
+  lc=$(printf '%s' "${path##*/}" | tr '[:upper:]' '[:lower:]')
+  case "$lc" in
+    *.zip) echo zip ;;
+    *.tar.gz|*.tgz) echo gzip ;;
+    *.tar.xz) echo xz ;;
+    *.tar.bz2|*.tbz|*.tbz2) echo bzip2 ;;
+    *.tar.zst) echo zstd ;;
+    *.tar) classify_archive_by_magic "$path" ;;
+    *) classify_archive_by_magic "$path" ;;
+  esac
+}
+
+extract_tar_zst() {
+  local src="$1" dest="$2"
+  if tar --help 2>&1 | grep -q -- '--zstd'; then
+    tar "${TAR_COMMON_OPTS[@]}" --zstd -xf "$src" -C "$dest" 2> >(tee -a "$LOG_FILE" >&2)
+  elif command -v zstd >/dev/null 2>&1; then
+    zstd -dc "$src" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$dest" 2> >(tee -a "$LOG_FILE" >&2)
+  elif command -v unzstd >/dev/null 2>&1; then
+    unzstd -c "$src" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$dest" 2> >(tee -a "$LOG_FILE" >&2)
+  else
+    log "ERROR: zstd not installed and tar lacks --zstd"; return 1
+  fi
+}
+
+extract_archive() {
+  local src="$1" dest="$2"
+  local kind
+  kind=$(classify_archive "$src")
+  log "Extracting archive (kind=$kind): $(basename "$src") → $dest"
+  case "$kind" in
+    zip)
+      unzip -q -o "$src" -d "$dest" 2> >(tee -a "$LOG_FILE" >&2) ;;
+    gzip)
+      tar "${TAR_COMMON_OPTS[@]}" -xzf "$src" -C "$dest" 2> >(tee -a "$LOG_FILE" >&2) ;;
+    xz)
+      tar "${TAR_COMMON_OPTS[@]}" -xJf "$src" -C "$dest" 2> >(tee -a "$LOG_FILE" >&2) ;;
+    bzip2)
+      tar "${TAR_COMMON_OPTS[@]}" -xjf "$src" -C "$dest" 2> >(tee -a "$LOG_FILE" >&2) ;;
+    zstd)
+      extract_tar_zst "$src" "$dest" ;;
+    tar)
+      tar "${TAR_COMMON_OPTS[@]}" -xf "$src" -C "$dest" 2> >(tee -a "$LOG_FILE" >&2) ;;
+    unknown)
+      log "ERROR: Unsupported archive type: $(file -b "$src")"
+      return 1 ;;
+  esac
+}
+
+unwrap_nested_archives() {
+  local max_iters=12
+  local iter inner
+  for (( iter = 0; iter < max_iters; iter++ )); do
+    if [[ -n "$(find "$EXTRACT_DIR" -type f -name CURRENT -print -quit 2>/dev/null)" ]]; then
+      log "Found CURRENT after nested unwrap (iteration $iter)"
+      return 0
+    fi
+
+    mapfile -d '' -t inner < <(
+      find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type f \
+        \( -name '*.tar' -o -name '*.tar.gz' -o -name '*.tgz' -o -name '*.tar.xz' \
+        -o -name '*.tar.bz2' -o -name '*.tbz' -o -name '*.tbz2' -o -name '*.tar.zst' \
+        -o -name '*.zip' \) -print0 2>/dev/null
+    )
+
+    if [[ ${#inner[@]} -eq 0 ]]; then
+      return 0
+    fi
+    if [[ ${#inner[@]} -gt 1 ]]; then
+      log "WARNING: ${#inner[@]} top-level archives under $EXTRACT_DIR and still no CURRENT; skipping auto-unwrap. Files:"
+      printf '%s\n' "${inner[@]}" | tee -a "$LOG_FILE"
+      return 0
+    fi
+
+    inner="${inner[0]}"
+    log "No CURRENT yet; unwrapping nested archive (iteration $((iter + 1))/${max_iters}): $inner"
+    if ! extract_archive "$inner" "$EXTRACT_DIR"; then
+      log "ERROR: Failed to extract nested archive: $inner"
+      return 1
+    fi
+    log "Removing nested archive after successful extraction: $inner"
+    rm -f "$inner"
+  done
+  log "WARNING: Stopped nested unwrap after ${max_iters} iterations without finding CURRENT."
+  return 0
+}
 
 log "Creating necessary directories"
 mkdir -p "$DOWNLOAD_DIR" "$EXTRACT_DIR"
@@ -47,20 +171,9 @@ log "Created: $DOWNLOAD_DIR and $EXTRACT_DIR"
 if [[ -z "${SNAPSHOT_URL:-}" ]]; then
   log "No snapshot URL provided; exiting."
 
-  mkdir -p "${STORAGE_DIR}/ledger-0"
+  mkdir -p "${STORAGE_DIR}/${LEDGER_DIR}"
 
-  log "Restarting snarkOS service..."
-  systemctl restart snarkos || true
-  sleep 5
-  log "snarkOS service status after restart:"
-  systemctl status snarkos | tee -a "$LOG_FILE" || true
-
-  if systemctl is-active --quiet snarkos; then
-    log "snarkOS service is running successfully"
-  else
-    log "WARNING: snarkOS service failed to start, showing recent logs:"
-    journalctl -u snarkos --no-pager -n 50 | tee -a "$LOG_FILE" || true
-  fi
+  restart_snarkos_and_report
 
   exit 0
 fi
@@ -68,89 +181,67 @@ fi
 # --- Download ---
 log "Snapshot URL: $SNAPSHOT_URL"
 
+FILENAME=$(basename "$SNAPSHOT_URL" | sed 's/[[:space:]]*$//')
+DEST_FILE="$DOWNLOAD_DIR/$FILENAME"
+log "Target local file: $DEST_FILE"
+
+mkdir -p "$DOWNLOAD_DIR"
+
 if [[ "$SNAPSHOT_URL" == gs://* ]]; then
-  # ---------------------------------------------------
-  # GCS: sync directory tree directly into EXTRACT_DIR
-  # ---------------------------------------------------
-  DOWNLOAD_MODE="directory"
-  log "Detected GCS source; using gsutil rsync directly into $EXTRACT_DIR"
+  log "Detected GCS source; using gsutil cp to download archive"
 
   if ! command -v gsutil >/dev/null 2>&1; then
     log "ERROR: gsutil not found in PATH. Install Google Cloud SDK / gsutil first."
     exit 1
   fi
 
-  log "Cleaning extraction directory for GCS sync"
-  rm -rf "$EXTRACT_DIR"
-  mkdir -p "$EXTRACT_DIR"
-
-  # Exclude node-local / ephemeral files that may change mid-sync and are
-  # not needed for a ledger snapshot.
-  #
-  #  - LOG.old.*            : old RocksDB logs
-  #  - jwt_secret_aleo...   : node JWT secrets
-  #  - cached_router_peers  : peer cache
-  #
-  # gsutil -x uses a Python regex.
-  EXCLUDE_RE='LOG\.old\..*|jwt_secret_aleo.*|cached_router_peers'
-
   max_attempts=5
   attempt=1
   success=0
   while (( attempt <= max_attempts )); do
-    log "gsutil rsync attempt ${attempt}/${max_attempts}..."
-    ATTEMPT_LOG="$DOWNLOAD_DIR/gsutil_rsync_$(date +%s)_${attempt}.log"
+    log "gsutil cp attempt ${attempt}/${max_attempts}..."
+    ATTEMPT_LOG="$DOWNLOAD_DIR/gsutil_cp_$(date +%s)_${attempt}.log"
 
-    # -m: parallel; -r: recursive; -c: checksum-safe; -x: exclude regex
-    if gsutil -m rsync -r -c -x "$EXCLUDE_RE" \
-         "$SNAPSHOT_URL" "$EXTRACT_DIR" \
+    if gsutil cp "$SNAPSHOT_URL" "$DEST_FILE" \
          2>&1 | tee -a "$ATTEMPT_LOG" -a "$LOG_FILE"; then
-      log "GCS rsync completed successfully into $EXTRACT_DIR"
+      log "GCS download complete: $DEST_FILE"
       rm -f "$ATTEMPT_LOG"
       success=1
       break
     fi
 
-    log "gsutil rsync failed on attempt ${attempt}. Relevant error lines:"
+    log "gsutil cp failed on attempt ${attempt}. Relevant error lines:"
     grep -iE 'Exception|Error|denied|not found|ServiceException' "$ATTEMPT_LOG" \
       | tail -n 40 | tee -a "$LOG_FILE" || true
 
     rm -f "$ATTEMPT_LOG"
     attempt=$((attempt + 1))
     if (( attempt <= max_attempts )); then
-      log "Retrying gsutil rsync in 10s..."
+      log "Retrying gsutil cp in 10s..."
       sleep 10
     fi
   done
 
   if (( success == 0 )); then
-    log "ERROR: gsutil rsync failed for $SNAPSHOT_URL after ${max_attempts} attempts."
+    log "ERROR: gsutil cp failed for $SNAPSHOT_URL after ${max_attempts} attempts."
     exit 1
   fi
 
-else
-  # ---------------------------------------------------
-  # S3 or HTTP(S): download a single archive to DEST_FILE
-  # ---------------------------------------------------
-  FILENAME=$(basename "$SNAPSHOT_URL" | sed 's/[[:space:]]*$//')
-  DEST_FILE="$DOWNLOAD_DIR/$FILENAME"
-  log "Target filename: '$FILENAME'"
+elif [[ "$SNAPSHOT_URL" == s3://* ]]; then
+  log "Detected S3 source; using aws s3 cp"
 
-  if [[ "$SNAPSHOT_URL" == s3://* ]]; then
-    log "Detected S3 source; using aws s3 cp"
+  if ! command -v aws >/dev/null 2>&1; then
+    log "ERROR: aws CLI not found in PATH."
+    exit 1
+  fi
 
-    if ! command -v aws >/dev/null 2>&1; then
-      log "ERROR: aws CLI not found in PATH."
-      exit 1
-    fi
-
-    if aws s3 cp "$SNAPSHOT_URL" "$DEST_FILE" 2>&1 | tee -a "$LOG_FILE"; then
-      log "S3 download complete: $DEST_FILE"
-    else
-      log "ERROR: aws s3 cp failed for $SNAPSHOT_URL"
-      exit 1
-    fi
+  if aws s3 cp "$SNAPSHOT_URL" "$DEST_FILE" 2>&1 | tee -a "$LOG_FILE"; then
+    log "S3 download complete: $DEST_FILE"
   else
+    log "ERROR: aws s3 cp failed for $SNAPSHOT_URL"
+    exit 1
+  fi
+else
     # -------- Robust HTTP(S) downloader with rotation detection + infinite retry --------
     if ! command -v aria2c >/dev/null 2>&1; then
       log "ERROR: aria2c not found in PATH."
@@ -171,8 +262,6 @@ else
              /^Last-Modified:/  { sub("\r","");  print "LM:" substr($0,16) }
              /^Content-Length:/ { sub("\r","");  print "CL:" $2 }'
     }
-
-    mkdir -p "$DOWNLOAD_DIR"
 
     remote_fp="$(fingerprint)"
     local_fp="$(cat "$FPRINT" 2>/dev/null || echo "")"
@@ -234,103 +323,32 @@ else
       sleep 15
     done
     # -------- end robust HTTP(S) downloader --------
-  fi
-
-  log "File size: $(du -h "$DEST_FILE" | cut -f1)"
-  FILE_DESC=$(file -b "$DEST_FILE")
-  log "File type: $FILE_DESC"
 fi
+
+log "File size: $(du -h "$DEST_FILE" | cut -f1)"
+FILE_DESC=$(file -b "$DEST_FILE")
+log "File type: $FILE_DESC"
 
 # --- Extract / Prepare EXTRACT_DIR ---
 extract_ok=false
 
-if [[ "$DOWNLOAD_MODE" == "directory" ]]; then
-  # GCS mode: EXTRACT_DIR is already populated by gsutil rsync
-  log "DOWNLOAD_MODE=directory → skipping archive extraction, using synced tree in $EXTRACT_DIR"
-  if [[ -d "$EXTRACT_DIR" ]]; then
-    extract_ok=true
-    log "Contents of $EXTRACT_DIR (top level):"
-    ls -la "$EXTRACT_DIR" | tee -a "$LOG_FILE"
-  else
-    log "ERROR: Expected directory at $EXTRACT_DIR after gsutil rsync, but it does not exist."
+log "Cleaning extraction directory"
+rm -rf "$EXTRACT_DIR"/*
+log "Extracting snapshot archive..."
+
+if extract_archive "$DEST_FILE" "$EXTRACT_DIR"; then
+  extract_ok=true
+fi
+
+if $extract_ok; then
+  if ! unwrap_nested_archives; then
+    log "ERROR: Nested archive unwrap failed."
     exit 1
   fi
-else
-  # Archive mode: we downloaded a single archive file to DEST_FILE and now extract it.
-  log "Cleaning extraction directory"
-  rm -rf "$EXTRACT_DIR"/*
-  log "Extracting snapshot archive..."
-
-  # Lowercased filename (portable, works on macOS too)
-  fname_lc="$(printf '%s' "$DEST_FILE" | tr '[:upper:]' '[:lower:]')"
-
-  extract_tar_zst() {
-    if tar --help 2>&1 | grep -q -- '--zstd'; then
-      tar "${TAR_COMMON_OPTS[@]}" --zstd -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
-    elif command -v zstd >/dev/null 2>&1; then
-      zstd -dc "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
-    elif command -v unzstd >/dev/null 2>&1; then
-      unzstd -c "$DEST_FILE" | tar "${TAR_COMMON_OPTS[@]}" -xf - -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2)
-    else
-      log "ERROR: zstd not installed and tar lacks --zstd"; return 1
-    fi
-  }
-
-  case "$fname_lc" in
-    *.zip)
-      log "Detected ZIP archive (by extension), using: unzip"
-      if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      ;;
-    *.tar.gz|*.tgz)
-      log "Detected gzipped tar (by extension), using: tar -xzf"
-      if tar "${TAR_COMMON_OPTS[@]}" -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      ;;
-    *.tar.xz)
-      log "Detected xz tar (by extension), using: tar -xJf"
-      if tar "${TAR_COMMON_OPTS[@]}" -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      ;;
-    *.tar.bz2|*.tbz|*.tbz2)
-      log "Detected bzip2 tar (by extension), using: tar -xjf"
-      if tar "${TAR_COMMON_OPTS[@]}" -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      ;;
-    *.tar.zst)
-      log "Detected zstd tar (by extension), using: tar --zstd OR zstd -dc | tar -xf -"
-      if extract_tar_zst; then extract_ok=true; fi
-      ;;
-    *.tar)
-      log "Detected plain tar (by extension), using: tar -xf"
-      if tar "${TAR_COMMON_OPTS[@]}" -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      ;;
-    *)
-      # Fallback using `file` description
-      FILE_DESC="$(file -b "$DEST_FILE")"
-      if echo "$FILE_DESC" | grep -qi 'zip archive'; then
-        log "Detected ZIP archive (by file), using: unzip"
-        if unzip -q -o "$DEST_FILE" -d "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      elif echo "$FILE_DESC" | grep -qi 'gzip compressed data'; then
-        log "Detected gzipped tar (by file), using: tar -xzf"
-        if tar -xzf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      elif echo "$FILE_DESC" | grep -qi 'xz compressed data'; then
-        log "Detected xz tar (by file), using: tar -xJf"
-        if tar -xJf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      elif echo "$FILE_DESC" | grep -qi 'bzip2 compressed data'; then
-        log "Detected bzip2 tar (by file), using: tar -xjf"
-        if tar -xjf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      elif echo "$FILE_DESC" | grep -qi 'zstandard compressed data'; then
-        log "Detected zstd-compressed tar (by file), attempting zstd extraction"
-        if extract_tar_zst; then extract_ok=true; fi
-      elif echo "$FILE_DESC" | grep -qi 'tar archive'; then
-        log "Detected tar archive (by file), using: tar -xf"
-        if tar -xf "$DEST_FILE" -C "$EXTRACT_DIR" 2> >(tee -a "$LOG_FILE" >&2); then extract_ok=true; fi
-      else
-        log "ERROR: Unsupported archive type: $FILE_DESC"
-      fi
-      ;;
-  esac
 fi
 
 if ! $extract_ok; then
-  log "ERROR: Extraction (or directory sync) failed."
+  log "ERROR: Extraction failed."
   exit 1
 fi
 
@@ -360,20 +378,27 @@ if [[ ${#CURRENT_HITS[@]} -eq 0 ]]; then
 else
   rm -rf "$DOWNLOAD_DIR"/*
 
-  # Prefer a path that includes '/ledger-0'; otherwise pick the shortest path
+  # gs:// archives: ledger lives at ${EXTRACT_DIR}/block_storage_snapshot/${LEDGER_DIR}/.
+  GCS_LEDGER_ROOT="${EXTRACT_DIR}/block_storage_snapshot/${LEDGER_DIR}"
   LEDGER_ROOT=""
-  for p in "${CURRENT_HITS[@]}"; do
-    if [[ "$p" == *"/ledger-0/"* || "$p" == *"/ledger-0/CURRENT" ]]; then
-      LEDGER_ROOT="$(dirname "$p")"
-      break
-    fi
-  done
-  if [[ -z "$LEDGER_ROOT" ]]; then
-    shortest="${CURRENT_HITS[0]}"
+  if [[ "$SNAPSHOT_URL" == gs://* ]] && [[ -f "${GCS_LEDGER_ROOT}/CURRENT" ]]; then
+    LEDGER_ROOT="$GCS_LEDGER_ROOT"
+    log "Using GCS snapshot layout: block_storage_snapshot/${LEDGER_DIR}/"
+  else
+    # Prefer a path that includes '/${LEDGER_DIR}/'; otherwise pick the shortest path
     for p in "${CURRENT_HITS[@]}"; do
-      [[ ${#p} -lt ${#shortest} ]] && shortest="$p"
+      if [[ "$p" == *"/${LEDGER_DIR}/"* || "$p" == *"/${LEDGER_DIR}/CURRENT" ]]; then
+        LEDGER_ROOT="$(dirname "$p")"
+        break
+      fi
     done
-    LEDGER_ROOT="$(dirname "$shortest")"
+    if [[ -z "$LEDGER_ROOT" ]]; then
+      shortest="${CURRENT_HITS[0]}"
+      for p in "${CURRENT_HITS[@]}"; do
+        [[ ${#p} -lt ${#shortest} ]] && shortest="$p"
+      done
+      LEDGER_ROOT="$(dirname "$shortest")"
+    fi
   fi
 
   log "Detected ledger root (folder containing CURRENT): $LEDGER_ROOT"
@@ -386,59 +411,52 @@ else
 
   mkdir -p "$STORAGE_DIR"
 
-  # 3) Backup existing ledger-0 if present
-  if [[ -d "${STORAGE_DIR}/ledger-0" ]]; then
-    BACKUP_NAME="ledger-0-backup-$(date +%Y%m%d-%H%M%S)"
+  # 3) Backup existing ledger if present
+  if [[ -d "${STORAGE_DIR}/${LEDGER_DIR}" ]]; then
+    BACKUP_NAME="${LEDGER_DIR}-backup-$(date +%Y%m%d-%H%M%S)"
     log "Backing up existing ledger to ${STORAGE_DIR}/${BACKUP_NAME}"
-    log "Current ledger size: $(du -sh "${STORAGE_DIR}/ledger-0" | cut -f1)"
-    mv "${STORAGE_DIR}/ledger-0" "${STORAGE_DIR}/${BACKUP_NAME}"
+    log "Current ledger size: $(du -sh "${STORAGE_DIR}/${LEDGER_DIR}" | cut -f1)"
+    mv "${STORAGE_DIR}/${LEDGER_DIR}" "${STORAGE_DIR}/${BACKUP_NAME}"
     log "Backup completed"
   else
-    log "No existing ledger found at ${STORAGE_DIR}/ledger-0"
+    log "No existing ledger found at ${STORAGE_DIR}/${LEDGER_DIR}"
   fi
 
-  # 4) Install: flatten contents from the CURRENT-level folder into storage/ledger-0
-  log "Installing new ledger (flattened at CURRENT level) to ${STORAGE_DIR}/ledger-0"
-  mkdir -p "${STORAGE_DIR}/ledger-0"
+  # 4) Install: flatten contents from the CURRENT-level folder into storage
+  log "Installing new ledger (flattened at CURRENT level) to ${STORAGE_DIR}/${LEDGER_DIR}"
+  mkdir -p "${STORAGE_DIR}/${LEDGER_DIR}"
 
   if command -v rsync >/dev/null 2>&1; then
     # --delete keeps destination in sync with source
-    rsync -a --delete "${LEDGER_ROOT}/" "${STORAGE_DIR}/ledger-0/" 2>&1 | tee -a "$LOG_FILE"
+    rsync -a --delete "${LEDGER_ROOT}/" "${STORAGE_DIR}/${LEDGER_DIR}/" 2>&1 | tee -a "$LOG_FILE"
   else
     # Fallback without --delete semantics
-    cp -a "${LEDGER_ROOT}/." "${STORAGE_DIR}/ledger-0/" 2>&1 | tee -a "$LOG_FILE"
+    cp -a "${LEDGER_ROOT}/." "${STORAGE_DIR}/${LEDGER_DIR}/" 2>&1 | tee -a "$LOG_FILE"
   fi
 
   # Sanity check: ensure CURRENT exists at destination root now
-  if [[ -f "${STORAGE_DIR}/ledger-0/CURRENT" ]]; then
+  if [[ -f "${STORAGE_DIR}/${LEDGER_DIR}/CURRENT" ]]; then
     log "New ledger installed successfully."
+    CLEANUP_EXTRACT_DIR=true
   else
-    log "ERROR: 'CURRENT' not found at ${STORAGE_DIR}/ledger-0 after install."
+    log "ERROR: 'CURRENT' not found at ${STORAGE_DIR}/${LEDGER_DIR} after install."
     exit 1
   fi
 
-  log "New ledger size: $(du -sh "${STORAGE_DIR}/ledger-0" | cut -f1)"
+  log "New ledger size: $(du -sh "${STORAGE_DIR}/${LEDGER_DIR}" | cut -f1)"
   log "Available disk space on /: $(df -h / | awk 'NR==2 {print $4}')"
 fi
 
 # --- Restart service ---
-log "Restarting snarkOS service..."
-systemctl restart snarkos || true
-sleep 5
-log "snarkOS service status after restart:"
-systemctl status snarkos | tee -a "$LOG_FILE" || true
-
-if systemctl is-active --quiet snarkos; then
-  log "snarkOS service is running successfully"
-else
-  log "WARNING: snarkOS service failed to start, showing recent logs:"
-  journalctl -u snarkos --no-pager -n 50 | tee -a "$LOG_FILE" || true
-fi
+restart_snarkos_and_report
 
 # --- Cleanup ---
-log "Cleanup: leaving downloaded and extracted files in place."
-
-rm -rf "$EXTRACT_DIR"/*
+if [[ "$CLEANUP_EXTRACT_DIR" == "true" ]]; then
+  log "Cleanup: removing contents of $EXTRACT_DIR (ledger install succeeded)."
+  rm -rf "$EXTRACT_DIR"/*
+else
+  log "Cleanup: preserving $EXTRACT_DIR (no successful ledger install; inspect for debugging)."
+fi
 
 log "=== Script completed at $(date) ==="
 log "Full log: $LOG_FILE"

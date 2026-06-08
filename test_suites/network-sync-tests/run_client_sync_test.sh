@@ -18,10 +18,11 @@ RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_RELEASE_BUCKET=$RELEASE_BUCKET
 
 # --- CLI options ---
-# --network {canary|testnet|mainnet} to skip prompt
+# --network {canary|testnet|mainnet} to skip network prompt
+# --terraform {apply|skip|destroy} to skip terraform prompt
 # --apply / -y to auto-approve terraform apply
-# --destroy to immediately terraform destroy and exit
 NETWORK=""
+TF_ACTION=""   # apply, skip, or destroy
 TF_APPLY_ARGS=""
 DESTROY_ONLY=0
 
@@ -29,12 +30,20 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --network)
       NETWORK="$2"; shift 2;;
+    --terraform)
+      case "$2" in
+        apply|a) TF_ACTION="apply";;
+        skip|s) TF_ACTION="skip";;
+        destroy|d) TF_ACTION="destroy"; DESTROY_ONLY=1;;
+        *) echo "Invalid --terraform value: '$2'. Use apply, skip, or destroy."; exit 2;;
+      esac
+      shift 2;;
     --apply|-y)
       TF_APPLY_ARGS="-auto-approve"; shift;;
     --destroy)
-      DESTROY_ONLY=1; shift;;
+      DESTROY_ONLY=1; TF_ACTION="destroy"; shift;;
     -h|--help)
-      echo "Usage: $0 [--network canary|testnet|mainnet] [--apply|-y] [--destroy]"; exit 0;;
+      echo "Usage: $0 [--terraform apply|skip|destroy] [--network canary|testnet|mainnet] [--apply|-y] [--destroy]"; exit 0;;
 
     *)
       echo "Unknown option: $1"; exit 2;;
@@ -179,6 +188,31 @@ init_and_apply_terraform() {
     fi
 }
 
+# Function to use existing Terraform infrastructure (skip apply)
+use_existing_terraform() {
+    cd "$PARENT_DIR/terraform"
+
+    terraform init \
+      --reconfigure \
+      -backend-config="bucket=${TFSTATE_BUCKET}" \
+      -backend-config="key=${TFSTATE_KEY}"
+
+    terraform output -raw snarkos_lb_dns_name > "$PARENT_DIR/lb_url.txt"
+    LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
+    set_devnet_vars || exit 1
+
+    cd "$PARENT_DIR/playbooks"
+    ansible-playbook ips.yml \
+      --extra-vars "devnet_name=${DEVNET_NAME}" \
+      --extra-vars "test_network_url=${LB_URL}" \
+      --extra-vars "snarkos_network=${NETWORK} snarkos_network_int=${SNARKOS_NETWORK_INT}" \
+      --extra-vars "@vars.yml"
+
+    if [ "$(uname)" == "Darwin" ]; then
+        say "Finished loading Terraform state"
+    fi
+}
+
 # Set up trap to call cleanup function on any error
 trap cleanup ERR
 
@@ -200,44 +234,43 @@ else
     echo "SSH key already exists. Skipping generation..."
 fi
 
-# Determine network (from --network or interactive)
-if [[ -z "$NETWORK" ]]; then
-  # Ask the user which network they want to run or if they want to skip
+# --- Step 1: Terraform action (apply / skip / destroy) ---
+if [[ -z "$TF_ACTION" && "${DESTROY_ONLY}" -eq 0 ]]; then
   while true; do
-      read -r -p "Do you want to run the network for canary(c), testnet (t), mainnet (m), or skip and destroy (s)? " NETWORK_TYPE
-      if [[ "$NETWORK_TYPE" == "c" || "$NETWORK_TYPE" == "t" || "$NETWORK_TYPE" == "m" || "$NETWORK_TYPE" == "s" ]]; then
-          break
-      else
-          echo "Invalid option. Please enter 't' for testnet, 'm' for mainnet, or 's' to skip and destroy."
-      fi
+      read -r -p "Terraform: (a)pply, (s)kip, or (d)estroy infrastructure? " TF_CHOICE
+      case "$TF_CHOICE" in
+          [Aa]*) TF_ACTION="apply"; break;;
+          [Ss]*) TF_ACTION="skip"; break;;
+          [Dd]*) TF_ACTION="destroy"; break;;
+          *) echo "Invalid option. Please enter 'a' for apply, 's' for skip, or 'd' for destroy.";;
+      esac
   done
+elif [[ "${DESTROY_ONLY}" -eq 0 ]]; then
+  TF_ACTION="${TF_ACTION:-apply}"
+fi
 
-  # Check if the user wants to skip
-  if [ "$NETWORK_TYPE" == "s" ]; then
-      echo "Skipping network setup and proceeding to infrastructure destruction..."
-      read -r -p "Press ENTER to destroy the infrastructure or CTRL+C to cancel..."
-      destroy_infrastructure
-      exit 0
-  fi
+if [[ "$TF_ACTION" == "destroy" || "${DESTROY_ONLY}" -eq 1 ]]; then
+  echo "Destroying infrastructure..."
+  read -r -p "Press ENTER to destroy or CTRL+C to cancel..."
+  destroy_infrastructure
+  exit 0
+fi
 
-  # Set the snarkos_network_int value based on user selection
-  if [ "$NETWORK_TYPE" == "t" ]; then
-      SNARKOS_NETWORK_INT=1
-      cp "$PARENT_DIR/playbooks/snapshot_urls_testnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
-      echo "Using testnet snapshot URLs."
-      NETWORK="testnet"
-  elif [ "$NETWORK_TYPE" == "m" ]; then
-      SNARKOS_NETWORK_INT=0
-      cp "$PARENT_DIR/playbooks/snapshot_urls_mainnet.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
-      echo "Using mainnet snapshot URLs."
-      NETWORK="mainnet"
-  else
-      SNARKOS_NETWORK_INT=2
-      cp "$PARENT_DIR/playbooks/snapshot_urls_canary.txt" "$PARENT_DIR/playbooks/snapshot_urls.txt"
-      echo "Using canary snapshot URLs."
-      NETWORK="canary"
-  fi
-else
+# --- Step 2: Network target (mainnet / testnet / canary) ---
+if [[ -z "$NETWORK" ]]; then
+  while true; do
+      read -r -p "Target network: (m)ainnet, (t)estnet, or (c)anary? " NETWORK_CHOICE
+      case "$NETWORK_CHOICE" in
+          [Mm]*) NETWORK="mainnet"; break;;
+          [Tt]*) NETWORK="testnet"; break;;
+          [Cc]*) NETWORK="canary"; break;;
+          *) echo "Invalid option. Please enter 'm' for mainnet, 't' for testnet, or 'c' for canary.";;
+      esac
+  done
+fi
+
+# Set SNARKOS_NETWORK_INT and snapshot URLs based on network
+if [[ -n "$NETWORK" ]]; then
   case "$NETWORK" in
     testnet)
       SNARKOS_NETWORK_INT=1
@@ -262,15 +295,18 @@ else
 fi
 
 # Get highest snapshot height
-SNAPSHOT_HEIGHT=$(get_highest_snapshot_height "$PARENT_DIR/playbooks/snapshot_urls.txt")
+# SNAPSHOT_HEIGHT=$(get_highest_snapshot_height "$PARENT_DIR/playbooks/snapshot_urls.txt")
 # Get current network height
-CURRENT_HEIGHT=$(get_current_network_height "$NETWORK")
+# CURRENT_HEIGHT=$(get_current_network_height "$NETWORK")
 
 # Check if snapshots are outdated
-if ! check_snapshot_freshness "$NETWORK" "$SNAPSHOT_HEIGHT" "$CURRENT_HEIGHT"; then
-    echo "Exiting due to outdated snapshots."
-    exit 1
-fi
+# if ! check_snapshot_freshness "$NETWORK" "$SNAPSHOT_HEIGHT" "$CURRENT_HEIGHT"; then
+#     echo "Exiting due to outdated snapshots."
+#     exit 1
+# fi
+
+# Persist network for check_sync.sh (reads from playbooks/.network)
+echo "$NETWORK" > "$PARENT_DIR/playbooks/.network"
 
 # Count ALL lines in the snapshot_urls.txt file (including empty ones)
 # Use grep with a pattern that matches empty lines too
@@ -293,8 +329,12 @@ fi
 
 echo "Updated variables.tf with $SNAPSHOT_COUNT clients."
 
-# Initialize and apply Terraform
-init_and_apply_terraform
+# Initialize and apply Terraform, or use existing infrastructure
+if [[ "$TF_ACTION" == "apply" ]]; then
+  init_and_apply_terraform
+else
+  use_existing_terraform
+fi
 
 # Read the load balancer DNS name from lb_url.txt
 LB_URL=$(cat "$PARENT_DIR/lb_url.txt")

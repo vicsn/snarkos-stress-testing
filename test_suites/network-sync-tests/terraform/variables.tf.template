@@ -26,6 +26,6 @@ variable "snarkos_network" {
 
 variable "volume_size" {
   description = "The volume size of the snapshot nodes"
-  default     = 1200
+  default     = 3200
   type        = number
 }

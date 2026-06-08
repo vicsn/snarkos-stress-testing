@@ -96,6 +96,7 @@ run_ansible_playbook() {
   (
     cd "${TF_DIR}/ansible"
     ansible-playbook \
+      --extra-vars "ansible_ssh_common_args='-o ForwardAgent=yes'" \
       --extra-vars "github_token=${TF_VAR_github_token}" \
       --extra-vars "stress_testing_branch=${STRESS_TESTING_BRANCH}" \
       --extra-vars "talisker_branch=${TALISKER_BRANCH}" \
@@ -109,7 +110,7 @@ run_ansible_playbook() {
       --extra-vars "elastic_cloud_id=${elastic_cloud_id}" \
       --extra-vars "elastic_api_key=${elastic_api_key}" \
       --extra-vars "grafana_cloud_api_key=${grafana_cloud_api_key}" \
-      -i "${manager_ip}," playbook.yml
+      -i "${manager_ip}," setup.yml
   )
 }
 

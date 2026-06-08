@@ -41,7 +41,7 @@ features: "" # optional, e.g., "test_network"
 # snarkos_pre_build_location: "/home/ubuntu/bin/snarkos" 
 
 # Application vars
-snarkos_verbosity: "1"
+snarkos_verbosity: "6"
 rest_rps: 1000000000
 
 # Ansible vars

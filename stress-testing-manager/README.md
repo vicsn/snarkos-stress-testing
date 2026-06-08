@@ -91,7 +91,7 @@ What does that include?
 Keep in mind that in order to create the Stress Testing Manager, first you need to export `TF_VAR_AWS_ACCESS_KEY` and `TF_VAR_AWS_SECRET_KEY`.
 Additionally you need a github token with read access to this repository (so the stress-testing-manager can download the tests). Export it with `TF_VAR_github_token`.
 
-By default, the setup uses the ssh key `id_ed25519.pub` in `~/.ssh/`. You can overwrite this with `TF_VAR_PUBLIC_KEY_PATH=...`.
+By default, the setup uses the ssh key `id_ed25519.pub` in `~/.ssh/`. You can overwrite this with `TF_VAR_PUBLIC_KEY_PATH=...` - make sure to have the SSH key added to your local agent using `ssh-add`.
 
 #### Creating a staging copy (parallel environment)
 
