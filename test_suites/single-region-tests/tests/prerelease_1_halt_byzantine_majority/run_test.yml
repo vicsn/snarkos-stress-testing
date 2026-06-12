@@ -1,23 +1,31 @@
+# bootstrap clients / validator_data facts are prepared centrally by the
+# run_test.yml wrapper (delegated to localhost), so they're available here via
+# hostvars['localhost'].* even though the --limit filters localhost out.
+
 - name: Run test 3 times
-  hosts: localhost
+  # Anchor on a matched host and run the restart sequence once (the original
+  # `hosts: localhost` play is filtered out by the --limit intersection). The
+  # tasks inside restart.yml that must run on the controller already use
+  # `delegate_to: localhost`, and the systemd tasks delegate to the validators.
+  hosts: snarkos_validator
+  gather_facts: false
+  remote_user: ubuntu
   tasks:
     - name: Include restart tasks
       include_tasks: restart.yml
       loop: "{{ range(1, 4) | list }}"
-
-- name: Set bootstrap clients related facts
-  hosts: localhost
-  any_errors_fatal: true
-  roles:
-    - choose_bootstrap_client
+      run_once: true
 
 - name: Gather full validator host list (unaffected by serial batching)
-  hosts: localhost
+  hosts: snarkos_validator
   gather_facts: false
   tasks:
-    - name: Store all snarkos_validator hosts
+    - name: Store all snarkos_validator hosts (on localhost)
       set_fact:
         all_validator_hosts: "{{ groups['snarkos_validator'] | list }}"
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
 
 - name: Check the all the validators are synced
   hosts: snarkos_validator

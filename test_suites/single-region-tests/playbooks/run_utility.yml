@@ -1,8 +1,25 @@
-- name: Run Utility
-  hosts: localhost
+- name: Prepare controller-side facts (validator data + bootstrap clients)
+  # These facts must live on localhost so the utility plays can read them via
+  # hostvars['localhost'].*. We cannot target `hosts: localhost` here because the
+  # AWS dynamic-inventory --limit uses a devnet&owner intersection that filters
+  # localhost out. Instead we run once on a matched host and delegate the
+  # fact-setting to localhost (delegation ignores --limit). 'always' so the facts
+  # are set even when a utility is run with a tag filter.
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  tags: always
   tasks:
-    - name: Load validator data from JSON
+    - name: Load validator data from JSON (stored on localhost)
       set_fact:
         validator_data: "{{ lookup('file', playbook_dir + '/../validator_data/data.json') | from_json }}"
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Decide on the bootstrap clients (stored on localhost)
+      ansible.builtin.include_role:
+        name: choose_bootstrap_client
+      run_once: true
 
 - import_playbook: ../utils/{{ utility_name }}/run_utility.yml

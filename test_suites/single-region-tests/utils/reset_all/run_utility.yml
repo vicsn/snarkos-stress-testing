@@ -1,6 +1,3 @@
-- name: Determine if snarkOS reinstall is needed
-  import_playbook: ../../playbooks/maybe_reinstall_snarkos.yml
-
 - name: Set bootstrap clients related facts
   hosts: localhost
   any_errors_fatal: true

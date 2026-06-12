@@ -29,12 +29,6 @@
       set_fact:
         program_data: "{{ lookup('file', playbook_dir + '/../../programs/credits.aleo') }}"
 
-- name: Select installation method and build if needed
-  hosts: localhost
-  gather_facts: true
-  any_errors_fatal: true
-  roles:
-    - check_and_setup_snarkos
     #- role: snarkos_service
     #  num_instances: "{{ groups['snarkos_validator'] | length }}"
     #  validator_index: 0
@@ -61,7 +55,7 @@
   become: true
   remote_user: ubuntu
   vars:
-    snarkos_install_s3_release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
+    release_name: "{{ hostvars['localhost'].release_name }}"
     snarkos_install_s3_dest_name: "snarkos"
   roles:
     - snarkos_install_s3
@@ -89,9 +83,9 @@
   remote_user: ubuntu
   become_user: ubuntu
   tasks:
-    - name: Set standard release name as fact
+    - name: Set release name as fact
       set_fact:
-        release_name: "{{ hostvars['localhost'].standard_release_name }}"
+        release_name: "{{ hostvars['localhost'].release_name }}"
 
     - name: Read pregenerate_transactions_num_validators var (if set)
       set_fact:
@@ -165,7 +159,7 @@
 
     - name: Set snarkOS binary path based on installation method
       set_fact:
-        snarkos_bin_path: "{{ '/root/.cargo/bin' if snarkos_git_hash is defined else '/usr/bin' }}"
+        snarkos_bin_path: "/usr/bin"
 
     - name: Set txs_target_state_root based on num_validators_fact
       set_fact:

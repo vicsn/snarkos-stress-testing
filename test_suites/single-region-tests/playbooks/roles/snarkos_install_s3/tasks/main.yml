@@ -1,7 +1,11 @@
+- name: Print bucket and release name
+  debug:
+    msg: "s3_bucket: {{ s3_bucket }}, release_name: {{ release_name }}, snarkos_install_s3_dest_name: {{ snarkos_install_s3_dest_name }}"
+
 - name: Download snarkos binary from S3
   aws_s3:
     bucket: "{{ s3_bucket }}"
-    object: "{{ snarkos_install_s3_release_name | trim }}"
+    object: "{{ release_name | trim }}"
     dest: "/usr/bin/{{ snarkos_install_s3_dest_name }}"
     mode: get
   register: s3_download

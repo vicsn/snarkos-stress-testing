@@ -343,6 +343,51 @@ set_devnet_vars || exit 1
 
 cd "$PARENT_DIR/playbooks"
 
+# Check if the desired snarkOS binary is present in S3. If it is not, create
+# an ephemeral builder machine, build the binary, upload it to S3, then tear
+# the builder down before continuing with setup.
+# NOTE: the network-sync-tests terraform must include aws_instance.snarkos_builder
+# and the add_builder variable (see single-region-tests/terraform/main.tf).
+VARS_FILE="$PARENT_DIR/playbooks/vars.yml"
+SNARKOS_GIT_HASH=$(grep -E '^snarkos_git_hash:' "$VARS_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'")
+FEATURES=$(grep -E '^features:' "$VARS_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+S3_BUCKET_BUILD=$(grep -E '^s3_bucket:' "$VARS_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+S3_BUCKET_BUILD="${S3_BUCKET_BUILD:-$RELEASE_BUCKET}"
+
+# Mirror the release_name Jinja2 expression from vars.yml:
+# snarkos_git_hash[_features]
+RELEASE_NAME="$SNARKOS_GIT_HASH"
+[[ -n "$FEATURES" ]] && RELEASE_NAME="${RELEASE_NAME}_${FEATURES}"
+
+if aws s3api head-object --bucket "$S3_BUCKET_BUILD" --key "$RELEASE_NAME" \
+     --profile ephnet &>/dev/null; then
+    echo "snarkOS binary '$RELEASE_NAME' found in S3, skipping build."
+else
+    echo "Binary '$RELEASE_NAME' not found in S3 bucket $S3_BUCKET_BUILD. Creating ephemeral builder machine..."
+
+    cd "$PARENT_DIR/terraform"
+    terraform apply \
+        -target=aws_iam_policy.snarkos_s3_access \
+        -target=aws_iam_role_policy_attachment.snarkos_s3_access_attach \
+        -target=aws_instance.snarkos_builder \
+        -var="add_builder=true" -auto-approve
+
+    cd "$PARENT_DIR/playbooks"
+    ansible-playbook -i ../inventory/dynamic_inventory.aws_ec2.yml build_binary.yml \
+        --limit "builder" \
+        --extra-vars="devnet_name=${DEVNET_NAME}" \
+        --extra-vars="snarkos_network=${NETWORK}" \
+        --extra-vars="snarkos_network_int=${SNARKOS_NETWORK_INT}" \
+        --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
+        --extra-vars="@vars.yml"
+
+    echo "Build complete. Destroying ephemeral builder..."
+    cd "$PARENT_DIR/terraform"
+    terraform destroy -target=aws_instance.snarkos_builder \
+        -var="add_builder=true" -auto-approve
+    cd "$PARENT_DIR/playbooks"
+fi
+
 ansible-playbook setup.yml \
   --extra-vars="devnet_name=${DEVNET_NAME}" \
   --extra-vars "test_network_url=${LB_URL} snarkos_network_int=${SNARKOS_NETWORK_INT}" \

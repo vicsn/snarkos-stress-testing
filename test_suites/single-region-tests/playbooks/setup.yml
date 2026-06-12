@@ -1,9 +1,30 @@
-- name: Load validator data
-  hosts: localhost
+- name: Prepare controller-side facts (validator data + bootstrap clients)
+  # These facts must live on localhost so later plays can read them via
+  # hostvars['localhost'].*. We cannot target `hosts: localhost` here because the
+  # AWS dynamic-inventory --limit uses a devnet&owner intersection that filters
+  # localhost out (intersection applies to the whole pattern, so a trailing
+  # ":localhost" does not survive). Instead we run once on a matched host and
+  # delegate the fact-setting to localhost (delegation ignores --limit).
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  # 'always' so these controller-side facts are set even when setup is run with a
+  # tag filter (e.g. --tags snarkos). The validators play is tagged 'snarkos' and
+  # the clients play 'snarkos_client', and both read hostvars['localhost'].*, so
+  # this prep must never be filtered out.
+  tags: always
   tasks:
-    - name: Load validator data from JSON
+    - name: Load validator data from JSON (stored on localhost)
       set_fact:
         validator_data: "{{ lookup('file', playbook_dir + '/../validator_data/data.json') | from_json }}"
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Decide on the bootstrap clients (stored on localhost)
+      ansible.builtin.include_role:
+        name: choose_bootstrap_client
+      run_once: true
 
 - name: Wait for SSH to become available
   hosts: all
@@ -14,44 +35,8 @@
     - name: Wait for SSH to become ready
       ansible.builtin.wait_for_connection:
 
-- name: Select installation method and build if needed
-  hosts: localhost
-  gather_facts: true
-  any_errors_fatal: true
-  roles:
-    - check_and_setup_snarkos
-
 # ------------------------------------------------
 # snarkOS installation
-
-- name: Choose builder machine (only if remote build)
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Add chosen host to group 'builder'
-      add_host:
-        name: >-
-          {{ ((groups['snarkos_validator']|default([])) + (groups['snarkos_client']|default([]))) | first }}
-        groups: builder
-      when: (use_remote_build | default(false)) | bool
-
-- name: Build snarkOS once and upload to S3 if use_remote_build
-  hosts: builder
-  remote_user: ubuntu
-  become: true
-  any_errors_fatal: true
-  vars:
-    s3_bucket: "{{ s3_bucket }}"
-    snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
-    snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-    release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
-    dest_name: "snarkos"
-  tasks:
-    - name: Build from git on one validator to reuse on the others
-      include_role:
-        name: snarkos_build_from_git
-      when: hostvars['localhost'].use_remote_build
-  run_once: true
 
 - name: Install snarkOS
   hosts:
@@ -65,60 +50,15 @@
     s3_bucket: "{{ s3_bucket }}"
     snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
     snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-    release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
+    release_name: "{{ hostvars['localhost'].release_name }}"
     dest_name: "snarkos"
   tasks:
-    - name: Use local pre-built version
-      ansible.builtin.include_role:
-        name: snarkos_upload_local
-      when: hostvars['localhost'].use_local_pre_build
-
     - name: Install snarkOS from S3
       ansible.builtin.include_role:
         name: snarkos_install_s3
       vars:
-        snarkos_install_s3_release_name: "{{ release_name }}"
+        release_name: "{{ release_name }}"
         snarkos_install_s3_dest_name: "{{ dest_name }}"
-      when: hostvars['localhost'].use_s3_pre_build or hostvars['localhost'].use_local_build
-
-    - name: Install snarkOS from binary
-      ansible.builtin.include_role:
-        name: snarkos_install_binary
-      when: hostvars['localhost'].use_github_build
-
-    - name: Build snarkOS from git
-      ansible.builtin.include_role:
-        name: snarkos_build_from_git
-      when: hostvars['localhost'].use_remote_build
-
-    # - name: Download malice snarkOS binary with GitHub CLI
-    #   ansible.builtin.shell: >
-    #     TAG="{{ snarkos_malice_tag }}"
-
-    #     apt-get install -y unzip
-
-    #     GITHUB_TOKEN="{{ github_token }}" gh release download ${TAG}
-    #     --repo ProvableHQ/snarkOS-staging
-    #     --pattern "snarkos*unknown-linux-gnu.zip"
-    #     --output "/tmp/snarkos-malicious.zip"
-    #     --clobber
-
-    #     unzip -o /tmp/snarkos-malicious.zip -d /tmp/snarkos-malicious
-
-    #     mv /tmp/snarkos-malicious/snarkos /usr/bin/snarkos-malice
-    #   args:
-    #     executable: /bin/bash
-    #   register: download_malice_result
-    #   changed_when: download_malice_result is success
-    #   when: not hostvars['localhost'].use_malicious_snarkos_pre_build
-
-    # - name: Download malice snarkOS binary from S3
-    #   vars:
-    #     snarkos_install_s3_release_name: "{{ snarkos_malice_tag }}/snarkos"
-    #     snarkos_install_s3_dest_name: "snarkos-malice"
-    #   ansible.builtin.include_role:
-    #     name: snarkos_install_s3
-    #   when: hostvars['localhost'].use_malicious_snarkos_pre_build
 
   tags: snarkos_install
 
@@ -221,16 +161,6 @@
   remote_user: ubuntu
   any_errors_fatal: true
   strategy: free
-  pre_tasks:
-    - name: Add logging enrichment to Metricbeat, Filebeat and Logstash
-      include_tasks: logging_enrichment.yml
-      vars:
-        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
-        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
-        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
-        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
-        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
-        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
   roles:
     - logstash_setup
     - metricbeat_setup
@@ -252,16 +182,6 @@
     # - logstash_setup # Enable this again if we use a hosted logging solution.
   vars:
     test_runner_for_metrics_ip: "{{ test_runner_ip | default('localhost') }}"
-
-# ------------------------------------------------
-# snarkOS bootstrap clients
-
-- name: Decide on the bootstrap clients
-  hosts: localhost
-  any_errors_fatal: true
-  roles:
-    - choose_bootstrap_client
-  tags: snarkos
 
 # ------------------------------------------------
 # snarkOS validators
@@ -310,17 +230,6 @@
   roles:
     - snarkos_service
   tags: snarkos
-
-# ------------------------------------------------
-# Save the git hash of snarkos that was installed
-
-- name: Persist deployed snarkOS hash for future runs
-  hosts: localhost
-  tasks:
-    - name: Write current snarkOS hash to file
-      copy:
-        dest: "{{ playbook_dir }}/.last_snarkos_hash"
-        content: "{{ snarkos_git_commit_local_build | default(snarkos_git_hash, true) | default('') }}\n"
 
 # ------------------------------------------------
 # TX Runner

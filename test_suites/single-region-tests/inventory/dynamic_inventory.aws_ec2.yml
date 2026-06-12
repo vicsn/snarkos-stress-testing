@@ -1,6 +1,6 @@
 plugin: amazon.aws.aws_ec2
 
-strict: true
+strict: false
 
 cache: false
 
@@ -36,9 +36,9 @@ filters:
     - "prometheus-server"
     - "snarkos-client"
     - "snarkos-prover"
-    - "tx-cannon-node"
     - "tx-sender-node"
     - "tx-runner"
+    - "builder"
 
 # Tell Ansible to use the EC2 Name tag as the server's name in the terminal
 hostnames:

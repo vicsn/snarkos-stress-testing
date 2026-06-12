@@ -15,14 +15,6 @@ s3_bucket: "{{ releases_bucket }}"
 # Other vars
 snarkos_malice_tag: "malice-2349f3eda-with-batch-transmission-request-and-txcache-skip-tx-checks" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs. Only GitHub build installation method currently supported.
 
-# Make sure it uses the same snarkVM rev as snarkOS:
-txcannon_envs: ""
-txcannon_features: "test_network"
-
-use_snarkos_pre_build_s3: true
-use_prebuild_tx_cannon: true
-use_malicious_snarkos_pre_build: true
-
 # Application vars
 snarkos_verbosity: "6"
 rest_rps: 1000000000

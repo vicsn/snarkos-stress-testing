@@ -225,3 +225,37 @@ output "devnet_name" {
   description = "The devnet_name name"
   depends_on  = [null_resource.noop]
 }
+
+# ------------------------------------------------
+# Ephemeral builder machine for compiling snarkOS
+
+variable "add_builder" {
+  default = false
+}
+
+variable "builder_instance_type" {
+  description = "Instance type for the ephemeral snarkOS builder"
+  default     = "c7i.8xlarge"
+}
+
+resource "aws_instance" "snarkos_builder" {
+  count                = var.add_builder ? 1 : 0
+  ami                  = module.stress_base_ami.ami_id
+  instance_type        = var.builder_instance_type
+  key_name             = aws_key_pair.generated_key.key_name
+  iam_instance_profile = aws_iam_instance_profile.snarkos_ec2_instance_profile.name
+  security_groups      = [module.sg.security_group_name]
+
+  ebs_block_device {
+    device_name = "/dev/sda1"
+    volume_size = 128
+    volume_type = "gp3"
+  }
+
+  tags = {
+    Name   = "${var.owner}-${var.devnet_name}-snarkos-builder"
+    Role   = "builder"
+    Owner  = var.owner
+    Devnet = var.devnet_name
+  }
+}

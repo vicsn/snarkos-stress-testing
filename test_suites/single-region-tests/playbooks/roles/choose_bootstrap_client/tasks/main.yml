@@ -1,36 +1,48 @@
+# All facts here are stored on localhost (delegate_to + delegate_facts) so that
+# downstream plays can read them via hostvars['localhost'].*. This works even
+# when the calling play targets the AWS hosts (the dynamic-inventory --limit uses
+# a devnet&owner intersection that filters localhost out), because delegation is
+# not subject to --limit.
 - name: Bootstrap defaults (even if no clients)
   set_fact:
     bootstrap_clients: []
     bootstrap_client_ips: []
     cacheable: true
+  run_once: true
+  delegate_to: localhost
+  delegate_facts: true
 
 - name: Decide bootstrap clients and shared peering sets
   block:
-    - name: Select bootstrap client hostnames (sorted, first N)
+    # Compute hostnames and IPs in a single task. We must not chain across two
+    # delegated set_fact tasks: with delegate_facts the result lives on
+    # hostvars['localhost'], not on this (delegated) host's bare vars, so a
+    # follow-up task referencing the bare name would see it as undefined.
+    - name: Select bootstrap client hostnames and IPs (sorted, first N)
       set_fact:
-        bootstrap_clients: >-
-          {{
-            (groups['snarkos_client'] | default([]) | list | sort)[: (bootstrap_count | default(1) | int) ]
-          }}
-
-    - name: Resolve bootstrap clients' IPs
-      set_fact:
+        bootstrap_clients: "{{ _selected_bootstrap_clients }}"
         bootstrap_client_ips: >-
           {{
-            bootstrap_clients
+            _selected_bootstrap_clients
             | map('extract', hostvars)
             | map(attribute='public_ip_address')
             | select('string') | list | unique | sort
+          }}
+      vars:
+        _selected_bootstrap_clients: >-
+          {{
+            (groups['snarkos_client'] | default([]) | list | sort)[: (bootstrap_count | default(1) | int) ]
           }}
 
     - name: Assert bootstrap set is non-empty
       assert:
         that:
-          - bootstrap_clients | length > 0
-          - bootstrap_client_ips | length > 0
+          - hostvars['localhost'].bootstrap_clients | length > 0
+          - hostvars['localhost'].bootstrap_client_ips | length > 0
         fail_msg: "Bootstrap client set is empty or has no IPs."
   vars:
     bootstrap_count: "{{ (clients_bootstrap_count | default(1)) | int }}"
   when: (groups['snarkos_client'] | default([])) | length > 0
   run_once: true
   delegate_to: localhost
+  delegate_facts: true

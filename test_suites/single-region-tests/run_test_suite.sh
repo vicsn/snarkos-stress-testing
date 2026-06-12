@@ -138,7 +138,15 @@ react_on_exit() {
   # When the external runner manages logs it does its own collection, so skip.
   if [ $rc -ne 0 ] && ! runner_manages_logs; then
       echo "Error detected! Downloading and uploading logs before exiting..."
-      download_and_upload_logs || echo "WARNING: failed to collect/upload logs during EXIT trap; preserving original rc=$rc"
+      local _do_collect="y"
+      if [ -t 0 ]; then
+        read -r -p "Download and upload logs now? (y/n): " _do_collect || _do_collect="n"
+      fi
+      if [[ "$_do_collect" == "y" || "$_do_collect" == "Y" ]]; then
+        download_and_upload_logs || echo "WARNING: failed to collect/upload logs during EXIT trap; preserving original rc=$rc"
+      else
+        echo "Skipping log collection."
+      fi
   fi
 
   exit $rc
@@ -168,7 +176,7 @@ set_network_vars() {
   export ANSIBLE_DEVNET_GROUP="${DEVNET_NAME//-/_}"
 
   export TARGET_PATTERN="devnet_${ANSIBLE_DEVNET_GROUP}:&owner_${ANSIBLE_OWNER_GROUP}"
-  export LIMIT="localhost,${TARGET_PATTERN}"
+  export LIMIT="${TARGET_PATTERN}:localhost"
 
   echo "devnet_name : $DEVNET_NAME"
 
@@ -259,7 +267,6 @@ run_test() {
         "./pre-test.sh"
     fi
 
-    (cd "$PARENT_DIR/terraform" && terraform init -input=false)
     set_network_vars || exit 1
 
     # Run the test
@@ -303,7 +310,6 @@ run_utility() {
         "./pre-utility.sh"
     fi
 
-    (cd "$PARENT_DIR/terraform" && terraform init -input=false)
     set_network_vars || exit 1
 
     # Run the utility
@@ -428,8 +434,6 @@ VARS="${ARG_VARS:-vars}"
 
 echo "About to run setup/tests for user $OWNER"
 
-trap react_on_exit EXIT
-
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
@@ -515,6 +519,9 @@ if [ "$RUN_TESTS" == "y" ]; then
     fi
 fi
 
+# All prompts answered — from here on, errors should trigger log collection.
+trap react_on_exit EXIT
+
 # Optionally initialize and apply Terraform
 if [ "$RUN_TERRAFORM" == "h" ]; then
     cp "$PARENT_DIR/terraform/variables.tf.heavy" "$PARENT_DIR/terraform/variables.tf"
@@ -539,6 +546,49 @@ LB_URL=$(cat "$PARENT_DIR/lb_url.txt")
 if [ "$RUN_SETUP" == "y" ]; then
     cd "$PARENT_DIR/playbooks"
     set_network_vars || exit 1
+
+    # Check if the desired snarkOS binary is present in S3. If it is not, create
+    # an ephemeral builder machine, build the binary, upload it, then tear the
+    # builder down before continuing with setup.
+    VARS_FILE="$PARENT_DIR/playbooks/${VARS}.yml"
+    SNARKOS_GIT_HASH=$(grep -E '^snarkos_git_hash:' "$VARS_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'")
+    FEATURES=$(grep -E '^features:' "$VARS_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+    S3_BUCKET=$(grep -E '^s3_bucket:' "$VARS_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+    S3_BUCKET="${S3_BUCKET:-$RELEASE_BUCKET}"
+
+    # Mirror the release_name Jinja2 expression from vars.yml:
+    # snarkos_git_hash[_features]
+    RELEASE_NAME="$SNARKOS_GIT_HASH"
+    [[ -n "$FEATURES" ]] && RELEASE_NAME="${RELEASE_NAME}_${FEATURES}"
+
+    if aws s3api head-object --bucket "$S3_BUCKET" --key "$RELEASE_NAME" \
+         --profile ephnet &>/dev/null; then
+        echo "snarkOS binary '$RELEASE_NAME' found in S3, skipping build."
+    else
+        echo "Binary '$RELEASE_NAME' not found in S3 bucket $S3_BUCKET. Creating ephemeral builder machine..."
+
+        cd "$PARENT_DIR/terraform"
+        terraform apply \
+            -target=aws_iam_policy.snarkos_s3_access \
+            -target=aws_iam_role_policy_attachment.snarkos_s3_access_attach \
+            -target=aws_instance.snarkos_builder \
+            -var="owner=$OWNER" -var="add_builder=true" -auto-approve
+
+        cd "$PARENT_DIR/playbooks"
+        ansible-playbook -i "$INVENTORY_FILE" build_binary.yml \
+            --limit "builder" \
+            --extra-vars="devnet_name=${DEVNET_NAME}" \
+            --extra-vars="snarkos_network=${NETWORK}" \
+            --extra-vars="snarkos_network_int=${NETWORK_INT}" \
+            --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
+            --extra-vars="@${VARS}.yml"
+
+        echo "Build complete. Destroying ephemeral builder..."
+        cd "$PARENT_DIR/terraform"
+        terraform destroy -target=aws_instance.snarkos_builder \
+            -var="owner=$OWNER" -var="add_builder=true" -auto-approve
+        cd "$PARENT_DIR/playbooks"
+    fi
 
     ansible-playbook -i "$INVENTORY_FILE" setup.yml \
       --limit "$LIMIT" \

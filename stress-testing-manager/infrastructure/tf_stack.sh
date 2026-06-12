@@ -16,13 +16,14 @@ usage() {
 Usage:
   TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh provision [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
   TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh setup [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [-- ...extra terraform args]
+  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh update [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR]
   tf_stack.sh destroy [--staging|--workspace NAME] [--auto-approve] [--force] [-- ...extra terraform args]
   tf_stack.sh plan [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh output [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh ip [--staging|--workspace NAME] [-- ...extra terraform args]
 
 Notes:
-  - provision runs terraform apply only. setup runs Ansible against the instance IP from terraform output (no terraform apply).
+  - provision runs terraform apply only. setup/update run Ansible against the instance IP from terraform output (no terraform apply).
   - default workspace is production, --staging maps to workspace "staging".
   - set TF_VAR_github_token and other TF_VAR_* the same way as for terraform (e.g. when running provision); see env-default / env-staging.
   - destroy on default is blocked unless --force is provided.
@@ -56,7 +57,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$ACTION" in
-  provision|destroy|plan|output|ip|setup) ;;
+  provision|destroy|plan|output|ip|setup|update) ;;
   *) usage; die "Unknown action: $ACTION" ;;
 esac
 
@@ -72,6 +73,7 @@ cd "$TF_DIR"
 
 # Run Ansible against the manager instance (reads IP from terraform output). Does not run terraform apply.
 run_ansible_playbook() {
+  local playbook="${1:?missing playbook name}"
   : "${TF_VAR_github_token:?Set TF_VAR_github_token (e.g. source your .env)}"
   local manager_ip
   manager_ip="$(terraform output -raw stress_testing_manager_public_ip)"
@@ -92,7 +94,7 @@ run_ansible_playbook() {
   local elastic_api_key="${TF_VAR_ELASTIC_API_KEY:-your_elastic_api_key_here}"
   local grafana_cloud_api_key="${TF_VAR_GRAFANA_CLOUD_API_KEY:-your_grafana_cloud_api_key_here}"
 
-  echo "==> ansible-playbook (inventory $manager_ip)"
+  echo "==> ansible-playbook $playbook (inventory $manager_ip)"
   (
     cd "${TF_DIR}/ansible"
     ansible-playbook \
@@ -110,19 +112,21 @@ run_ansible_playbook() {
       --extra-vars "elastic_cloud_id=${elastic_cloud_id}" \
       --extra-vars "elastic_api_key=${elastic_api_key}" \
       --extra-vars "grafana_cloud_api_key=${grafana_cloud_api_key}" \
-      -i "${manager_ip}," setup.yml
+      -i "${manager_ip}," "$playbook"
   )
 }
 
-echo "==> terraform init"
-terraform init -upgrade
+init_terraform() {
+  echo "==> terraform init"
+  terraform init -upgrade
 
-echo "==> selecting workspace: $WORKSPACE"
-if terraform workspace list | sed 's/*//g' | awk '{$1=$1};1' | grep -qx "$WORKSPACE"; then
-  terraform workspace select "$WORKSPACE"
-else
-  terraform workspace new "$WORKSPACE"
-fi
+  echo "==> selecting workspace: $WORKSPACE"
+  if terraform workspace list | sed 's/*//g' | awk '{$1=$1};1' | grep -qx "$WORKSPACE"; then
+    terraform workspace select "$WORKSPACE"
+  else
+    terraform workspace new "$WORKSPACE"
+  fi
+}
 
 if [[ "$ACTION" == "destroy" && "$WORKSPACE" == "default" && "$FORCE" -ne 1 ]]; then
   die "Refusing to destroy the DEFAULT workspace. Re-run with --force if you really mean it."
@@ -147,13 +151,20 @@ if ((${#APPROVE_ARGS[@]})); then
 fi
 
 case "$ACTION" in
+  setup)
+    echo "==> setup: ansible-playbook (workspace=$WORKSPACE)"
+    run_ansible_playbook setup.yml
+    ;;
+  update)
+    echo "==> update: ansible-playbook (workspace=$WORKSPACE)"
+    run_ansible_playbook update.yml
+    ;;
+  *)
+    init_terraform
+    case "$ACTION" in
   plan)
     echo "==> terraform plan (workspace=$WORKSPACE)"
     terraform plan "${TF_COMMON_ARGS[@]}"
-    ;;
-  setup)
-    echo "==> setup: ansible-playbook (workspace=$WORKSPACE)"
-    run_ansible_playbook
     ;;
   provision)
     echo "==> terraform apply via provision (workspace=$WORKSPACE)"
@@ -174,5 +185,7 @@ case "$ACTION" in
   ip)
     echo "==> stress_testing_manager_public_ip (workspace=$WORKSPACE)"
     terraform output -raw stress_testing_manager_public_ip
+    ;;
+    esac
     ;;
 esac

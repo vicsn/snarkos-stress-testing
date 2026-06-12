@@ -5,25 +5,21 @@
         envs_dict: "{{ dict(envs | default('') | split(',') | map('split', '=', 1)) }}"
       when: envs is defined and envs | length > 0
 
-    - name: Set release name
-      set_fact:
-        releasename: "{{ generate_release_name | replace('COMMIT_HASH', snarkos_git_hash) | trim }}"
-
-    - name: Debug generated release name
+    - name: Debug release name
       debug:
-        msg: "Release name: '{{ releasename }}'"
+        msg: "Release name: '{{ release_name }}'"
 
     - name: Check if the binary for the git hash exists in S3 bucket
       aws_s3:
         bucket: "{{ s3_bucket }}"
         mode: list
-        prefix: "{{ releasename }}"
+        prefix: "{{ release_name }}"
       register: s3_ls_output
       failed_when: false
 
     - name: Set fact if object exists
       set_fact:
-        s3_binary_exists: "{{ releasename in (s3_ls_output.s3_keys | default([])) }}"
+        s3_binary_exists: "{{ release_name in (s3_ls_output.s3_keys | default([])) }}"
 
     - name: Construct authenticated repo URL if GitHub token is set
       set_fact:
@@ -176,19 +172,19 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         mode: list
-        prefix: "{{ releasename }}"
+        prefix: "{{ release_name }}"
       register: s3_ls_output
       failed_when: false
 
     - name: Set fact if object exists (post)
       set_fact:
-        s3_binary_exists: "{{ releasename in (s3_ls_output.s3_keys | default([])) }}"
+        s3_binary_exists: "{{ release_name in (s3_ls_output.s3_keys | default([])) }}"
 
     - name: Upload the built snarkos binary to S3
       become_user: ubuntu
       aws_s3:
         bucket: "{{ s3_bucket }}"
-        object: "{{ releasename | trim }}"
+        object: "{{ release_name | trim }}"
         src: "/home/ubuntu/snarkOS/target/release/snarkos"
         mode: put
       when:
@@ -214,21 +210,15 @@
       become_user: ubuntu
       aws_s3:
         bucket: "{{ s3_bucket }}"
-        object: "{{ releasename | trim }}"
-        dest: "/home/ubuntu/.cargo/bin/snarkos"
+        object: "{{ release_name | trim }}"
+        dest: "/usr/bin/snarkos"
         mode: get
       when: s3_binary_exists
 
     - name: Ensure the binary is executable
       become_user: ubuntu
       file:
-        path: "/home/ubuntu/.cargo/bin/snarkos"
+        path: "/usr/bin/snarkos"
         mode: '0755'
-
-    - name: Copy the snarkos build to /usr/bin/snarkos to make it the same as in other builds
-      ansible.builtin.shell: |
-        cp /home/ubuntu/.cargo/bin/snarkos /usr/bin/snarkos
-        chmod 755 /usr/bin/snarkos
-        chown ubuntu:ubuntu  /usr/bin/snarkos
-      args:
-        executable: /bin/bash
+        owner: ubuntu
+        group: ubuntu

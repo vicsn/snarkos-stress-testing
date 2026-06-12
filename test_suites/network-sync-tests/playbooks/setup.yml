@@ -7,13 +7,6 @@
     - name: Wait for SSH to become ready
       ansible.builtin.wait_for_connection:
 
-- name: Select installation method and build if needed
-  hosts: localhost
-  gather_facts: true
-  any_errors_fatal: true
-  roles:
-    - check_and_setup_snarkos
-
 # ------------------------------------------------
 # snarkOS installation
 
@@ -26,31 +19,15 @@
     s3_bucket: "{{ s3_bucket }}"
     snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
     snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
-    release_name: "{{ hostvars['localhost'].standard_release_name | default('snarkos') }}"
+    release_name: "{{ hostvars['localhost'].release_name | default('snarkos') }}"
     dest_name: "snarkos"
   tasks:
-    - name: Use local pre-built version
-      ansible.builtin.include_role:
-        name: snarkos_upload_local
-      when: hostvars['localhost'].use_local_pre_build
-
     - name: Install snarkOS from S3
       ansible.builtin.include_role:
         name: snarkos_install_s3
       vars:
-        snarkos_install_s3_release_name: "{{ release_name }}"
+        release_name: "{{ release_name }}"
         snarkos_install_s3_dest_name: "{{ dest_name }}"
-      when: hostvars['localhost'].use_s3_pre_build or hostvars['localhost'].use_local_build
-
-    - name: Install snarkOS from binary
-      ansible.builtin.include_role:
-        name: snarkos_install_binary
-      when: hostvars['localhost'].use_github_build
-
-    - name: Build snarkOS from git
-      ansible.builtin.include_role:
-        name: snarkos_build_from_git
-      when: hostvars['localhost'].use_remote_build
 
   tags: snarkos_install
 
@@ -187,16 +164,6 @@
   remote_user: ubuntu
   any_errors_fatal: true
   strategy: free
-  pre_tasks:
-    - name: Add logging enrichment to Metricbeat, Filebeat and Logstash
-      include_tasks: logging_enrichment.yml
-      vars:
-        use_local_pre_build: "{{ hostvars['localhost'].use_local_pre_build }}"
-        use_s3_pre_build: "{{ hostvars['localhost'].use_s3_pre_build }}"
-        use_local_build: "{{ hostvars['localhost'].use_local_build }}"
-        use_github_build: "{{ hostvars['localhost'].use_github_build }}"
-        use_remote_build: "{{ hostvars['localhost'].use_remote_build }}"
-        snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
   roles:
     - logstash_setup
     - metricbeat_setup

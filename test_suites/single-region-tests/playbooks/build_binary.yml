@@ -1,0 +1,19 @@
+- name: Wait for SSH on builder
+  hosts: builder
+  remote_user: ubuntu
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Wait for SSH to become ready
+      ansible.builtin.wait_for_connection:
+
+- name: Build snarkOS binary and upload to S3
+  hosts: builder
+  remote_user: ubuntu
+  become: true
+  any_errors_fatal: true
+  run_once: true
+  roles:
+    - snarkos_build_from_git
+  vars:
+    release_name: "{{ hostvars['localhost'].release_name }}"

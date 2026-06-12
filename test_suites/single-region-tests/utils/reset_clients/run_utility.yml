@@ -1,6 +1,3 @@
-- name: Determine if snarkOS reinstall is needed
-  import_playbook: ../../playbooks/maybe_reinstall_snarkos.yml
-
 - name: Set bootstrap clients related facts
   hosts: localhost
   any_errors_fatal: true
@@ -26,11 +23,6 @@
         cmd: |
           rm -rf /home/ubuntu/.ledger-* || true
           rm -rf /home/ubuntu/.node-data-* || true
-
-    # - name: Reinstall snarkOS from a specific branch
-    #   include_tasks: ../../playbooks/reinstall_with_branch.yml
-    #   vars:
-    #     reinstall_branch: fix_sync_off_by_one
 
   roles:
     - snarkos_service
