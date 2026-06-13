@@ -215,6 +215,16 @@
         mode: get
       when: s3_binary_exists
 
+    - name: Copy locally built binary to /usr/bin/snarkos
+      ansible.builtin.copy:
+        src: "/home/ubuntu/snarkOS/target/release/snarkos"
+        dest: "/usr/bin/snarkos"
+        remote_src: true
+        mode: '0755'
+        owner: ubuntu
+        group: ubuntu
+      when: not s3_binary_exists
+
     - name: Ensure the binary is executable
       become_user: ubuntu
       file:

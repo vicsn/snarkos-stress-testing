@@ -18,6 +18,7 @@ filters:
   "tag:Role":
     - "prometheus-server"
     - "snarkos-client"
+    - "builder"
 
 compose:
   ansible_host: public_ip_address

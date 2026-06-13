@@ -10,3 +10,4 @@ s3://aleo-snapshots/testnet/checkpoint_8000000.zip
 gs://snapshots-testnet/archive/2026-03-01_00-00-01.tar
 gs://snapshots-testnet/archive/2026-04-01_00-00-01.tar
 gs://snapshots-testnet/archive/2026-05-01_00-00-01.tar
+gs://snapshots-testnet/archive/2026-06-01_00-00-01.tar
