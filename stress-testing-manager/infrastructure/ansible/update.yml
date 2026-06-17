@@ -4,6 +4,9 @@
   gather_facts: false
   remote_user: ubuntu
   become_user: ubuntu
+  vars:
+    update_stress_testing: "{{ update_target | default('both') in ['both', 'stress-testing'] }}"
+    update_talisker: "{{ update_target | default('both') in ['both', 'talisker'] }}"
   tasks:
     - name: Update the stress-testing repository
       git:
@@ -11,6 +14,7 @@
         dest: "/home/ubuntu/snarkos-stress-testing"
         version: "{{ stress_testing_branch | default('main') }}"
         force: true
+      when: update_stress_testing
 
     - name: Update the Talisker repository
       git:
@@ -18,11 +22,13 @@
         dest: "/home/ubuntu/talisker-src"
         version: "{{ talisker_branch | default('master') }}"
         force: true
+      when: update_talisker
 
     - name: Check if talisker.service unit file exists
       stat:
         path: /etc/systemd/system/talisker.service
       register: talisker_service_file
+      when: update_talisker
 
     - name: Stop talisker service if it exists
       become: true
@@ -30,7 +36,9 @@
       systemd:
         name: talisker.service
         state: stopped
-      when: talisker_service_file.stat.exists
+      when:
+        - update_talisker
+        - talisker_service_file.stat.exists
 
     - name: Compile Talisker
       shell: |
@@ -51,11 +59,13 @@
         CARGO_INCREMENTAL: '0'
       async: 7200
       poll: 15
+      when: update_talisker
 
     - name: Ensure the talisker binary is executable
       file:
         path: "/home/ubuntu/talisker/bin/talisker"
         mode: '0755'
+      when: update_talisker
 
     - name: Deploy the talisker systemd service file
       become: true
@@ -64,20 +74,24 @@
         src: talisker.service
         dest: /etc/systemd/system/talisker.service
         mode: '0644'
+      when: update_talisker
 
     - name: Reload systemd to read updated talisker service file
       become: true
       become_user: root
       systemd:
         daemon_reload: true
+      when: update_talisker
 
     - name: Get IP from inside the stress testing manager EC2 instance
       shell: curl -s http://checkip.amazonaws.com
       register: ip_result
+      when: update_talisker
 
     - name: Set fact for the stress testing manager IP
       set_fact:
         stress_testing_manager_ip: "{{ ip_result.stdout | trim }}"
+      when: update_talisker
 
     - name: Set up testing ansible vars
       template:
@@ -85,6 +99,7 @@
         dest: /home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests/playbooks/vars.yml
         mode: '0600'
       become: true
+      when: update_talisker
 
     - name: Set up sync network testing ansible vars
       template:
@@ -92,6 +107,7 @@
         dest: /home/ubuntu/snarkos-stress-testing/test_suites/network-sync-tests/playbooks/vars.talisker.yml
         mode: '0600'
       become: true
+      when: update_talisker
 
     - name: Restart talisker service
       become: true
@@ -99,3 +115,4 @@
       systemd:
         name: talisker
         state: restarted
+      when: update_talisker

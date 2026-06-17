@@ -16,10 +16,7 @@ export TF_VAR_RELEASE_BUCKET=$RELEASE_BUCKET
 export OWNER=$USER
 export ANSIBLE_ENABLE_PLUGINS=amazon.aws.aws_ec2
 export TF_VAR_devnet_name="${DEVNET_NAME:-single-region-tests}"
-INVENTORY_FILE="$PARENT_DIR/inventory/dynamic_inventory.aws_ec2.yml"
-
-# Sanitize for Ansible dynamic inventory
-export ANSIBLE_OWNER_GROUP="${OWNER//-/_}"
+INVENTORY_DIR="$PARENT_DIR/inventory/"
 
 # Bucket for the logs:
 RESULTS_AND_LOGS_BUCKET="${RESULTS_AND_LOGS_BUCKET:-provable-logs-results}"
@@ -174,9 +171,33 @@ set_network_vars() {
 
   # Sanitize for Ansible dynamic inventory
   export ANSIBLE_DEVNET_GROUP="${DEVNET_NAME//-/_}"
-
+  export ANSIBLE_OWNER_GROUP="${OWNER//-/_}"
   export TARGET_PATTERN="devnet_${ANSIBLE_DEVNET_GROUP}:&owner_${ANSIBLE_OWNER_GROUP}"
-  export LIMIT="${TARGET_PATTERN}:localhost"
+  export LIMIT="${TARGET_PATTERN}"
+
+  # Put localhost into both intersected groups so it survives the devnet&owner
+  # --limit intersection. Ansible's :& operator applies to the whole union, so
+  # a bare ":localhost" suffix gets filtered out; membership in both groups is
+  # the only reliable fix. This file is regenerated on every set_network_vars
+  # call so it always reflects the current owner and devnet.
+  #
+  # INI format with no file extension is used so Ansible's directory-inventory
+  # auto-detection routes directly to the ini plugin. Files with a .yml
+  # extension cause the yaml inventory plugin to be used; if that plugin fails
+  # (observed on some CI environments) localhost is silently dropped from the
+  # inventory. Files with a .ini extension are skipped entirely by the auto
+  # plugin in directory-scan mode. A bare filename (no extension) is parsed by
+  # the ini plugin in all environments and Ansible versions.
+  cat > "$PARENT_DIR/inventory/local" <<EOF
+[local]
+localhost ansible_connection=local
+
+[devnet_${ANSIBLE_DEVNET_GROUP}]
+localhost ansible_connection=local
+
+[owner_${ANSIBLE_OWNER_GROUP}]
+localhost ansible_connection=local
+EOF
 
   echo "devnet_name : $DEVNET_NAME"
 
@@ -217,7 +238,7 @@ init_and_apply_terraform() {
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         # Use Ansible to count matched hosts.
         # (Redirects stderr to /dev/null to hide the noisy warnings while it fails)
-        HOST_COUNT=$(ansible -i "$INVENTORY_FILE" "$TARGET_PATTERN" --list-hosts 2>/dev/null | grep -o 'hosts ([0-9]*)' | grep -o '[0-9]*')
+        HOST_COUNT=$(ansible -i "$INVENTORY_DIR" "$TARGET_PATTERN" --list-hosts 2>/dev/null | grep -o 'hosts ([0-9]*)' | grep -o '[0-9]*')
 
         # If we got a valid number back and it's greater than 0, the tags are synced!
         if [[ -n "$HOST_COUNT" ]] && [[ "$HOST_COUNT" -gt 0 ]]; then
@@ -239,11 +260,11 @@ init_and_apply_terraform() {
     env | grep -iE "aws|ansible|profile"
 
     echo "Ansible inventory graph:"
-    ansible-inventory -i "$PARENT_DIR/inventory/dynamic_inventory.aws_ec2.yml" --graph
+    ansible-inventory -i "$INVENTORY_DIR" --graph
 
     # Save updated IP addresses
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook -i "$INVENTORY_FILE" ips.yml \
+    ansible-playbook -i "$INVENTORY_DIR" ips.yml \
       --limit "$LIMIT" \
       --extra-vars="devnet_name=${DEVNET_NAME}" \
       --extra-vars="snarkos_network=${NETWORK}" \
@@ -271,7 +292,7 @@ run_test() {
 
     # Run the test
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook -i "$INVENTORY_FILE" run_test.yml \
+    ansible-playbook -i "$INVENTORY_DIR" run_test.yml \
       --limit "$LIMIT" \
       --extra-vars="devnet_name=${DEVNET_NAME}" \
       --extra-vars="snarkos_network=${NETWORK}" \
@@ -314,7 +335,7 @@ run_utility() {
 
     # Run the utility
     cd "$PARENT_DIR/playbooks"
-    ansible-playbook -i "$INVENTORY_FILE" run_utility.yml \
+    ansible-playbook -i "$INVENTORY_DIR" run_utility.yml \
       --limit "$LIMIT" \
       --extra-vars="devnet_name=${DEVNET_NAME}" \
       --extra-vars="snarkos_network=${NETWORK}" \
@@ -565,7 +586,7 @@ if [ "$RUN_SETUP" == "y" ]; then
          --profile ephnet &>/dev/null; then
         echo "snarkOS binary '$RELEASE_NAME' found in S3, skipping build."
     else
-        echo "Binary '$RELEASE_NAME' not found in S3 bucket $S3_BUCKET. Creating ephemeral builder machine..."
+        echo "snarkOS binary '$RELEASE_NAME' not found in S3 bucket $S3_BUCKET. Creating ephemeral builder machine..."
 
         cd "$PARENT_DIR/terraform"
         terraform apply \
@@ -574,14 +595,35 @@ if [ "$RUN_SETUP" == "y" ]; then
             -target=aws_instance.snarkos_builder \
             -var="owner=$OWNER" -var="add_builder=true" -auto-approve
 
+        echo "Waiting for builder EC2 instance to reach running state..."
+        # NOTE: polling using the aws-cli may have different behaviour and
+        # should only be re-attempted after we unified the usage of --profile on
+        # local v.s. remote invocations.
+        sleep 30
+
+        BUILDER_IP=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_builder_ip)
+        if [[ -z "$BUILDER_IP" ]]; then
+            echo "ERROR: Could not retrieve builder public IP from Terraform output."
+            exit 1
+        fi
+        echo "Builder instance is running at $BUILDER_IP"
+
+        # Use a one-shot static inventory so the playbook is never subject to
+        # EC2 tag-propagation delays in the dynamic inventory.
+        BUILDER_INVENTORY="$PARENT_DIR/builder_inventory.tmp"
+        cat > "$BUILDER_INVENTORY" <<BUILDERINV
+[builder]
+${BUILDER_IP} ansible_user=ubuntu
+BUILDERINV
+
         cd "$PARENT_DIR/playbooks"
-        ansible-playbook -i "$INVENTORY_FILE" build_binary.yml \
-            --limit "builder" \
+        ansible-playbook -i "$BUILDER_INVENTORY" build_binary.yml \
             --extra-vars="devnet_name=${DEVNET_NAME}" \
             --extra-vars="snarkos_network=${NETWORK}" \
             --extra-vars="snarkos_network_int=${NETWORK_INT}" \
             --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
             --extra-vars="@${VARS}.yml"
+        rm -f "$BUILDER_INVENTORY"
 
         echo "Build complete. Destroying ephemeral builder..."
         cd "$PARENT_DIR/terraform"
@@ -590,7 +632,7 @@ if [ "$RUN_SETUP" == "y" ]; then
         cd "$PARENT_DIR/playbooks"
     fi
 
-    ansible-playbook -i "$INVENTORY_FILE" setup.yml \
+    ansible-playbook -i "$INVENTORY_DIR" setup.yml \
       --limit "$LIMIT" \
       --extra-vars="devnet_name=${DEVNET_NAME}" \
       --extra-vars="snarkos_network=${NETWORK}" \

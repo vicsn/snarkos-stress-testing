@@ -10,13 +10,14 @@ EXTRA_TF_ARGS=()
 
 TALISKER_BRANCH="master"
 STRESS_TESTING_BRANCH="main"
+UPDATE_TARGET="both"
 
 usage() {
   cat <<'EOF'
 Usage:
   TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh provision [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
   TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh setup [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [-- ...extra terraform args]
-  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh update [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR]
+  tf_stack.sh update [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--update-target both|talisker|stress-testing]
   tf_stack.sh destroy [--staging|--workspace NAME] [--auto-approve] [--force] [-- ...extra terraform args]
   tf_stack.sh plan [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh output [--staging|--workspace NAME] [-- ...extra terraform args]
@@ -27,6 +28,7 @@ Notes:
   - default workspace is production, --staging maps to workspace "staging".
   - set TF_VAR_github_token and other TF_VAR_* the same way as for terraform (e.g. when running provision); see env-default / env-staging.
   - destroy on default is blocked unless --force is provided.
+  - update --update-target controls what is refreshed: both (default), talisker, or stress-testing.
   - pass extra terraform args after -- (e.g. -- -var-file=staging.tfvars)
 EOF
 }
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
       STRESS_TESTING_BRANCH="${2:?missing branch name}"
       shift 2
       ;;
+    --update-target)
+      UPDATE_TARGET="${2:?missing update target (both|talisker|stress-testing)}"
+      shift 2
+      ;;
     --auto-approve) AUTO_APPROVE=1; shift ;;
     --force) FORCE=1; shift ;;
     --) shift; EXTRA_TF_ARGS+=("$@"); break ;;
@@ -60,14 +66,6 @@ case "$ACTION" in
   provision|destroy|plan|output|ip|setup|update) ;;
   *) usage; die "Unknown action: $ACTION" ;;
 esac
-
-if [[ "$WORKSPACE" == "default" && "$TALISKER_BRANCH" != "master" ]]; then
-  die "--talisker-branch is only allowed with --staging/--workspace (non-default)"
-fi
-
-if [[ "$WORKSPACE" == "default" && "$STRESS_TESTING_BRANCH" != "main" ]]; then
-  die "--stress-testing-branch is only allowed with --staging/--workspace (non-default)"
-fi
 
 cd "$TF_DIR"
 
@@ -95,23 +93,29 @@ run_ansible_playbook() {
   local grafana_cloud_api_key="${TF_VAR_GRAFANA_CLOUD_API_KEY:-your_grafana_cloud_api_key_here}"
 
   echo "==> ansible-playbook $playbook (inventory $manager_ip)"
+  local ansible_extra_vars=(
+    --extra-vars "ansible_ssh_common_args='-o ForwardAgent=yes'"
+    --extra-vars "github_token=${TF_VAR_github_token}"
+    --extra-vars "stress_testing_branch=${STRESS_TESTING_BRANCH}"
+    --extra-vars "talisker_branch=${TALISKER_BRANCH}"
+    --extra-vars "pre_release_prefix=${pre_release_prefix}"
+    --extra-vars "sync_prefix=${sync_prefix}"
+    --extra-vars "load_ledger_prefix=${load_ledger_prefix}"
+    --extra-vars "slack_channel_id=${TF_VAR_SLACK_CHANNEL_ID:-}"
+    --extra-vars "slack_token=${TF_VAR_SLACK_TOKEN:-}"
+    --extra-vars "releases_bucket=${releases_bucket}"
+    --extra-vars "results_bucket=${results_bucket}"
+    --extra-vars "elastic_cloud_id=${elastic_cloud_id}"
+    --extra-vars "elastic_api_key=${elastic_api_key}"
+    --extra-vars "grafana_cloud_api_key=${grafana_cloud_api_key}"
+  )
+  if [[ "$playbook" == "update.yml" ]]; then
+    ansible_extra_vars+=(--extra-vars "update_target=${UPDATE_TARGET}")
+  fi
   (
     cd "${TF_DIR}/ansible"
     ansible-playbook \
-      --extra-vars "ansible_ssh_common_args='-o ForwardAgent=yes'" \
-      --extra-vars "github_token=${TF_VAR_github_token}" \
-      --extra-vars "stress_testing_branch=${STRESS_TESTING_BRANCH}" \
-      --extra-vars "talisker_branch=${TALISKER_BRANCH}" \
-      --extra-vars "pre_release_prefix=${pre_release_prefix}" \
-      --extra-vars "sync_prefix=${sync_prefix}" \
-      --extra-vars "load_ledger_prefix=${load_ledger_prefix}" \
-      --extra-vars "slack_channel_id=${TF_VAR_SLACK_CHANNEL_ID:-}" \
-      --extra-vars "slack_token=${TF_VAR_SLACK_TOKEN:-}" \
-      --extra-vars "releases_bucket=${releases_bucket}" \
-      --extra-vars "results_bucket=${results_bucket}" \
-      --extra-vars "elastic_cloud_id=${elastic_cloud_id}" \
-      --extra-vars "elastic_api_key=${elastic_api_key}" \
-      --extra-vars "grafana_cloud_api_key=${grafana_cloud_api_key}" \
+      "${ansible_extra_vars[@]}" \
       -i "${manager_ip}," "$playbook"
   )
 }
@@ -156,7 +160,11 @@ case "$ACTION" in
     run_ansible_playbook setup.yml
     ;;
   update)
-    echo "==> update: ansible-playbook (workspace=$WORKSPACE)"
+    case "$UPDATE_TARGET" in
+      both|talisker|stress-testing) ;;
+      *) die "Invalid --update-target: $UPDATE_TARGET (expected both, talisker, or stress-testing)" ;;
+    esac
+    echo "==> update: ansible-playbook (workspace=$WORKSPACE, target=$UPDATE_TARGET)"
     run_ansible_playbook update.yml
     ;;
   *)

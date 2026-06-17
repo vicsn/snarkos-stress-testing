@@ -207,7 +207,6 @@
         mode: '0755'
 
     - name: Download snarkos binary from S3
-      become_user: ubuntu
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ release_name | trim }}"
@@ -226,7 +225,6 @@
       when: not s3_binary_exists
 
     - name: Ensure the binary is executable
-      become_user: ubuntu
       file:
         path: "/usr/bin/snarkos"
         mode: '0755'

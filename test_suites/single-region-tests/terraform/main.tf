@@ -259,3 +259,8 @@ resource "aws_instance" "snarkos_builder" {
     Devnet = var.devnet_name
   }
 }
+
+output "snarkos_builder_ip" {
+  value       = length(aws_instance.snarkos_builder) > 0 ? aws_instance.snarkos_builder[0].public_ip : ""
+  description = "Public IP of the ephemeral snarkOS builder instance (empty when not provisioned)"
+}

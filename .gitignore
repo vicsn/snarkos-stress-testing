@@ -89,3 +89,5 @@ test_suites/network-sync-tests/playbooks/local.inventory
 # Related to scripts
 **/*/.builder_ip
 **/.upload_state
+
+**/inventory/local
