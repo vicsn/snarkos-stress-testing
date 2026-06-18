@@ -45,6 +45,6 @@
       when: next_host != 'none'
       vars:
         node_to_check: localhost
-        node_to_compare: "{{ next_host }}"
+        node_to_compare: "{{ hostvars[next_host]['ansible_host'] }}"
         retries_var: 30
         delay_var: 30

@@ -8,16 +8,16 @@ AUTO_APPROVE=0
 FORCE=0
 EXTRA_TF_ARGS=()
 
-TALISKER_BRANCH="master"
+PUEUE_VERSION=""
 STRESS_TESTING_BRANCH="main"
 UPDATE_TARGET="both"
 
 usage() {
   cat <<'EOF'
 Usage:
-  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh provision [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
-  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh setup [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [-- ...extra terraform args]
-  tf_stack.sh update [--staging|--workspace NAME] [--talisker-branch BR] [--stress-testing-branch BR] [--update-target both|talisker|stress-testing]
+  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh provision [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
+  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh setup [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [-- ...extra terraform args]
+  tf_stack.sh update [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [--update-target both|pueue|stress-testing]
   tf_stack.sh destroy [--staging|--workspace NAME] [--auto-approve] [--force] [-- ...extra terraform args]
   tf_stack.sh plan [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh output [--staging|--workspace NAME] [-- ...extra terraform args]
@@ -28,7 +28,8 @@ Notes:
   - default workspace is production, --staging maps to workspace "staging".
   - set TF_VAR_github_token and other TF_VAR_* the same way as for terraform (e.g. when running provision); see env-default / env-staging.
   - destroy on default is blocked unless --force is provided.
-  - update --update-target controls what is refreshed: both (default), talisker, or stress-testing.
+  - update --update-target controls what is refreshed: both (default), pueue, or stress-testing.
+  - --pueue-version pins the crate (cargo install --locked --version VER pueue); omit for the latest release.
   - pass extra terraform args after -- (e.g. -- -var-file=staging.tfvars)
 EOF
 }
@@ -42,8 +43,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --staging) WORKSPACE="staging"; shift ;;
     --workspace) WORKSPACE="${2:?missing workspace name}"; shift 2 ;;
-    --talisker-branch)
-      TALISKER_BRANCH="${2:?missing branch name}"
+    --pueue-version)
+      PUEUE_VERSION="${2:?missing pueue version}"
       shift 2
       ;;
     --stress-testing-branch)
@@ -51,7 +52,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --update-target)
-      UPDATE_TARGET="${2:?missing update target (both|talisker|stress-testing)}"
+      UPDATE_TARGET="${2:?missing update target (both|pueue|stress-testing)}"
       shift 2
       ;;
     --auto-approve) AUTO_APPROVE=1; shift ;;
@@ -97,7 +98,7 @@ run_ansible_playbook() {
     --extra-vars "ansible_ssh_common_args='-o ForwardAgent=yes'"
     --extra-vars "github_token=${TF_VAR_github_token}"
     --extra-vars "stress_testing_branch=${STRESS_TESTING_BRANCH}"
-    --extra-vars "talisker_branch=${TALISKER_BRANCH}"
+    --extra-vars "pueue_version=${PUEUE_VERSION}"
     --extra-vars "pre_release_prefix=${pre_release_prefix}"
     --extra-vars "sync_prefix=${sync_prefix}"
     --extra-vars "load_ledger_prefix=${load_ledger_prefix}"
@@ -142,7 +143,6 @@ if [[ "$AUTO_APPROVE" -eq 1 ]]; then
 fi
 
 TF_COMMON_ARGS=(
-  "-var=TALISKER_BRANCH=${TALISKER_BRANCH}"
   "-var=STRESS_TESTING_BRANCH=${STRESS_TESTING_BRANCH}"
 )
 if ((${#EXTRA_TF_ARGS[@]})); then
@@ -161,8 +161,8 @@ case "$ACTION" in
     ;;
   update)
     case "$UPDATE_TARGET" in
-      both|talisker|stress-testing) ;;
-      *) die "Invalid --update-target: $UPDATE_TARGET (expected both, talisker, or stress-testing)" ;;
+      both|pueue|stress-testing) ;;
+      *) die "Invalid --update-target: $UPDATE_TARGET (expected both, pueue, or stress-testing)" ;;
     esac
     echo "==> update: ansible-playbook (workspace=$WORKSPACE, target=$UPDATE_TARGET)"
     run_ansible_playbook update.yml

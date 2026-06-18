@@ -1,4 +1,4 @@
-- name: Update stress testing manager source and Talisker service
+- name: Update stress testing manager source and pueue
   hosts: all
   become: true
   gather_facts: false
@@ -6,7 +6,7 @@
   become_user: ubuntu
   vars:
     update_stress_testing: "{{ update_target | default('both') in ['both', 'stress-testing'] }}"
-    update_talisker: "{{ update_target | default('both') in ['both', 'talisker'] }}"
+    update_pueue: "{{ update_target | default('both') in ['both', 'pueue'] }}"
   tasks:
     - name: Update the stress-testing repository
       git:
@@ -16,38 +16,20 @@
         force: true
       when: update_stress_testing
 
-    - name: Update the Talisker repository
-      git:
-        repo: git@github.com:ProvableHQ/talisker.git
-        dest: "/home/ubuntu/talisker-src"
-        version: "{{ talisker_branch | default('master') }}"
-        force: true
-      when: update_talisker
-
-    - name: Check if talisker.service unit file exists
-      stat:
-        path: /etc/systemd/system/talisker.service
-      register: talisker_service_file
-      when: update_talisker
-
-    - name: Stop talisker service if it exists
+    - name: Stop pueued service if it exists
       become: true
       become_user: root
       systemd:
-        name: talisker.service
+        name: pueued.service
         state: stopped
-      when:
-        - update_talisker
-        - talisker_service_file.stat.exists
+      failed_when: false
+      when: update_pueue
 
-    - name: Compile Talisker
+    - name: Update pueue via cargo (reinstall; provides pueue + pueued)
       shell: |
         set -euo pipefail
         source $HOME/.cargo/env
-        cd /home/ubuntu/talisker-src && \
-        cargo build --release && \
-        mkdir -p /home/ubuntu/talisker/bin && \
-        cp target/release/talisker /home/ubuntu/talisker/bin
+        cargo install --locked --force {% if pueue_version | default('') | length > 0 %}--version {{ pueue_version }} {% endif %}pueue
       args:
         executable: /bin/bash
       environment:
@@ -55,43 +37,37 @@
         SCCACHE_BUCKET: 'snarkos-compiler-cache'
         SCCACHE_REGION: 'us-west-2'
         SCCACHE_S3_USE_SSL: 'true'
-        SCCACHE_S3_KEY_PREFIX: 'talisker_linux_rust/'
+        SCCACHE_S3_KEY_PREFIX: 'pueue_linux_rust/'
         CARGO_INCREMENTAL: '0'
       async: 7200
       poll: 15
-      when: update_talisker
+      when: update_pueue
 
-    - name: Ensure the talisker binary is executable
-      file:
-        path: "/home/ubuntu/talisker/bin/talisker"
-        mode: '0755'
-      when: update_talisker
-
-    - name: Deploy the talisker systemd service file
+    - name: Deploy the pueued systemd service file
       become: true
       become_user: root
       template:
-        src: talisker.service
-        dest: /etc/systemd/system/talisker.service
+        src: pueued.service
+        dest: /etc/systemd/system/pueued.service
         mode: '0644'
-      when: update_talisker
+      when: update_pueue
 
-    - name: Reload systemd to read updated talisker service file
+    - name: Reload systemd to read updated pueued service file
       become: true
       become_user: root
       systemd:
         daemon_reload: true
-      when: update_talisker
+      when: update_pueue
 
     - name: Get IP from inside the stress testing manager EC2 instance
       shell: curl -s http://checkip.amazonaws.com
       register: ip_result
-      when: update_talisker
+      when: update_pueue
 
     - name: Set fact for the stress testing manager IP
       set_fact:
         stress_testing_manager_ip: "{{ ip_result.stdout | trim }}"
-      when: update_talisker
+      when: update_pueue
 
     - name: Set up testing ansible vars
       template:
@@ -99,20 +75,22 @@
         dest: /home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests/playbooks/vars.yml
         mode: '0600'
       become: true
-      when: update_talisker
+      when: update_pueue
 
     - name: Set up sync network testing ansible vars
       template:
         src: sync_network_test_ansible_vars.yml
-        dest: /home/ubuntu/snarkos-stress-testing/test_suites/network-sync-tests/playbooks/vars.talisker.yml
+        dest: /home/ubuntu/snarkos-stress-testing/test_suites/network-sync-tests/playbooks/vars.yml
         mode: '0600'
       become: true
-      when: update_talisker
+      when: update_pueue
 
-    - name: Restart talisker service
+    - name: Enable and (re)start pueued service
       become: true
       become_user: root
       systemd:
-        name: talisker
+        name: pueued
+        enabled: true
         state: restarted
-      when: update_talisker
+        daemon_reload: true
+      when: update_pueue

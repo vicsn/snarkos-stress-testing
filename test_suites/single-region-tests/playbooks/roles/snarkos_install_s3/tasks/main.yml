@@ -9,6 +9,9 @@
     dest: "/usr/bin/{{ snarkos_install_s3_dest_name }}"
     mode: get
   register: s3_download
+  retries: 5
+  delay: 15
+  until: s3_download is not failed
 
 - name: Ensure the download was successful
   fail:

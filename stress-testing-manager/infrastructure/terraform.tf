@@ -39,11 +39,6 @@ variable "GRAFANA_CLOUD_API_KEY" {
   default = "your_grafana_cloud_api_key_here"
 }
 
-variable "TALISKER_BRANCH" {
-  type    = string
-  default = "master"
-}
-
 variable "STRESS_TESTING_BRANCH" {
   type    = string
   default = "main"

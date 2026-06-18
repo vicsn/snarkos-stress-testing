@@ -1,0 +1,5 @@
+# Resolve `source` targets relative to each script's own directory (not CWD),
+# and allow shellcheck to follow them. Lets it follow the runtime-computed
+# `source "$(cd ... && pwd)/lib/common.sh"` via the per-file `source=` directives.
+external-sources=true
+source-path=SCRIPTDIR

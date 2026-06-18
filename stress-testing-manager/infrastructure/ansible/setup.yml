@@ -130,61 +130,33 @@
       args:
         executable: /bin/bash
 
-    - name: Clone the Talisker repository
-      git:
-        repo: git@github.com:ProvableHQ/talisker.git
-        dest: "/home/ubuntu/talisker-src"
-        version: "{{ talisker_branch | default('master') }}"
-        force: true
-
-    - name: Check if talisker.service unit file exists
-      stat:
-        path: /etc/systemd/system/talisker.service
-      register: talisker_service_file
-
-    - name: Stop talisker service if it exists
-      become: true
-      become_user: root
-      systemd:
-        name: talisker.service
-        state: stopped
-      when: talisker_service_file.stat.exists
-
-    - name: Compile Talisker
+    - name: Install pueue via cargo (provides pueue + pueued)
       shell: |
         set -euo pipefail
         source $HOME/.cargo/env
-        cd /home/ubuntu/talisker-src && \
-        cargo build --release && \
-        mkdir -p /home/ubuntu/talisker/bin && \
-        cp target/release/talisker /home/ubuntu/talisker/bin
+        cargo install --locked {% if pueue_version | default('') | length > 0 %}--version {{ pueue_version }} {% endif %}pueue
       args:
         executable: /bin/bash
-        creates: /home/ubuntu/talisker/bin/talisker
+        creates: /home/ubuntu/.cargo/bin/pueued
       environment:
         RUSTC_WRAPPER: '/usr/local/bin/sccache'
         SCCACHE_BUCKET: 'snarkos-compiler-cache'
         SCCACHE_REGION: 'us-west-2'
         SCCACHE_S3_USE_SSL: 'true'
-        SCCACHE_S3_KEY_PREFIX: 'talisker_linux_rust/'
+        SCCACHE_S3_KEY_PREFIX: 'pueue_linux_rust/'
         CARGO_INCREMENTAL: '0'
       async: 7200
       poll: 15
 
-    - name: Ensure the talisker binary is executable
-      file:
-        path: "/home/ubuntu/talisker/bin/talisker"
-        mode: '0755'
-
-    - name: Deploy the talisker systemd service file
+    - name: Deploy the pueued systemd service file
       become: true
       become_user: root
       template:
-        src: talisker.service
-        dest: /etc/systemd/system/talisker.service
+        src: pueued.service
+        dest: /etc/systemd/system/pueued.service
         mode: '0644'
 
-    - name: Reload systemd to read new talisker service file
+    - name: Reload systemd to read new pueued service file
       become: true
       become_user: root
       systemd:
@@ -221,20 +193,15 @@
     - name: Set up sync network testing ansible vars
       template:
         src: sync_network_test_ansible_vars.yml
-        dest: /home/ubuntu/snarkos-stress-testing/test_suites/network-sync-tests/playbooks/vars.talisker.yml
+        dest: /home/ubuntu/snarkos-stress-testing/test_suites/network-sync-tests/playbooks/vars.yml
         mode: '0600'
       become: true
 
-    - name: Set up the talisker control script
-      template:
-        src: talisker_control.sh
-        dest: /home/ubuntu/talisker_control.sh
-        mode: '0755'
-      become: true
-
-    - name: Restart talisker service
+    - name: Enable and (re)start pueued service
       become: true
       become_user: root
       systemd:
-        name: talisker
+        name: pueued
+        enabled: true
         state: restarted
+        daemon_reload: true
