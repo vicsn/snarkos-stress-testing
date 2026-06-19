@@ -2,9 +2,9 @@
 # bin/setup.sh [--vars=NAME]
 # Builds the snarkOS binary if missing, then runs the setup playbook.
 set -euo pipefail
+ORIG_ARGS=("$@")
 # shellcheck source=/dev/null
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
-install_exit_trap
 
 for arg in "$@"; do
   case "$arg" in
@@ -12,7 +12,9 @@ for arg in "$@"; do
     *) die "Unknown argument: $arg" ;;
   esac
 done
+pueue_dispatch_self "setup" -- "$0" "${ORIG_ARGS[@]}"
 
+install_exit_trap
 require_provisioned
 notify_job_begin "setup"
 cd "$PARENT_DIR/playbooks"

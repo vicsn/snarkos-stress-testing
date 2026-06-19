@@ -15,7 +15,7 @@ resource "null_resource" "noop" {}
 
 resource "aws_key_pair" "generated_key" {
   key_name   = "${var.owner}-${var.devnet_name}-devnet-key"
-  public_key = file("../${path.module}/devnet-key.pub")
+  public_key = file("${path.module}/../../../devnet-key.pub")
 }
 
 # ------------------------------------------------

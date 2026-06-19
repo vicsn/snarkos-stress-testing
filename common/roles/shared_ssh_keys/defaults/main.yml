@@ -1,0 +1,2 @@
+# Relative to playbook_dir (playbooks/ or infrastructure/ansible/).
+shared_keys_pub_path: "{{ playbook_dir }}/../../../keys.pub"

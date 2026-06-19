@@ -4,27 +4,23 @@
   gather_facts: true
   remote_user: ubuntu
   become_user: ubuntu
+  vars:
+    _setup_target: "{{ setup_target | default('full') }}"
+    setup_full: "{{ _setup_target == 'full' }}"
+    setup_stress_testing: "{{ _setup_target in ['full', 'both', 'stress-testing'] }}"
+    setup_pueue: "{{ _setup_target in ['full', 'both', 'pueue'] }}"
   tasks:
-    - name: Read additional authorized keys from the template
-      set_fact:
-        extra_keys_raw: "{{ lookup('file', 'templates/extra_keys.pub') }}"
-
-    - name: Parse keys into a list
-      set_fact:
-        extra_keys_list: "{{ extra_keys_raw.splitlines() | select('match', '^ssh-') | list }}"
-
-    - name: Add each key if not already present
-      ansible.posix.authorized_key:
-        user: "ubuntu"
-        key: "{{ item }}"
-        state: present
-      loop: "{{ extra_keys_list }}"
+    - name: Install shared SSH keys from repo keys.pub
+      ansible.builtin.include_role:
+        name: shared_ssh_keys
+      when: setup_full
 
     - name: Ensure .ssh directory exists
       file:
         path: /home/ubuntu/.ssh
         state: directory
         mode: '0700'
+      when: setup_full
 
     - name: Ensure GitHub is in known_hosts
       shell: |
@@ -32,13 +28,70 @@
         ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts
       args:
         executable: /bin/bash
+      when: setup_full
 
-    - name: Clone the stress-testing repository
-      git:
-        repo: git@github.com:ProvableHQ/snarkos-stress-testing.git
-        dest: "/home/ubuntu/snarkos-stress-testing"
-        version: "{{ stress_testing_branch | default('main') }}"
-        force: true
+    - name: Ensure stress-testing repo destination exists
+      file:
+        path: /home/ubuntu/snarkos-stress-testing
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+      when: setup_stress_testing
+
+    - name: Sync local snarkos-stress-testing checkout to manager
+      ansible.posix.synchronize:
+        src: "{{ stress_testing_local_path }}/"
+        dest: /home/ubuntu/snarkos-stress-testing/
+        mode: push
+        delete: true
+        use_ssh_args: true
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=**/.terraform"
+          - "--exclude=**/.terraform.lock.hcl"
+          - "--exclude=**/target"
+          - "--exclude=**/__pycache__"
+          - "--exclude=**/.venv"
+          - "--exclude=**/.venv-lint"
+          - "--exclude=**/node_modules"
+          - "--exclude=devnet-key"
+          - "--exclude=devnet-key.pub"
+          - "--exclude=stress-testing-manager-ip.txt"
+      delegate_to: localhost
+      become: false
+      when: setup_stress_testing
+
+    - name: Check local devnet-key exists
+      ansible.builtin.stat:
+        path: "{{ stress_testing_local_path }}/devnet-key"
+      delegate_to: localhost
+      become: false
+      register: local_devnet_key
+      when: setup_stress_testing
+
+    - name: Copy devnet-key pair to manager
+      ansible.builtin.copy:
+        src: "{{ stress_testing_local_path }}/{{ item.src }}"
+        dest: "/home/ubuntu/snarkos-stress-testing/{{ item.dest }}"
+        mode: "{{ item.mode }}"
+        owner: ubuntu
+        group: ubuntu
+      loop:
+        - { src: devnet-key, dest: devnet-key, mode: '0400' }
+        - { src: devnet-key.pub, dest: devnet-key.pub, mode: '0644' }
+      when: setup_stress_testing and local_devnet_key.stat.exists
+
+    - name: Set ownership on synced stress-testing repo
+      file:
+        path: /home/ubuntu/snarkos-stress-testing
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        recurse: true
+      become: true
+      become_user: root
+      when: setup_stress_testing
 
     - name: Update APT package index and install dependencies
       become: true
@@ -66,12 +119,14 @@
           - lld
           - cmake
           - wget
+      when: setup_full
 
     - name: Ensure Python boto3 is installed
       pip:
         name: boto3
         state: present
         executable: pip3
+      when: setup_full
 
     - name: Download rustup-init script
       become: false
@@ -80,6 +135,7 @@
         url: https://sh.rustup.rs
         dest: /tmp/rustup-init.sh
         mode: '0755'
+      when: setup_full
 
     - name: Run rustup-init.sh to install Rust and Cargo
       become: false
@@ -95,6 +151,7 @@
       register: rustup_result
       changed_when: "'Rust is installed now' in rustup_result.stdout or rustup_result.rc == 0"
       become_user: ubuntu
+      when: setup_full
 
     - name: Add Cargo to PATH in .bashrc
       lineinfile:
@@ -103,6 +160,7 @@
         insertafter: EOF
       become: false
       become_user: ubuntu
+      when: setup_full
 
     - name: Add Cargo to PATH for this session
       shell: |
@@ -111,33 +169,60 @@
       args:
         executable: /bin/bash
       register: cargo_path
+      when: setup_full
 
     - name: Show cargo path
       debug:
         var: cargo_path.stdout
+      when: setup_full
 
     - name: Check if sccache exists
       stat:
         path: /usr/local/bin/sccache
       register: sccache
+      when: setup_full
 
     - name: Install sccache
       shell: |
         wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
         tar -xf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
         sudo install -m 0755 sccache-*/sccache /usr/local/bin/sccache
-      when: not sccache.stat.exists
+      when: setup_full and not sccache.stat.exists
       args:
         executable: /bin/bash
+
+    - name: Stop pueued before install
+      become: true
+      become_user: root
+      systemd:
+        name: pueued.service
+        state: stopped
+      failed_when: false
+      when: setup_pueue
+
+    - name: Stop pueued user service if present
+      become: true
+      become_user: ubuntu
+      shell: systemctl --user stop pueued
+      failed_when: false
+      changed_when: false
+      when: setup_pueue
+
+    - name: Remove pueued user systemd unit if present
+      become: true
+      become_user: ubuntu
+      file:
+        path: /home/ubuntu/.config/systemd/user/pueued.service
+        state: absent
+      when: setup_pueue
 
     - name: Install pueue via cargo (provides pueue + pueued)
       shell: |
         set -euo pipefail
         source $HOME/.cargo/env
-        cargo install --locked {% if pueue_version | default('') | length > 0 %}--version {{ pueue_version }} {% endif %}pueue
+        cargo install --locked --force {% if pueue_version | default('') | length > 0 %}--version {{ pueue_version }} {% endif %}pueue
       args:
         executable: /bin/bash
-        creates: /home/ubuntu/.cargo/bin/pueued
       environment:
         RUSTC_WRAPPER: '/usr/local/bin/sccache'
         SCCACHE_BUCKET: 'snarkos-compiler-cache'
@@ -147,6 +232,25 @@
         CARGO_INCREMENTAL: '0'
       async: 7200
       poll: 15
+      when: setup_pueue
+
+    - name: Ensure pueue config directory exists
+      become: true
+      become_user: ubuntu
+      file:
+        path: /home/ubuntu/.config/pueue
+        state: directory
+        mode: '0755'
+      when: setup_pueue
+
+    - name: Deploy pueue config with fixed unix socket path
+      become: true
+      become_user: ubuntu
+      template:
+        src: pueue.yml
+        dest: /home/ubuntu/.config/pueue/pueue.yml
+        mode: '0644'
+      when: setup_pueue
 
     - name: Deploy the pueued systemd service file
       become: true
@@ -155,18 +259,21 @@
         src: pueued.service
         dest: /etc/systemd/system/pueued.service
         mode: '0644'
+      when: setup_pueue
 
     - name: Reload systemd to read new pueued service file
       become: true
       become_user: root
       systemd:
         daemon_reload: true
+      when: setup_pueue
 
     - name: Run aws config
       ansible.builtin.shell: |
         aws configure set default.region us-central-1
       environment:
         PYTHONNOUSERSITE: "1"   # ignore ~/.local site-packages
+      when: setup_full
 
     - name: Setup aws config
       template:
@@ -174,28 +281,17 @@
         dest: /home/ubuntu/.aws/config
         mode: '0600'
       become: true
+      when: setup_full
 
     - name: Get IP from inside the stress testing manager EC2 instance
       shell: curl -s http://checkip.amazonaws.com
       register: ip_result
+      when: setup_pueue
 
     - name: Set fact for the stress testing manager IP
       set_fact:
         stress_testing_manager_ip: "{{ ip_result.stdout | trim }}"
-
-    - name: Set up testing ansible vars
-      template:
-        src: ansible_vars.yml
-        dest: /home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests/playbooks/vars.yml
-        mode: '0600'
-      become: true
-
-    - name: Set up sync network testing ansible vars
-      template:
-        src: sync_network_test_ansible_vars.yml
-        dest: /home/ubuntu/snarkos-stress-testing/test_suites/network-sync-tests/playbooks/vars.yml
-        mode: '0600'
-      become: true
+      when: setup_pueue
 
     - name: Enable and (re)start pueued service
       become: true
@@ -205,3 +301,4 @@
         enabled: true
         state: restarted
         daemon_reload: true
+      when: setup_pueue

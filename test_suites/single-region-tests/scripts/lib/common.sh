@@ -22,6 +22,10 @@ _COMMON_SH_SOURCED=1
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$SCRIPTS_DIR/.." && pwd)"
 export SCRIPTS_DIR REPO_ROOT
+MONOREPO_ROOT="$(cd "$REPO_ROOT/../.." && pwd)"
+DEVNET_KEY="${MONOREPO_ROOT}/devnet-key"
+SHARED_KEYS_PUB="${MONOREPO_ROOT}/keys.pub"
+export MONOREPO_ROOT DEVNET_KEY SHARED_KEYS_PUB
 # Keep the old name as an alias so existing references still work.
 PARENT_DIR="$REPO_ROOT"
 export PARENT_DIR
@@ -38,9 +42,17 @@ export RUN_ID
 # Slack notifications (best-effort; no-op unless SLACK_TOKEN + channel are set).
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/notify.sh"
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/pueue.sh"
 
 # --- Static environment ------------------------------------------------------
 ulimit -n 4096 || true
+
+# Non-interactive SSH sessions (e.g. delegated full_run) skip login profiles.
+if [[ -d "${HOME}/.cargo/bin" ]]; then
+  PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+export PATH
 
 # tput fails noisily without a TERM (e.g. under pueue); degrade gracefully.
 bold=$(tput bold 2>/dev/null || true)
@@ -69,6 +81,10 @@ runner_manages_logs() { [ "${RUNNER_MANAGES_LOGS:-}" = "1" ]; }
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+ensure_devnet_key() {
+  bash "${MONOREPO_ROOT}/scripts/ensure_devnet_key.sh"
+}
+
 # macOS spoken notification; silent no-op elsewhere. Returns 0 unconditionally
 # so it is safe as the LAST statement of a function/script under `set -e`
 # (a bare `[ ... ] && say` returns 1 on non-Darwin and would abort the script).
@@ -83,14 +99,26 @@ require_provisioned() {
 
 # --- Discovery ---------------------------------------------------------------
 discover_tests() {
-  mapfile -t TESTS < <(find "$PARENT_DIR/tests" -maxdepth 1 -mindepth 1 -type d \
-    -printf '%f\n' | sort)
+  mapfile -t TESTS < <(
+    shopt -s nullglob
+    for d in "$PARENT_DIR/tests"/*/; do basename "$d"; done | sort
+  )
   export TESTS
 }
 discover_utilities() {
-  mapfile -t UTILITIES < <(find "$PARENT_DIR/utils" -maxdepth 1 -mindepth 1 -type d \
-    -printf '%f\n' | sort)
+  mapfile -t UTILITIES < <(
+    shopt -s nullglob
+    for d in "$PARENT_DIR/utils"/*/; do basename "$d"; done | sort
+  )
   export UTILITIES
+}
+
+resolve_tests() {
+  case "$1" in
+    all)        printf '%s\n' "${TESTS[@]}" | grep -v '^_' ;;
+    prerelease) printf '%s\n' "${TESTS[@]}" | grep '^prerelease_' ;;
+    *)          tr ',' '\n' <<<"$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' ;;
+  esac
 }
 
 # --- Centralised ansible invocation -----------------------------------------

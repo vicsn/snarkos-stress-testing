@@ -1,0 +1,6 @@
+- name: Add shared SSH keys to ubuntu user
+  ansible.posix.authorized_key:
+    user: ubuntu
+    key: "{{ item }}"
+    state: present
+  loop: "{{ lookup('file', shared_keys_pub_path).splitlines() | select('match', '^ssh-') | list }}"

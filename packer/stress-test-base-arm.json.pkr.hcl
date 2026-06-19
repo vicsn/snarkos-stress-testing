@@ -60,4 +60,9 @@ build {
     playbook_file   = "../common/ansible_playbooks/dependencies.yml"
   }
 
+  provisioner "shell" {
+    inline = [
+      "for home in $(getent passwd | cut -d: -f6); do [ -d \"$home/.ansible\" ] && sudo rm -rf \"$home/.ansible\"; done",
+    ]
+  }
 }

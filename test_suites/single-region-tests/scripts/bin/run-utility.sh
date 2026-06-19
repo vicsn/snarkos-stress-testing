@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # bin/run-utility.sh --utility=NAME [--vars=NAME]
 set -euo pipefail
+ORIG_ARGS=("$@")
 # shellcheck source=/dev/null
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
-install_exit_trap
 
 UTIL=""
 for arg in "$@"; do
@@ -14,6 +14,9 @@ for arg in "$@"; do
   esac
 done
 [[ -n "$UTIL" ]] || die "--utility=NAME is required."
+pueue_dispatch_self "run-utility:$UTIL" -- "$0" "${ORIG_ARGS[@]}"
+
+install_exit_trap
 require_provisioned
 notify_job_begin "run-utility:$UTIL"
 

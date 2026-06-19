@@ -19,16 +19,15 @@
     - `rustup target add x86_64-unknown-linux-gnu`
 - [Install pre-commit](https://pre-commit.com/#installation). It can be installed with `pip install pre-commit`.
     - Run `cd test_suites/single-region-tests && pre-commit install`. Now you have an Ansible lint commit hook.
-
-The local build method uses the S3 bucket `release-bucket-2122415`, which been created on AWS using the command `aws s3api create-bucket --bucket release-bucket --region us-east-1`. By default in the `vars.example.yml` file, it compiles snarkOS with the `test_targets` feature (lowering the coinbase proving target, tx cannon needs to be compiled with the `enable_test_targets` feature alongside) and the `test_skip_tx_checks` feature (allows for fake txs to be processed, only exists for the `malice` snarkOS branches.)
+- [Install pueue](https://github.com/Nukesor/pueue) and start the daemon before running jobs:
+    - `cargo install pueue` (or `brew install pueue` if available)
+    - `pueued -d` (runs in the background; use `pueue status` to confirm)
+    - Set `pause_on_failure: true` in the pueue daemon config so a failing job pauses the group instead of continuing.
 
 ## Configuration
 
 - Copy `playbooks/vars.example.yml` to `playbooks/vars.yml` and fill in the required fields.
-- You can change instance types and counts in `terraform/vars.tf*`
-- You can change the network in `terraform/vars.tf*` and `playbooks/vars.yml`.
-
-## AWS authentication
+- Add your SSH public key to `keys.pub` at the repo root for human access to devnet machines. The ephemeral `devnet-key` (repo root, auto-created on provision) is used by Terraform/Ansible alongside those keys.
 
 Authentication happens via Google SSO:
 - Via `drive.google.com`, go to the top right apps icon, click on the app called "AWS access portal".
@@ -39,11 +38,71 @@ Authentication happens via Google SSO:
 
 ## Running your devnet
 
-The devnet name can be set via the `DEVNET_NAME` env variable (for example `DEVNET_NAME="my_net" ./run_test_suite.sh`).
+Every run needs a **`RUN_ID`**: it ties together S3 log prefixes, Slack threads, and pueue job snapshots. Export it once at the start of a session and reuse it for every job in that run:
+
+```bash
+export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+The devnet name can be set via the `DEVNET_NAME` env variable (for example `DEVNET_NAME="my_net" export RUN_ID=...` before enqueuing).
 By default for local test runs it is `single-region-tests` and for automatic pre-release tests it is `prerelease-devnet`.
 Alternatively the TF var `devnet_name` can be edited to change it too.
 
-`./run_test_suite.sh` will allow you to choose infra to set up and tests to run.
+All work goes through **pueue** by default (`lib/pueue.sh`). Each `scripts/bin/` entrypoint self-enqueues unless `PUEUE_DISABLED=1`. Set `PUEUE_DISABLED=1` to run inline in the current shell.
+
+
+### Full run
+
+`full_run.sh` wires `provision → setup → {N test jobs} → destroy`:
+
+```bash
+export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
+./scripts/full_run.sh --mode=light --tests=prerelease
+pueue status
+```
+
+Use `--tests=prerelease` or `--tests=t1,t2` to narrow the test list. A failed provision cancels the rest of the chain.
+
+#### Stress Testing Manager delegation
+
+`full_run.sh` can run on the shared [Stress Testing Manager](../../stress-testing-manager/README.md) instead of your laptop. By default it delegates over SSH to the manager using a repo-root file, `stress-testing-manager-ip.txt` (gitignored):
+
+| Situation | Behaviour |
+|-----------|-----------|
+| IP file **missing** | Runs `stress-testing-manager/infrastructure/tf_stack.sh ip`, writes the IP to `stress-testing-manager-ip.txt`, then **delegates** to that host. |
+| IP file **present** | Delegates immediately (same as above). |
+
+The manager must be provisioned and set up first (`tf_stack.sh provision` + `setup`; see the manager README). `tf_stack.sh ip` must succeed when the IP file is first created.
+
+Forwarded to the remote run: `RUN_ID`, Slack/pueue settings, `DEVNET_NAME`, `OWNER`, and related bucket/region env vars. Export anything you need **before** calling `full_run.sh`.
+
+To run **locally** on your machine (requires pueue, or `PUEUE_DISABLED=1`):
+
+```bash
+FULL_RUN_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=prerelease
+```
+
+To point at a different manager, replace the file contents or delete it and re-run so `tf_stack.sh ip` repopulates it.
+
+### Individual jobs
+
+Once `RUN_ID` is exported, pueue snapshots it at enqueue time — every job in the run shares the same S3 prefix. Invoke a bin script directly; it enqueues itself:
+
+```bash
+export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
+./scripts/bin/provision.sh --mode=light
+./scripts/bin/setup.sh
+./scripts/bin/run-test.sh --test=prerelease_foo
+./scripts/bin/run-utility.sh --utility=analyze_logs
+./scripts/bin/destroy.sh
+pueue status
+```
+
+Run inline (no pueue): `PUEUE_DISABLED=1 ./scripts/bin/run-test.sh --test=foo`.
+
+### Slack notifications
+
+Optional, best-effort job status. Export `SLACK_TOKEN` and `SLACK_CHANNEL_ID` (or `CHANNEL_ID`) **before** enqueuing; pueue snapshots them into each task. Disable with `NOTIFY_SLACK_DISABLED=1`. Notifications never fail a job.
 
 ## Monitoring
 
@@ -55,7 +114,7 @@ host *.*.compute.amazonaws.com
   User ubuntu
   addkeystoagent yes
   usekeychain yes
-  identityfile /path/to/stress-testing/test_suites/single-region-tests/devnet-key
+  identityfile /path/to/snarkos-stress-testing/devnet-key
 ```
  - Add hosts to known hosts and connect with lnav
 ```
@@ -102,6 +161,8 @@ nodes using the fixed `DEVELOPMENT_MODE_RNG_SEED`.
 With local runs the log files are downloaded in `log_files`.
 With remote runs the log files are zipped and uploaded to S3 (in slack the location is pointed out).
 
+Ensure the same `RUN_ID` from the test run is still exported before enqueuing log jobs.
+
 Example logs zip : https://us-west-2.console.aws.amazon.com/s3/object/provable-logs-results?region=us-west-2&bucketType=general&prefix=dbd34c34d70e859d93dfac56600ee18ef8f64a22/20251003T000120Z/prerelease_1_halt_byzantine_majority_ERROR/logs_ERROR.zip
 You can download and unzip the log files from a auto-run in `log_files` too to use the utilities on them.
 
@@ -117,30 +178,35 @@ For getting the errors out of them this can be done:
 grep -Hn ERROR log_files/* > tmp.errors.txt
 ```
 
-Additionally the stat analyser can be ran on them by running:
-```
-./run_test_suite.sh
-```
+Run the stat analyser on downloaded logs (reuse the run's `RUN_ID`):
 
-Selecting `n` for terraform, `n` for setup, `n` for tests and `y` for utilities, then `0`.
-This will run the log analyser and the stats will be generated in `log_files/landing_stats.json`.
-
-For a local run the logs can be downloaded by selecting the following utiltieis:
-
-```
-3) download_logs_clients
-4) download_logs_provers
-5) download_logs_tx_runner
-6) download_logs_validators
+```bash
+./scripts/bin/run-utility.sh --utility=analyze_logs
 ```
 
-Or all downloaded and then uploaded to S3 by selecting `12`.
+Stats are written to `log_files/landing_stats.json`.
+
+Download individual log sets:
+
+```bash
+./scripts/bin/run-utility.sh --utility=download_logs_clients
+./scripts/bin/run-utility.sh --utility=download_logs_provers
+./scripts/bin/run-utility.sh --utility=download_logs_tx_runner
+./scripts/bin/run-utility.sh --utility=download_logs_validators
+```
+
+Download all logs, analyze, and upload to S3:
+
+```bash
+./scripts/bin/collect-logs.sh
+```
 
 ## Destroying the stress testing infrastructure locally
 
-On the Stress Test Manager, Talikser deals with cleaning up the infrastructure after testing, locally it has to be done manually.
+When runs are **delegated** to the Stress Testing Manager (see [Full run](#stress-testing-manager-delegation) above), cleanup is handled on the manager via the normal `destroy` job in the pipeline.
 
-Destroy the infrastructure when ready by running:
-```
-./run_test_suite.sh destroy
+When running **locally** with `FULL_RUN_LOCAL=1`, destroy manually when ready (with the run's `RUN_ID` still exported):
+
+```bash
+./scripts/bin/destroy.sh
 ```

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # bin/destroy.sh — tear down provisioned infrastructure.
 set -euo pipefail
+ORIG_ARGS=("$@")
 # shellcheck source=/dev/null
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+pueue_dispatch_self "destroy" -- "$0" "${ORIG_ARGS[@]}"
+
 # No EXIT-trap log collection here: a destroy failure shouldn't try to pull logs
 # off machines that may be half-gone. Still report status to Slack.
 notify_job_begin "destroy"

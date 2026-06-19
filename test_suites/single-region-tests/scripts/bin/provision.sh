@@ -2,9 +2,9 @@
 # bin/provision.sh --mode=light|heavy|prerelease [--vars=NAME]
 # Provisions infrastructure with terraform. One job, no prompts.
 set -euo pipefail
+ORIG_ARGS=("$@")
 # shellcheck source=/dev/null
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
-install_exit_trap
 
 MODE=""
 for arg in "$@"; do
@@ -14,13 +14,12 @@ for arg in "$@"; do
     *) die "Unknown argument: $arg" ;;
   esac
 done
+[[ -n "$MODE" ]] || die "--mode=light|heavy|prerelease is required."
+pueue_dispatch_self "provision:$MODE" -- "$0" "${ORIG_ARGS[@]}"
 
-# Generate SSH key if absent (idempotent).
-KEY_NAME="$PARENT_DIR/devnet-key"
-if [ ! -f "$KEY_NAME" ]; then
-  ssh-keygen -t rsa -b 4096 -f "$KEY_NAME" -N ''
-  chmod 400 "$KEY_NAME"
-fi
+install_exit_trap
+
+ensure_devnet_key
 
 case "$MODE" in
   light|l)        cp "$PARENT_DIR/terraform/variables.tf.light"      "$PARENT_DIR/terraform/variables.tf" ;;

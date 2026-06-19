@@ -1,94 +1,99 @@
 #!/usr/bin/env bash
-# full_run.sh — compose the fine-grained entrypoints into a whole run.
+# full_run.sh — compose bin entrypoints into a whole run.
 #
-#   full_run.sh --mode=light --vars=vars --tests=all
-#   full_run.sh --mode=heavy --tests=t1,t2,t3 --queue --group=devnet --parallel=3
+#   full_run.sh --mode=light --vars=vars --tests=prerelease
+#   full_run.sh --mode=heavy --tests=t1,t2
 #
-# Without --queue it runs phases sequentially in this shell (old behaviour).
-# With --queue it enqueues each phase into pueue, wiring dependencies so tests
-# only start once setup succeeds, and a failed provision cancels everything.
+# Jobs enqueue via pueue by default (see lib/pueue.sh). Set PUEUE_DISABLED=1
+# to run sequentially in this shell.
+#
+# When stress-testing-manager-ip.txt exists at the repo root (or can be created
+# via tf_stack.sh ip), the run is delegated over SSH to that manager unless
+# already running on the manager. Set FULL_RUN_LOCAL=1 to force a local run.
 set -euo pipefail
-BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bin"
 # shellcheck source=/dev/null
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
-MODE="light"; TESTS_ARG="all"; UTIL=""; QUEUE=0; GROUP="default"; PARALLEL=1
+MANAGER_IP_FILE="${MONOREPO_ROOT}/stress-testing-manager-ip.txt"
+TF_STACK="${MONOREPO_ROOT}/stress-testing-manager/infrastructure/tf_stack.sh"
+REMOTE_SUITE="/home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests"
+
+populate_manager_ip_file() {
+  [[ -x "$TF_STACK" ]] || die "Cannot resolve manager IP: $TF_STACK not found or not executable."
+  ensure_devnet_key
+  local manager_ip
+  manager_ip="$(resolve_manager_ip_from_tf_stack)"
+  [[ -n "$manager_ip" ]] || die "tf_stack.sh ip returned no IP (is the manager provisioned?)"
+  printf '%s\n' "$manager_ip" > "$MANAGER_IP_FILE"
+  echo "Wrote stress-testing-manager IP to $MANAGER_IP_FILE ($manager_ip)"
+}
+
+resolve_manager_ip_from_tf_stack() {
+  "$TF_STACK" ip 2>/dev/null | tail -n1 | tr -d '[:space:]'
+}
+
+# True when this host is the stress-testing manager EC2 instance.
+is_stress_testing_manager() {
+  local here meta
+  here="$(curl -sf --max-time 5 http://checkip.amazonaws.com | tr -d '[:space:]')" || return 1
+  meta="$(curl -sf --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)"
+  [[ -n "$meta" && "$here" == "$meta" ]]
+}
+
+delegate_full_run() {
+  ensure_devnet_key
+  local manager_ip
+  manager_ip="$(tr -d '[:space:]' < "$MANAGER_IP_FILE")"
+  [[ -n "$manager_ip" ]] || die "Empty manager IP in $MANAGER_IP_FILE"
+
+  echo "==> Delegating full_run.sh to stress-testing-manager ($manager_ip)"
+
+  local -a env_args=()
+  local var
+  for var in RUN_ID SLACK_TOKEN SLACK_CHANNEL_ID CHANNEL_ID NOTIFY_SLACK_DISABLED \
+             PUEUE_DISABLED DEVNET_NAME OWNER TF_STATE_REGION TF_STATE_BUCKET \
+             RELEASE_BUCKET RESULTS_AND_LOGS_BUCKET; do
+    [[ -n "${!var:-}" ]] && env_args+=("$var=${!var}")
+  done
+
+  local -a remote_cmd=(env ${env_args[@]+"${env_args[@]}"} "$REMOTE_SUITE/scripts/full_run.sh" "$@")
+  ssh -i "$DEVNET_KEY" \
+    -o StrictHostKeyChecking=accept-new \
+    -o ForwardAgent=yes \
+    "ubuntu@${manager_ip}" \
+    "$(printf '%q ' "${remote_cmd[@]}")"
+}
+
+if [[ -z "${FULL_RUN_LOCAL:-}" ]]; then
+  if is_stress_testing_manager; then
+    : # already on the manager; run locally below
+  else
+    if [[ ! -f "$MANAGER_IP_FILE" ]]; then
+      populate_manager_ip_file
+    fi
+    manager_ip="$(tr -d '[:space:]' < "$MANAGER_IP_FILE")"
+    [[ -n "$manager_ip" ]] || die "Empty manager IP in $MANAGER_IP_FILE"
+    delegate_full_run "$@"
+    exit 0
+  fi
+fi
+
+MODE="light"; TESTS_ARG="prerelease"; UTIL=""
 for arg in "$@"; do
   case "$arg" in
     --mode=*)     MODE="${arg#*=}" ;;
     --vars=*)     VARS="${arg#*=}"; export VARS ;;
     --tests=*)    TESTS_ARG="${arg#*=}" ;;
     --utility=*)  UTIL="${arg#*=}" ;;
-    --queue)      QUEUE=1 ;;
-    --group=*)    GROUP="${arg#*=}" ;;
-    --parallel=*) PARALLEL="${arg#*=}" ;;
+    --queue)      echo "WARNING: --queue is deprecated (pueue is the default); use PUEUE_DISABLED=1 to run inline." >&2 ;;
     *) die "Unknown argument: $arg" ;;
   esac
 done
 
-# Resolve the test list once, here, where discovery lives. The fine-grained
-# jobs each take a single --test.
 discover_tests
-resolve_tests() {
-  case "$TESTS_ARG" in
-    all)        printf '%s\n' "${TESTS[@]}" | grep -v '^_' ;;
-    prerelease) printf '%s\n' "${TESTS[@]}" | grep '^prerelease_' ;;
-    *)          tr ',' '\n' <<<"$TESTS_ARG" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' ;;
-  esac
-}
-mapfile -t RUN_TESTS < <(resolve_tests)
+mapfile -t RUN_TESTS < <(resolve_tests "$TESTS_ARG")
 
-# RUN_ID is exported by common.sh and (crucially) snapshotted by pueue at
-# `pueue add` time, so every enqueued job shares this run's S3 prefix.
 echo "RUN_ID=$RUN_ID  mode=$MODE  vars=$VARS  tests=${RUN_TESTS[*]:-none}"
 notify_run_banner "🚀 Run \`$RUN_ID\` — mode=$MODE vars=$VARS tests=${RUN_TESTS[*]:-none}"
 
-if (( ! QUEUE )); then
-  # ---- Sequential, in-process. Each entrypoint opens/closes its own thread. ----
-  "$BIN/provision.sh" --mode="$MODE" --vars="$VARS"
-  "$BIN/setup.sh" --vars="$VARS"
-  for t in "${RUN_TESTS[@]}"; do "$BIN/run-test.sh" --test="$t" --vars="$VARS"; done
-  [[ -n "$UTIL" ]] && "$BIN/run-utility.sh" --utility="$UTIL" --vars="$VARS"
-  echo "Done. Remember: $BIN/destroy.sh when finished."
-  exit 0
-fi
-
-# ---- Enqueue into pueue ----
-command -v pueue >/dev/null || die "pueue not found on PATH."
-pueue group add "$GROUP" 2>/dev/null || true
-pueue parallel --group "$GROUP" "$PARALLEL" || true
-
-# Enqueue one job. pueue runs each task through the system shell (sh -c), so we
-# build a single, shell-escaped command string with `printf %q` and hand that to
-# `pueue add`. This is robust to spaces/metacharacters in $BIN or args — passing
-# the words "raw" after -- wouldn't be, since pueue re-joins them with plain
-# spaces before the shell re-parses them.
-#
-# We open the job's Slack thread first, then carry its ts into the task's
-# environment so the task threads its own start/finish messages.
-# `--print-task-id` prints just the numeric id (recent pueue); older versions
-# print "New task added (id N)" — parse that instead if needed.
-#
-#   enqueue <label> [pueue-opts...] -- <cmd> [args...]
-enqueue() {
-  local label="$1"; shift
-  local -a opts=() cmd=()
-  while (($#)); do                      # split pueue options from the argv on `--`
-    if [[ "$1" == "--" ]]; then shift; cmd=("$@"); break; fi
-    opts+=("$1"); shift
-  done
-  local cmd_str; printf -v cmd_str '%q ' "${cmd[@]}"   # shell-safe command string
-  local ts; ts="$(notify_open_for_enqueue "$label")"
-  SLACK_THREAD_TS="$ts" SLACK_JOB_NAME="$label" \
-    pueue add --print-task-id --group "$GROUP" ${opts[@]+"${opts[@]}"} -- "$cmd_str"
-}
-
-PROV=$(enqueue  "provision:$MODE"          -- "$BIN/provision.sh" "--mode=$MODE" "--vars=$VARS")
-SETUP=$(enqueue "setup"   --after "$PROV"  -- "$BIN/setup.sh" "--vars=$VARS")
-for t in "${RUN_TESTS[@]}"; do
-  enqueue "run-test:$t"   --after "$SETUP" -- "$BIN/run-test.sh" "--test=$t" "--vars=$VARS" >/dev/null
-done
-[[ -n "$UTIL" ]] && enqueue "run-utility:$UTIL" --after "$SETUP" -- "$BIN/run-utility.sh" "--utility=$UTIL" "--vars=$VARS" >/dev/null
-
-echo "Enqueued provision($PROV) -> setup($SETUP) -> ${#RUN_TESTS[@]} test job(s) in group '$GROUP' (parallel=$PARALLEL)."
-echo "Watch with: pueue status --group $GROUP"
+run_pipeline "$MODE" "$VARS" "$UTIL" "${RUN_TESTS[@]}"

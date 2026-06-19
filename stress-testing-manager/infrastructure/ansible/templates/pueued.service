@@ -5,19 +5,16 @@ After=network.target
 
 [Service]
 Type=simple
-Restart=on-failure
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu
-SyslogIdentifier=pueued
-Environment="HOME=/home/ubuntu"
-Environment="PATH=/home/ubuntu/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
-# Baseline env for tasks the daemon runs. Note: `pueue add` snapshots the
-# enqueueing shell's environment, so per-job values normally come from there;
-# these are a fallback.
-Environment="SLACK_TOKEN={{ slack_token }}"
-Environment="SLACK_CHANNEL_ID={{ slack_channel_id }}"
+Environment=HOME=/home/ubuntu
+Environment=PATH=/home/ubuntu/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/bin/mkdir -p /home/ubuntu/.local/share/pueue
+ExecStartPre=/bin/chown ubuntu:ubuntu /home/ubuntu/.local/share/pueue
 ExecStart=/home/ubuntu/.cargo/bin/pueued -vv
+Restart=on-failure
+SyslogIdentifier=pueued
 
 [Install]
 WantedBy=multi-user.target

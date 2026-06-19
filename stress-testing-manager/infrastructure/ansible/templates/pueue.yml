@@ -1,0 +1,3 @@
+---
+shared:
+  unix_socket_path: /home/ubuntu/.local/share/pueue/pueue_ubuntu.socket

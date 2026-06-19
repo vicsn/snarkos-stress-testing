@@ -2,6 +2,7 @@
 set -euo pipefail
 
 TF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$TF_DIR/../.." && pwd)"
 WORKSPACE="default"
 ACTION=""
 AUTO_APPROVE=0
@@ -15,26 +16,75 @@ UPDATE_TARGET="both"
 usage() {
   cat <<'EOF'
 Usage:
-  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh provision [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
-  TF_VAR_PUBLIC_KEY_PATH={path} tf_stack.sh setup [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [-- ...extra terraform args]
+  tf_stack.sh plan [--staging|--workspace NAME] [-- ...extra terraform args]
+  tf_stack.sh provision [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [--auto-approve] [-- ...extra terraform args]
+  tf_stack.sh setup [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [-- ...extra terraform args]
   tf_stack.sh update [--staging|--workspace NAME] [--pueue-version VER] [--stress-testing-branch BR] [--update-target both|pueue|stress-testing]
   tf_stack.sh destroy [--staging|--workspace NAME] [--auto-approve] [--force] [-- ...extra terraform args]
-  tf_stack.sh plan [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh output [--staging|--workspace NAME] [-- ...extra terraform args]
   tf_stack.sh ip [--staging|--workspace NAME] [-- ...extra terraform args]
-
-Notes:
-  - provision runs terraform apply only. setup/update run Ansible against the instance IP from terraform output (no terraform apply).
-  - default workspace is production, --staging maps to workspace "staging".
-  - set TF_VAR_github_token and other TF_VAR_* the same way as for terraform (e.g. when running provision); see env-default / env-staging.
-  - destroy on default is blocked unless --force is provided.
-  - update --update-target controls what is refreshed: both (default), pueue, or stress-testing.
-  - --pueue-version pins the crate (cargo install --locked --version VER pueue); omit for the latest release.
-  - pass extra terraform args after -- (e.g. -- -var-file=staging.tfvars)
 EOF
 }
 
 die() { echo "ERROR: $*" >&2; exit 1; }
+
+NOTIFY_SLACK="${REPO_ROOT}/scripts/notify_slack.sh"
+
+# Read a simple "key: value" field from vars.yml (best-effort).
+read_slack_var() {
+  local key="$1" file="$2"
+  awk -v key="$key" '
+    $1 == key ":" {
+      val = $2
+      for (i = 3; i <= NF; i++) val = val " " $i
+      gsub(/^"|"$|^'\''|'\''$/, "", val)
+      print val
+      exit
+    }
+  ' "$file"
+}
+
+load_slack_config() {
+  local candidate vars_file=""
+  for candidate in \
+    "${TF_DIR}/ansible/templates/vars.yml" \
+    "${TF_DIR}/vars.yml"; do
+    if [[ -f "$candidate" ]]; then
+      vars_file="$candidate"
+      break
+    fi
+  done
+  [[ -n "$vars_file" ]] || return 1
+
+  SLACK_TOKEN="$(read_slack_var slack_token "$vars_file")"
+  SLACK_CHANNEL_ID="$(read_slack_var slack_channel_id "$vars_file")"
+  [[ -n "$SLACK_TOKEN" && -n "$SLACK_CHANNEL_ID" ]]
+}
+
+notify_action_start() {
+  load_slack_config || return 0
+  [[ -x "$NOTIFY_SLACK" ]] || return 0
+
+  local msg="▶️ stress-testing-manager \`${ACTION}\` starting (workspace=${WORKSPACE}"
+  if [[ "$STRESS_TESTING_BRANCH" != "main" ]]; then
+    msg+=", branch=${STRESS_TESTING_BRANCH}"
+  fi
+  if [[ -n "$PUEUE_VERSION" ]]; then
+    msg+=", pueue=${PUEUE_VERSION}"
+  fi
+  if [[ "$ACTION" == "update" ]]; then
+    msg+=", target=${UPDATE_TARGET}"
+  fi
+  if [[ "$AUTO_APPROVE" -eq 1 ]]; then
+    msg+=", auto-approve"
+  fi
+  if [[ "$ACTION" == "destroy" && "$FORCE" -eq 1 ]]; then
+    msg+=", force"
+  fi
+  msg+=")"
+
+  "$NOTIFY_SLACK" -m "$msg" -c "$SLACK_CHANNEL_ID" -k "$SLACK_TOKEN" -o warning >/dev/null || true
+}
 
 if [[ $# -lt 1 ]]; then usage; exit 1; fi
 ACTION="$1"; shift
@@ -73,8 +123,9 @@ cd "$TF_DIR"
 # Run Ansible against the manager instance (reads IP from terraform output). Does not run terraform apply.
 run_ansible_playbook() {
   local playbook="${1:?missing playbook name}"
-  : "${TF_VAR_github_token:?Set TF_VAR_github_token (e.g. source your .env)}"
+  local setup_target="${2:-full}"
   local manager_ip
+  bash "${REPO_ROOT}/scripts/ensure_devnet_key.sh"
   manager_ip="$(terraform output -raw stress_testing_manager_public_ip)"
 
   echo "==> waiting for SSH on $manager_ip"
@@ -84,44 +135,25 @@ run_ansible_playbook() {
   done
   ssh-keyscan -H "$manager_ip" >> ~/.ssh/known_hosts
 
-  local pre_release_prefix="${TF_VAR_PRE_RELEASE_PREFIX:-prerelease}"
-  local sync_prefix="${TF_VAR_SYNC_PREFIX:-sync}"
-  local load_ledger_prefix="${TF_VAR_LOAD_LEDGER_PREFIX:-load-ledger}"
-  local releases_bucket="${TF_VAR_RELEASES_BUCKET:-provable-binaries-releases}"
-  local results_bucket="${TF_VAR_RESULTS_BUCKET:-provable-logs-results}"
-  local elastic_cloud_id="${TF_VAR_ELASTIC_CLOUD_ID:-your_elastic_cloud_id_here}"
-  local elastic_api_key="${TF_VAR_ELASTIC_API_KEY:-your_elastic_api_key_here}"
-  local grafana_cloud_api_key="${TF_VAR_GRAFANA_CLOUD_API_KEY:-your_grafana_cloud_api_key_here}"
-
   echo "==> ansible-playbook $playbook (inventory $manager_ip)"
   local ansible_extra_vars=(
     --extra-vars "ansible_ssh_common_args='-o ForwardAgent=yes'"
-    --extra-vars "github_token=${TF_VAR_github_token}"
-    --extra-vars "stress_testing_branch=${STRESS_TESTING_BRANCH}"
+    --extra-vars "stress_testing_local_path=${REPO_ROOT}"
     --extra-vars "pueue_version=${PUEUE_VERSION}"
-    --extra-vars "pre_release_prefix=${pre_release_prefix}"
-    --extra-vars "sync_prefix=${sync_prefix}"
-    --extra-vars "load_ledger_prefix=${load_ledger_prefix}"
-    --extra-vars "slack_channel_id=${TF_VAR_SLACK_CHANNEL_ID:-}"
-    --extra-vars "slack_token=${TF_VAR_SLACK_TOKEN:-}"
-    --extra-vars "releases_bucket=${releases_bucket}"
-    --extra-vars "results_bucket=${results_bucket}"
-    --extra-vars "elastic_cloud_id=${elastic_cloud_id}"
-    --extra-vars "elastic_api_key=${elastic_api_key}"
-    --extra-vars "grafana_cloud_api_key=${grafana_cloud_api_key}"
+    --extra-vars "setup_target=${setup_target}"
   )
-  if [[ "$playbook" == "update.yml" ]]; then
-    ansible_extra_vars+=(--extra-vars "update_target=${UPDATE_TARGET}")
-  fi
   (
     cd "${TF_DIR}/ansible"
-    ansible-playbook \
+    ANSIBLE_ROLES_PATH="${REPO_ROOT}/common/roles" \
+      ansible-playbook \
+      --private-key "${REPO_ROOT}/devnet-key" \
       "${ansible_extra_vars[@]}" \
       -i "${manager_ip}," "$playbook"
   )
 }
 
 init_terraform() {
+  bash "${REPO_ROOT}/scripts/ensure_devnet_key.sh"
   echo "==> terraform init"
   terraform init -upgrade
 
@@ -154,18 +186,20 @@ if ((${#APPROVE_ARGS[@]})); then
   TF_APPLY_ARGS+=("${APPROVE_ARGS[@]}")
 fi
 
+notify_action_start
+
 case "$ACTION" in
   setup)
-    echo "==> setup: ansible-playbook (workspace=$WORKSPACE)"
-    run_ansible_playbook setup.yml
+    echo "==> setup: ansible-playbook setup.yml (workspace=$WORKSPACE, target=full)"
+    run_ansible_playbook setup.yml full
     ;;
   update)
     case "$UPDATE_TARGET" in
       both|pueue|stress-testing) ;;
       *) die "Invalid --update-target: $UPDATE_TARGET (expected both, pueue, or stress-testing)" ;;
     esac
-    echo "==> update: ansible-playbook (workspace=$WORKSPACE, target=$UPDATE_TARGET)"
-    run_ansible_playbook update.yml
+    echo "==> update: ansible-playbook setup.yml (workspace=$WORKSPACE, target=$UPDATE_TARGET)"
+    run_ansible_playbook setup.yml "$UPDATE_TARGET"
     ;;
   *)
     init_terraform

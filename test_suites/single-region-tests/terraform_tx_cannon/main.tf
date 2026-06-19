@@ -3,7 +3,7 @@
 
 resource "aws_key_pair" "generated_key" {
   key_name   = "${var.owner}-tx-cannon-devnet-key"
-  public_key = file("../${path.module}/devnet-key.pub")
+  public_key = file("${path.module}/../../../devnet-key.pub")
 }
 
 # ------------------------------------------------
