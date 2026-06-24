@@ -48,20 +48,36 @@ delegate_full_run() {
 
   echo "==> Delegating full_run.sh to stress-testing-manager ($manager_ip)"
 
+  # Load Slack creds from local vars.yml when not exported (same file as tf_stack.sh setup).
+  load_slack_config_from_vars_yml || true
+  : "${SLACK_CHANNEL_ID:=${CHANNEL_ID:-}}"
+
   local -a env_args=()
   local var
   for var in RUN_ID SLACK_TOKEN SLACK_CHANNEL_ID CHANNEL_ID NOTIFY_SLACK_DISABLED \
-             PUEUE_DISABLED DEVNET_NAME OWNER TF_STATE_REGION TF_STATE_BUCKET \
+             PUEUE_DISABLED DEVNET_NAME OWNER TF_STATE_REGION \
              RELEASE_BUCKET RESULTS_AND_LOGS_BUCKET; do
     [[ -n "${!var:-}" ]] && env_args+=("$var=${!var}")
   done
 
-  local -a remote_cmd=(env ${env_args[@]+"${env_args[@]}"} "$REMOTE_SUITE/scripts/full_run.sh" "$@")
+  local -a inner=(env)
+  inner+=("${env_args[@]+"${env_args[@]}"}")
+  inner+=("$REMOTE_SUITE/scripts/full_run.sh")
+  inner+=("$@")
+  local inner_quoted
+  inner_quoted="$(printf '%q ' "${inner[@]}")"
+  inner_quoted="${inner_quoted% }"
+
+  # Login shell sources manager profile; explicit source covers non-interactive SSH.
+  # $HOME must expand on the remote host, not locally.
+  local lc_cmd
+  lc_cmd="if [[ -f \"\$HOME/.config/snarkos-stress-testing/slack_env.sh\" ]]; then . \"\$HOME/.config/snarkos-stress-testing/slack_env.sh\"; fi; exec ${inner_quoted}"
+
   ssh -i "$DEVNET_KEY" \
     -o StrictHostKeyChecking=accept-new \
     -o ForwardAgent=yes \
     "ubuntu@${manager_ip}" \
-    "$(printf '%q ' "${remote_cmd[@]}")"
+    bash -lc "$(printf '%q' "$lc_cmd")"
 }
 
 if [[ -z "${FULL_RUN_LOCAL:-}" ]]; then

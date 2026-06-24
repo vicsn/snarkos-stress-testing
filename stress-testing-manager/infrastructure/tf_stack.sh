@@ -3,6 +3,7 @@ set -euo pipefail
 
 TF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$TF_DIR/../.." && pwd)"
+MANAGER_IP_FILE="${REPO_ROOT}/stress-testing-manager-ip.txt"
 WORKSPACE="default"
 ACTION=""
 AUTO_APPROVE=0
@@ -28,7 +29,7 @@ EOF
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-NOTIFY_SLACK="${REPO_ROOT}/scripts/notify_slack.sh"
+_NOTIFY_SLACK_SH="${REPO_ROOT}/scripts/notify_slack.sh"
 
 # Read a simple "key: value" field from vars.yml (best-effort).
 read_slack_var() {
@@ -63,7 +64,6 @@ load_slack_config() {
 
 notify_action_start() {
   load_slack_config || return 0
-  [[ -x "$NOTIFY_SLACK" ]] || return 0
 
   local msg="▶️ stress-testing-manager \`${ACTION}\` starting (workspace=${WORKSPACE}"
   if [[ "$STRESS_TESTING_BRANCH" != "main" ]]; then
@@ -83,7 +83,7 @@ notify_action_start() {
   fi
   msg+=")"
 
-  "$NOTIFY_SLACK" -m "$msg" -c "$SLACK_CHANNEL_ID" -k "$SLACK_TOKEN" -o warning >/dev/null || true
+  "$_NOTIFY_SLACK_SH" -m "$msg" -c "$SLACK_CHANNEL_ID" -k "$SLACK_TOKEN" -o warning >/dev/null || true
 }
 
 if [[ $# -lt 1 ]]; then usage; exit 1; fi
@@ -120,13 +120,25 @@ esac
 
 cd "$TF_DIR"
 
-# Run Ansible against the manager instance (reads IP from terraform output). Does not run terraform apply.
+read_manager_ip_from_file() {
+  [[ -f "$MANAGER_IP_FILE" ]] || die "Missing ${MANAGER_IP_FILE} (create it with: ./tf_stack.sh ip)"
+  tr -d '[:space:]' < "$MANAGER_IP_FILE"
+}
+
+# Run Ansible against the manager instance. Does not run terraform apply.
+# setup reads IP from terraform output; update reads from stress-testing-manager-ip.txt.
 run_ansible_playbook() {
   local playbook="${1:?missing playbook name}"
   local setup_target="${2:-full}"
+  local ip_source="${3:-terraform}"
   local manager_ip
   bash "${REPO_ROOT}/scripts/ensure_devnet_key.sh"
-  manager_ip="$(terraform output -raw stress_testing_manager_public_ip)"
+  if [[ "$ip_source" == "file" ]]; then
+    manager_ip="$(read_manager_ip_from_file)"
+    [[ -n "$manager_ip" ]] || die "Empty manager IP in ${MANAGER_IP_FILE}"
+  else
+    manager_ip="$(terraform output -raw stress_testing_manager_public_ip)"
+  fi
 
   echo "==> waiting for SSH on $manager_ip"
   until nc -z -v -w5 "$manager_ip" 22; do
@@ -199,7 +211,7 @@ case "$ACTION" in
       *) die "Invalid --update-target: $UPDATE_TARGET (expected both, pueue, or stress-testing)" ;;
     esac
     echo "==> update: ansible-playbook setup.yml (workspace=$WORKSPACE, target=$UPDATE_TARGET)"
-    run_ansible_playbook setup.yml "$UPDATE_TARGET"
+    run_ansible_playbook setup.yml "$UPDATE_TARGET" file
     ;;
   *)
     init_terraform

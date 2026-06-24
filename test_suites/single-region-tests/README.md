@@ -74,7 +74,14 @@ Use `--tests=prerelease` or `--tests=t1,t2` to narrow the test list. A failed pr
 
 The manager must be provisioned and set up first (`tf_stack.sh provision` + `setup`; see the manager README). `tf_stack.sh ip` must succeed when the IP file is first created.
 
-Forwarded to the remote run: `RUN_ID`, Slack/pueue settings, `DEVNET_NAME`, `OWNER`, and related bucket/region env vars. Export anything you need **before** calling `full_run.sh`.
+**Slack on delegated runs** — no manual export required when either:
+
+1. **Local `vars.yml`** — copy [`stress-testing-manager/infrastructure/ansible/templates/vars.example.yml`](../../stress-testing-manager/infrastructure/ansible/templates/vars.example.yml) to `templates/vars.yml` (same file used by `tf_stack.sh setup`). Delegation auto-loads `slack_token` / `slack_channel_id` from there and forwards them over SSH.
+2. **Manager setup** — if `vars.yml` was used during `tf_stack.sh setup`, creds live in `~/.config/snarkos-stress-testing/slack_env.sh` on the manager. Delegation runs the remote command through a login shell and sources that file before `full_run.sh`.
+
+You can still `export SLACK_TOKEN` and `SLACK_CHANNEL_ID` locally to override. Set `NOTIFY_SLACK_DISABLED=1` to turn notifications off.
+
+Forwarded explicitly when set: `RUN_ID`, Slack/pueue settings, `DEVNET_NAME`, `OWNER`, and related bucket/region env vars.
 
 To run **locally** on your machine (requires pueue, or `PUEUE_DISABLED=1`):
 
@@ -102,7 +109,15 @@ Run inline (no pueue): `PUEUE_DISABLED=1 ./scripts/bin/run-test.sh --test=foo`.
 
 ### Slack notifications
 
-Optional, best-effort job status. Export `SLACK_TOKEN` and `SLACK_CHANNEL_ID` (or `CHANNEL_ID`) **before** enqueuing; pueue snapshots them into each task. Disable with `NOTIFY_SLACK_DISABLED=1`. Notifications never fail a job.
+Optional, best-effort job status. Credentials are resolved automatically when possible:
+
+| Source | Used when |
+|--------|-----------|
+| `SLACK_TOKEN` / `SLACK_CHANNEL_ID` already exported | Always (highest priority) |
+| `~/.config/snarkos-stress-testing/slack_env.sh` | Manager after `tf_stack.sh setup` with `vars.yml` |
+| `stress-testing-manager/infrastructure/ansible/templates/vars.yml` | Laptop delegation (`full_run.sh`) and local runs |
+
+Pueue snapshots them into each task at enqueue time. Disable with `NOTIFY_SLACK_DISABLED=1`. Notifications never fail a job.
 
 ## Monitoring
 

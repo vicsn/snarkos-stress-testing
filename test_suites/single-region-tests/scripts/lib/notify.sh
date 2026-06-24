@@ -13,7 +13,6 @@
 #
 # Env knobs:
 #   SLACK_TOKEN, SLACK_CHANNEL_ID (or CHANNEL_ID)  — required to enable.
-#   NOTIFY_SLACK=/abs/path/notify_slack.sh         — override notifier location.
 #   NOTIFY_SLACK_DISABLED=1                         — force off.
 #   NOTIFY_DEBUG=1                                  — print resolution/decisions.
 
@@ -25,44 +24,33 @@ _NOTIFY_SH_SOURCED=1
 : "${SLACK_CHANNEL_ID:=${CHANNEL_ID:-}}"
 # SCRIPTS_DIR is set by common.sh; derive a fallback if sourced standalone.
 : "${SCRIPTS_DIR:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+_NOTIFY_SLACK_SH="${MONOREPO_ROOT:-$(cd "${SCRIPTS_DIR}/../.." && pwd)}/scripts/notify_slack.sh"
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/slack_config.sh"
 
-_NOTIFY_WARNED=0
 _notify_warn() {        # warn-once on stderr (best-effort, never throws)
-  [[ "$_NOTIFY_WARNED" == 1 ]] && return 0
-  _NOTIFY_WARNED=1
   echo "notify: $*" >&2
   return 0
 }
 _notify_dbg() { [[ "${NOTIFY_DEBUG:-0}" == 1 ]] && echo "notify[dbg]: $*" >&2; return 0; }
 
-# Resolve a usable notifier into NOTIFY_SLACK. Tries the explicit override
-# first, then the likely locations relative to the scripts/ and project dirs.
-notify_resolve_path() {
-  if [[ -n "${NOTIFY_SLACK:-}" && -x "$NOTIFY_SLACK" ]]; then
-    _notify_dbg "using NOTIFY_SLACK=$NOTIFY_SLACK"; return 0
-  fi
-  local c
-  for c in "${NOTIFY_SLACK:-}" \
-           "${REPO_ROOT:-}/../../scripts/notify_slack.sh"; do
-    [[ -z "$c" ]] && continue
-    if [[ -x "$c" ]]; then NOTIFY_SLACK="$c"; _notify_dbg "resolved notifier: $c"; return 0; fi
-    [[ -f "$c" ]] && _notify_dbg "found but NOT executable: $c"
-  done
-  return 1
-}
-
 notify_enabled() {
   if [[ "${NOTIFY_SLACK_DISABLED:-0}" == 1 ]]; then
-    _notify_dbg "disabled via NOTIFY_SLACK_DISABLED=1"; return 1
-  fi
-  if [[ -z "${SLACK_TOKEN:-}" || -z "${SLACK_CHANNEL_ID:-}" ]]; then
-    _notify_dbg "SLACK_TOKEN and/or SLACK_CHANNEL_ID not set (did you 'export' them?) -> notifications off"
+    _notify_warn "disabled via NOTIFY_SLACK_DISABLED=1"
     return 1
   fi
-  if ! notify_resolve_path; then
-    _notify_warn "SLACK_TOKEN/SLACK_CHANNEL_ID are set but notify_slack.sh was not found or is not executable.
-        Looked at: $SCRIPTS_DIR/notify_slack.sh, ${REPO_ROOT:-?}/scripts/notify_slack.sh, ${REPO_ROOT:-?}/slack/notify_slack.sh, ${REPO_ROOT:-?}/../scripts/notify_slack.sh
-        Fix: place it there (and 'chmod +x'), or export NOTIFY_SLACK=/abs/path/notify_slack.sh"
+  load_slack_config || true
+  : "${SLACK_CHANNEL_ID:=${CHANNEL_ID:-}}"
+  if [[ -z "${SLACK_TOKEN:-}" || -z "${SLACK_CHANNEL_ID:-}" ]]; then
+    _notify_warn "SLACK_TOKEN and/or SLACK_CHANNEL_ID not set (did you 'export' them?) -> notifications off"
+    return 1
+  fi
+  if [[ ! -x "$_NOTIFY_SLACK_SH" ]]; then
+    if [[ -f "$_NOTIFY_SLACK_SH" ]]; then
+      _notify_warn "notify_slack.sh found but NOT executable: $_NOTIFY_SLACK_SH"
+    else
+      _notify_warn "notify_slack.sh not found: $_NOTIFY_SLACK_SH"
+    fi
     return 1
   fi
   return 0
@@ -81,7 +69,7 @@ _slack_post() {
   [[ -n "$color"  ]] && args+=(-o "$color")
 
   errfile="$(mktemp 2>/dev/null || echo "/tmp/notify.$$.$RANDOM")"
-  out="$("$NOTIFY_SLACK" "${args[@]}" 2>"$errfile")" || true
+  out="$("$_NOTIFY_SLACK_SH" "${args[@]}" 2>"$errfile")" || true
   err="$(tr '\n' ' ' <"$errfile" 2>/dev/null)"; rm -f "$errfile"
   # notify_slack.sh exits 0 even on API failure, so detect via its stderr.
   if [[ -n "$err" ]]; then

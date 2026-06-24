@@ -54,13 +54,20 @@ if [[ -d "${HOME}/.cargo/bin" ]]; then
 fi
 export PATH
 
+# System awscli (/usr/bin/aws) breaks if pip-installed botocore in ~/.local is
+# on PYTHONPATH (KeyError: 'opsworkscm'). Scope PYTHONNOUSERSITE to aws only —
+# Ansible's EC2 inventory plugin needs boto3 from user site-packages.
+unset PYTHONNOUSERSITE
+
+aws_cli() {
+  env PYTHONNOUSERSITE=1 aws "$@"
+}
+
 # tput fails noisily without a TERM (e.g. under pueue); degrade gracefully.
 bold=$(tput bold 2>/dev/null || true)
 normal=$(tput sgr0 2>/dev/null || true)
 
 export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
-export TF_STATE_BUCKET="${TF_STATE_BUCKET:-ephnet-terraform-state-bucket-eq}"
-export TF_VAR_state_bucket="$TF_STATE_BUCKET"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_VAR_RELEASE_BUCKET="$RELEASE_BUCKET"
 export OWNER="${OWNER:-$USER}"
@@ -93,8 +100,112 @@ say_done() { if [ "$(uname)" = "Darwin" ]; then say "$*" || true; fi; return 0; 
 # Fail fast with a clear message if a phase's precondition is missing, instead
 # of failing deep inside terraform/ansible. Call at the top of an entrypoint.
 require_provisioned() {
-  [[ -f "$PARENT_DIR/lb_url.txt" ]] \
-    || die "lb_url.txt not found — run provision.sh (and setup.sh) first."
+  if [[ ! -f "$PARENT_DIR/lb_url.txt" ]]; then
+    ensure_lb_url_file \
+      || die "lb_url.txt not found and LB DNS could not be read from terraform state — run provision.sh first."
+  fi
+}
+
+# Best-effort: recreate lb_url.txt from the shared (S3) terraform state. Lets a
+# host that did not run provision (e.g. setup on the manager, provision on a
+# laptop) still resolve the load balancer URL.
+ensure_lb_url_file() {
+  [[ -f "$PARENT_DIR/lb_url.txt" ]] && return 0
+  local url
+  url=$(cd "$PARENT_DIR/terraform" && tf_init >/dev/null 2>&1 \
+    && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_lb_dns_name 2>/dev/null) || true
+  if [[ -n "$url" && "$url" != *"No outputs found"* ]]; then
+    printf '%s\n' "$url" > "$PARENT_DIR/lb_url.txt"
+    return 0
+  fi
+  return 1
+}
+
+# Initialise terraform (S3 backend is configured in terraform/main.tf).
+tf_init() {
+  terraform init -input=false
+}
+
+# Import shared resources into terraform state when they already exist in AWS but
+# are missing locally. The ephemeral builder depends on the key pair, instance
+# profile (IAM role/policy) and security group; a hollow local state (e.g. infra
+# provisioned elsewhere or state lost) would otherwise try to recreate them and
+# fail with "EntityAlreadyExists"/"InvalidGroup.Duplicate".
+import_shared_terraform_resources() {
+  local owner="$OWNER"
+  local devnet="${DEVNET_NAME:-${TF_VAR_devnet_name:-single-region-tests}}"
+  local region="${AWS_REGION:-us-west-2}"
+
+  ( cd "$PARENT_DIR/terraform" || exit 1
+    tf_init >/dev/null
+
+    local state; state="$(terraform state list 2>/dev/null || true)"
+    in_state() { grep -qxF "$1" <<<"$state"; }
+    tf_import() {
+      local addr="$1" id="$2"
+      echo "==> terraform import ${addr} (${id})" >&2
+      terraform import -input=false -var="owner=${owner}" "$addr" "$id"
+    }
+
+    local account_id
+    account_id="$(aws_cli sts get-caller-identity --profile ephnet --query Account --output text 2>/dev/null || true)"
+    local policy_arn=""
+    [[ -n "$account_id" ]] && policy_arn="arn:aws:iam::${account_id}:policy/${owner}-SnarkOS-S3-Access-Policy"
+
+    if ! in_state 'aws_iam_role.snarkos_ec2_role' \
+        && aws_cli iam get-role --role-name "${owner}-SnarkOS-EC2-Role" --profile ephnet >/dev/null 2>&1; then
+      tf_import aws_iam_role.snarkos_ec2_role "${owner}-SnarkOS-EC2-Role"
+    fi
+
+    if [[ -n "$policy_arn" ]] && ! in_state 'aws_iam_policy.snarkos_s3_access' \
+        && aws_cli iam get-policy --policy-arn "$policy_arn" --profile ephnet >/dev/null 2>&1; then
+      tf_import aws_iam_policy.snarkos_s3_access "$policy_arn"
+    fi
+
+    if [[ -n "$policy_arn" ]] && ! in_state 'aws_iam_role_policy_attachment.snarkos_s3_access_attach' \
+        && aws_cli iam get-role --role-name "${owner}-SnarkOS-EC2-Role" --profile ephnet >/dev/null 2>&1; then
+      tf_import aws_iam_role_policy_attachment.snarkos_s3_access_attach "${owner}-SnarkOS-EC2-Role/${policy_arn}"
+    fi
+
+    if ! in_state 'aws_iam_instance_profile.snarkos_ec2_instance_profile' \
+        && aws_cli iam get-instance-profile --instance-profile-name "${owner}-SnarkOS-EC2-Instance-Profile" --profile ephnet >/dev/null 2>&1; then
+      tf_import aws_iam_instance_profile.snarkos_ec2_instance_profile "${owner}-SnarkOS-EC2-Instance-Profile"
+    fi
+
+    if ! in_state 'aws_key_pair.generated_key' \
+        && aws_cli ec2 describe-key-pairs --key-names "${owner}-${devnet}-devnet-key" \
+             --profile ephnet --region "$region" >/dev/null 2>&1; then
+      tf_import aws_key_pair.generated_key "${owner}-${devnet}-devnet-key"
+    fi
+
+    if ! in_state 'module.sg.aws_security_group.this'; then
+      local sg_id
+      sg_id="$(aws_cli ec2 describe-security-groups \
+        --filters "Name=group-name,Values=${owner}-${devnet}-sg" \
+        --query 'SecurityGroups[0].GroupId' --output text \
+        --profile ephnet --region "$region" 2>/dev/null || true)"
+      if [[ -n "$sg_id" && "$sg_id" != "None" ]]; then
+        tf_import module.sg.aws_security_group.this "$sg_id"
+      fi
+    fi )
+}
+
+# Ephemeral snarkOS builder (shared IAM/key pair/SG are imported first if needed).
+apply_ephemeral_builder() {
+  import_shared_terraform_resources
+  ( cd "$PARENT_DIR/terraform" || exit 1
+    tf_init
+    terraform apply \
+      -target=aws_instance.snarkos_builder \
+      -var="owner=$OWNER" -var="add_builder=true" -auto-approve )
+}
+
+destroy_ephemeral_builder() {
+  ( cd "$PARENT_DIR/terraform" || exit 1
+    tf_init
+    terraform destroy \
+      -target=aws_instance.snarkos_builder \
+      -var="owner=$OWNER" -var="add_builder=true" -auto-approve )
 }
 
 # --- Discovery ---------------------------------------------------------------
@@ -138,22 +249,47 @@ common_ansible() {
     "$@"
 }
 
+# Read a simple "key: value" field from a YAML file (best-effort).
+read_yml_field() {
+  local key="$1" file="$2"
+  [[ -f "$file" ]] || return 1
+  awk -v key="$key" '
+    $1 == key ":" {
+      val = $2
+      for (i = 3; i <= NF; i++) val = val " " $i
+      gsub(/^"|"$|^'\''|'\''$/, "", val)
+      print val
+      exit
+    }
+  ' "$file"
+}
+
+# Read a string local from terraform/variables.tf (best-effort).
+read_tf_local_string() {
+  local key="$1" file="$PARENT_DIR/terraform/variables.tf"
+  [[ -f "$file" ]] || return 1
+  grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null | head -1 \
+    | sed -E 's/.*=[[:space:]]*"([^"]*)".*/\1/'
+}
+
 # --- Network vars (re-derived from terraform state; safe to call repeatedly) -
 set_network_vars() {
-  NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
-  export NETWORK
-
-  if [[ -z "${NETWORK}" || "$NETWORK" == *"No outputs found"* ]]; then
-    echo "Output 'snarkos_network' not found. Applying noop target to generate it..."
-    cp "$PARENT_DIR/terraform/variables.tf.light" "$PARENT_DIR/terraform/variables.tf"
-    ( cd "$PARENT_DIR/terraform" || exit 1
-      terraform init > /dev/null
-      terraform apply -target=null_resource.noop -var="owner=$OWNER" -auto-approve > /dev/null )
-    NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network)
-    export NETWORK
+  # lb_url.txt is written at the end of a successful provision; trust it when present.
+  if [[ -f "$PARENT_DIR/lb_url.txt" ]]; then
+    LB_URL=$(tr -d '[:space:]' < "$PARENT_DIR/lb_url.txt"); export LB_URL
   fi
 
-  DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name)
+  NETWORK=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_network 2>/dev/null) || true
+  if [[ -z "${NETWORK}" || "$NETWORK" == *"No outputs found"* ]]; then
+    NETWORK=$(read_tf_local_string snarkos_network || echo testnet)
+  fi
+  export NETWORK
+
+  DEVNET_NAME=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw devnet_name 2>/dev/null) || true
+  if [[ -z "${DEVNET_NAME}" || "$DEVNET_NAME" == *"No outputs found"* ]]; then
+    DEVNET_NAME=$(read_yml_field devnet_name "$PARENT_DIR/playbooks/${VARS}.yml") \
+      || DEVNET_NAME="${TF_VAR_devnet_name:-single-region-tests}"
+  fi
   export DEVNET_NAME
 
   export ANSIBLE_DEVNET_GROUP="${DEVNET_NAME//-/_}"
@@ -180,12 +316,6 @@ EOF
     canary)  export NETWORK_INT=2 ;;
     *) echo "Error: Unknown network '$NETWORK'" >&2; return 1 ;;
   esac
-
-  # LB_URL is needed by every playbook call; load it whenever it exists. Use a
-  # real `if` (not `[[ ]] && ...`) so this isn't a 1-returning last statement.
-  if [[ -f "$PARENT_DIR/lb_url.txt" ]]; then
-    LB_URL=$(cat "$PARENT_DIR/lb_url.txt"); export LB_URL
-  fi
 }
 
 # --- Test / utility runners (single item each) -------------------------------
@@ -266,11 +396,11 @@ download_and_upload_logs() {
       [ -f "$log_file" ] || continue
       destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/$(basename "$log_file")"
       echo "Copying $log_file to $destination ..."
-      aws s3 cp "$log_file" "$destination" --profile ephnet
+      aws_cli s3 cp "$log_file" "$destination" --profile ephnet
     done
   fi
   if [ -f "$PARENT_DIR/observability_runner.log" ]; then
-    aws s3 cp "$PARENT_DIR/observability_runner.log" \
+    aws_cli s3 cp "$PARENT_DIR/observability_runner.log" \
       "s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/observability_runner.log" \
       --profile ephnet
     rm -f "$PARENT_DIR/observability_runner.log"
@@ -299,8 +429,10 @@ install_exit_trap() { trap react_on_exit EXIT; }
 
 # --- Terraform apply ---------------------------------------------------------
 init_and_apply_terraform() {
+  rm -f "$PARENT_DIR/lb_url.txt"
+  import_shared_terraform_resources
   ( cd "$PARENT_DIR/terraform" || exit 1
-    terraform init
+    tf_init
     terraform apply -auto-approve -var="owner=$OWNER"
     terraform output -raw snarkos_lb_dns_name > "$PARENT_DIR/lb_url.txt" )
   LB_URL=$(cat "$PARENT_DIR/lb_url.txt"); export LB_URL

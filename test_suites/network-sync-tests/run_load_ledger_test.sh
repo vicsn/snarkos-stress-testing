@@ -136,7 +136,6 @@ set_devnet_vars() {
 init_and_apply_terraform() {
   cd "$PARENT_DIR/terraform"
   terraform init \
-    --reconfigure \
     -backend-config="bucket=${TFSTATE_BUCKET}" \
     -backend-config="key=${TFSTATE_KEY}"
 

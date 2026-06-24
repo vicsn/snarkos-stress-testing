@@ -122,8 +122,8 @@
       when: setup_full
 
     - name: Ensure Python boto3 is installed
-      pip:
-        name: boto3
+      apt:
+        name: python3-boto3
         state: present
         executable: pip3
       when: setup_full
@@ -191,6 +191,74 @@
       args:
         executable: /bin/bash
 
+    - name: Load Slack vars from vars.yml
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/templates/vars.yml"
+      failed_when: false
+      when: setup_pueue
+
+    - name: Ensure snarkos-stress-testing config directory exists
+      become: true
+      become_user: ubuntu
+      file:
+        path: /home/ubuntu/.config/snarkos-stress-testing
+        state: directory
+        mode: '0700'
+      when: setup_pueue
+
+    - name: Deploy Slack env for ubuntu shell sessions
+      become: true
+      become_user: ubuntu
+      template:
+        src: slack_env.sh
+        dest: /home/ubuntu/.config/snarkos-stress-testing/slack_env.sh
+        mode: '0600'
+      no_log: true
+      when:
+        - setup_pueue
+        - slack_token | default('') | length > 0
+        - slack_channel_id | default('') | length > 0
+
+    - name: Remove Slack env file when vars not configured
+      become: true
+      become_user: ubuntu
+      file:
+        path: /home/ubuntu/.config/snarkos-stress-testing/slack_env.sh
+        state: absent
+      when:
+        - setup_pueue
+        - slack_token | default('') | length == 0 or slack_channel_id | default('') | length == 0
+
+    - name: Source Slack env from .bashrc
+      become: true
+      become_user: ubuntu
+      blockinfile:
+        path: /home/ubuntu/.bashrc
+        marker: "# {mark} ANSIBLE MANAGED - snarkos stress testing slack"
+        block: |
+          # Slack notifications for snarkos-stress-testing (from ansible vars.yml)
+          if [[ -f "$HOME/.config/snarkos-stress-testing/slack_env.sh" ]]; then
+            # shellcheck source=/dev/null
+            . "$HOME/.config/snarkos-stress-testing/slack_env.sh"
+          fi
+        state: "{{ 'present' if (slack_token | default('') | length > 0 and slack_channel_id | default('') | length > 0) else 'absent' }}"
+      when: setup_pueue
+
+    - name: Source Slack env from .profile
+      become: true
+      become_user: ubuntu
+      blockinfile:
+        path: /home/ubuntu/.profile
+        marker: "# {mark} ANSIBLE MANAGED - snarkos stress testing slack"
+        block: |
+          # Slack notifications for snarkos-stress-testing (from ansible vars.yml)
+          if [[ -f "$HOME/.config/snarkos-stress-testing/slack_env.sh" ]]; then
+            # shellcheck source=/dev/null
+            . "$HOME/.config/snarkos-stress-testing/slack_env.sh"
+          fi
+        state: "{{ 'present' if (slack_token | default('') | length > 0 and slack_channel_id | default('') | length > 0) else 'absent' }}"
+      when: setup_pueue
+
     - name: Stop pueued before install
       become: true
       become_user: root
@@ -250,6 +318,7 @@
         src: pueue.yml
         dest: /home/ubuntu/.config/pueue/pueue.yml
         mode: '0644'
+      no_log: true
       when: setup_pueue
 
     - name: Deploy the pueued systemd service file
@@ -259,6 +328,7 @@
         src: pueued.service
         dest: /etc/systemd/system/pueued.service
         mode: '0644'
+      no_log: true
       when: setup_pueue
 
     - name: Reload systemd to read new pueued service file

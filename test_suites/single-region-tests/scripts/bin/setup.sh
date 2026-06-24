@@ -28,16 +28,11 @@ S3_BUCKET="${S3_BUCKET:-$RELEASE_BUCKET}"
 RELEASE_NAME="$SNARKOS_GIT_HASH"
 [[ -n "$FEATURES" ]] && RELEASE_NAME="${RELEASE_NAME}_${FEATURES}"
 
-if aws s3api head-object --bucket "$S3_BUCKET" --key "$RELEASE_NAME" --profile ephnet &>/dev/null; then
+if aws_cli s3api head-object --bucket "$S3_BUCKET" --key "$RELEASE_NAME" --profile ephnet &>/dev/null; then
   echo "snarkOS binary '$RELEASE_NAME' found in S3, skipping build."
 else
   echo "Binary '$RELEASE_NAME' missing; spinning up ephemeral builder..."
-  ( cd "$PARENT_DIR/terraform"
-    terraform apply \
-      -target=aws_iam_policy.snarkos_s3_access \
-      -target=aws_iam_role_policy_attachment.snarkos_s3_access_attach \
-      -target=aws_instance.snarkos_builder \
-      -var="owner=$OWNER" -var="add_builder=true" -auto-approve )
+  apply_ephemeral_builder
   sleep 30
   BUILDER_IP=$(cd "$PARENT_DIR/terraform" && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_builder_ip)
   [[ -n "$BUILDER_IP" ]] || die "Could not retrieve builder IP."
@@ -55,9 +50,7 @@ else
   rm -f "$BUILDER_INVENTORY"
 
   echo "Destroying ephemeral builder..."
-  ( cd "$PARENT_DIR/terraform"
-    terraform destroy -target=aws_instance.snarkos_builder \
-      -var="owner=$OWNER" -var="add_builder=true" -auto-approve )
+  destroy_ephemeral_builder
 fi
 
 cd "$PARENT_DIR/playbooks"

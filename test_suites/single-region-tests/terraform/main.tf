@@ -1,5 +1,11 @@
 terraform {
-  backend "local" {}
+  backend "s3" {
+    bucket       = "ephnet-terraform-state-bucket-eq"
+    key          = "terraform/state/single-region-tests/terraform.tfstate"
+    region       = "us-west-2"
+    profile      = "ephnet"
+    use_lockfile = true
+  }
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -7,8 +13,6 @@ terraform {
     }
   }
 }
-
-resource "null_resource" "noop" {}
 
 # ------------------------------------------------
 # Generated key to be used for ssh access to the nodes
@@ -46,25 +50,25 @@ variable "tx_cannon_instance_type" {
 }
 
 module "tx-cannon" {
-  source = "./modules/tx-cannon"
-  count  = var.add_tx_cannons ? 1 : 0
-  ami_id = module.stress_base_ami.ami_id
-  key_name = aws_key_pair.generated_key.key_name
-  sec_group_name = module.sg.security_group_name
-  devnet_name = var.devnet_name
-  owner = var.owner
+  source                   = "./modules/tx-cannon"
+  count                    = var.add_tx_cannons ? 1 : 0
+  ami_id                   = module.stress_base_ami.ami_id
+  key_name                 = aws_key_pair.generated_key.key_name
+  sec_group_name           = module.sg.security_group_name
+  devnet_name              = var.devnet_name
+  owner                    = var.owner
   tx_cannon_instance_count = var.tx_cannon_instance_count
-  tx_cannon_instance_type = var.tx_cannon_instance_type
+  tx_cannon_instance_type  = var.tx_cannon_instance_type
 }
 
 # ------------------------------------------------
 # snarkOS validators
 
 resource "aws_instance" "snarkos_validator" {
-  count         = var.validator_instance_count
-  ami           = module.stress_base_ami.ami_id
-  instance_type = var.validator_instance_type
-  key_name      = aws_key_pair.generated_key.key_name
+  count                = var.validator_instance_count
+  ami                  = module.stress_base_ami.ami_id
+  instance_type        = var.validator_instance_type
+  key_name             = aws_key_pair.generated_key.key_name
   iam_instance_profile = aws_iam_instance_profile.snarkos_ec2_instance_profile.name
 
   security_groups = [module.sg.security_group_name]
@@ -76,10 +80,10 @@ resource "aws_instance" "snarkos_validator" {
   }
 
   tags = {
-    Name = "${var.owner}-${var.devnet_name}-snarkos-validator-${count.index}",
-    Role = "snarkos-validator",
-    Dev = count.index,
-    Owner = "${var.owner}"
+    Name   = "${var.owner}-${var.devnet_name}-snarkos-validator-${count.index}",
+    Role   = "snarkos-validator",
+    Dev    = count.index,
+    Owner  = "${var.owner}"
     Devnet = var.devnet_name
   }
 }
@@ -90,9 +94,9 @@ resource "aws_instance" "snarkos_validator" {
 resource "aws_instance" "snarkos_client" {
   for_each = { for client in local.snarkos_clients : "val${client.validator}-client${client.index}" => client }
 
-  ami           = module.stress_base_ami.ami_id
-  instance_type = each.value.type
-  key_name      = aws_key_pair.generated_key.key_name
+  ami                  = module.stress_base_ami.ami_id
+  instance_type        = each.value.type
+  key_name             = aws_key_pair.generated_key.key_name
   iam_instance_profile = aws_iam_instance_profile.snarkos_ec2_instance_profile.name
 
   security_groups = [module.sg.security_group_name]
@@ -118,10 +122,10 @@ resource "aws_instance" "snarkos_client" {
 # snarkOS provers
 
 resource "aws_instance" "snarkos_prover" {
-  count         = var.prover_instance_count
-  ami           = module.stress_base_ami.ami_id
-  instance_type = var.prover_instance_type
-  key_name      = aws_key_pair.generated_key.key_name
+  count                = var.prover_instance_count
+  ami                  = module.stress_base_ami.ami_id
+  instance_type        = var.prover_instance_type
+  key_name             = aws_key_pair.generated_key.key_name
   iam_instance_profile = aws_iam_instance_profile.snarkos_ec2_instance_profile.name
 
   security_groups = [module.sg.security_group_name]
@@ -133,10 +137,10 @@ resource "aws_instance" "snarkos_prover" {
   }
 
   tags = {
-    Name = "${var.owner}-${var.devnet_name}-snarkos-prover-${count.index}",
-    Role = "snarkos-prover",
-    Dev = count.index,
-    Owner = "${var.owner}"
+    Name   = "${var.owner}-${var.devnet_name}-snarkos-prover-${count.index}",
+    Role   = "snarkos-prover",
+    Dev    = count.index,
+    Owner  = "${var.owner}"
     Devnet = var.devnet_name
   }
 }
@@ -195,9 +199,9 @@ output "instance_ips" {
 # Prometheus Server used to collect metrics from snarkOS nodes
 
 resource "aws_instance" "prometheus_server" {
-  ami           = module.stress_base_ami.ami_id
-  instance_type = var.client_instance_type
-  key_name      = aws_key_pair.generated_key.key_name
+  ami             = module.stress_base_ami.ami_id
+  instance_type   = var.client_instance_type
+  key_name        = aws_key_pair.generated_key.key_name
   security_groups = [module.sg.security_group_name]
 
   ebs_block_device {
@@ -215,15 +219,13 @@ resource "aws_instance" "prometheus_server" {
 }
 
 output "snarkos_network" {
-  value = local.snarkos_network
+  value       = local.snarkos_network
   description = "The snarkos network name"
-  depends_on  = [null_resource.noop]
 }
 
 output "devnet_name" {
-  value = var.devnet_name
+  value       = var.devnet_name
   description = "The devnet_name name"
-  depends_on  = [null_resource.noop]
 }
 
 # ------------------------------------------------
