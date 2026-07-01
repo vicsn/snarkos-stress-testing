@@ -7,4 +7,9 @@ s3://aleo-snapshots/mainnet/checkpoint_6000000.zip
 s3://aleo-snapshots/mainnet/checkpoint_7000000.zip
 gs://snarkos-mainnet/monthly/2025-12-31_00-00-01.tar
 gs://snarkos-mainnet/monthly/2026-01-31_00-00-01.tar
-gs://snarkos-mainnet/monthly/2026-02-26_00-00-01.tar
+gs://snapshots-mainnet/archive/2026-02-01_00-00-01.tar
+gs://snapshots-mainnet/archive/2026-03-01_00-00-01.tar
+gs://snapshots-mainnet/archive/2026-04-01_00-00-01.tar
+gs://snapshots-mainnet/archive/2026-05-01_00-00-01.tar
+gs://snapshots-mainnet/archive/2026-06-01_00-00-01.tar
+

@@ -94,7 +94,7 @@ if [[ -z "${FULL_RUN_LOCAL:-}" ]]; then
   fi
 fi
 
-MODE="light"; TESTS_ARG="prerelease"; UTIL=""
+MODE="prerelease"; TESTS_ARG="prerelease"; UTIL=""
 for arg in "$@"; do
   case "$arg" in
     --mode=*)     MODE="${arg#*=}" ;;
