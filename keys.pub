@@ -1,3 +1,12 @@
+# Public keys installed on the ubuntu user of every devnet node, by
+# common/roles/shared_ssh_keys. Only lines starting with "ssh-" are read;
+# commented and blank lines are filtered out.
+
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPSfFj2Kf8WUyEtNKImFVgj6rO+1OGxyUguixNPjLmN5 victor.s.nicolaas@protonmail.com
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIKhZZUm/cdmoQqJ/MR2lr1OafeM3MZBXtP3I50DCQ6D ljedrz@gmail.com
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHIS7O9hXtMOjotY33xoL/ecGxXgo087HuiwxZJhKqGh ljedrz@gmail.com
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIJ6fEkk5FO2j4nJrbO6ESrk6K3rP/XQ2al8qVfewaz0 mikenichols@provable.com
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDmj24ISNJfPpyqM5oFLoKbUT16xgM0w6s07PF7paGfm beck.ct@gmail.com
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKEBWO8YFW/PwCNzauTF/bGaXSKhuFWkS6eBbfe7Z0vI eran@rundste.in
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPtwChogeZB6S56lmKWHT6FSUStMZ8iHKM4cEikgTnH/ sergii@aleo.org
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII/4UHLfS2UjtJdoSBH7oQdTmTiWlY2RU7WWqTw5nXWY john.reynolds

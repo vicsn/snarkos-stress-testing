@@ -9,17 +9,16 @@
       debug:
         msg: "Release name: '{{ release_name }}'"
 
-    - name: Check if the binary for the git hash exists in S3 bucket
-      aws_s3:
-        bucket: "{{ s3_bucket }}"
-        mode: list
-        prefix: "{{ release_name }}"
-      register: s3_ls_output
+    - name: Check if the binary for the git hash exists in GCS bucket
+      ansible.builtin.command:
+        cmd: gcloud storage ls "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
+      register: gcs_ls_output
       failed_when: false
+      changed_when: false
 
     - name: Set fact if object exists
       set_fact:
-        s3_binary_exists: "{{ release_name in (s3_ls_output.s3_keys | default([])) }}"
+        gcs_binary_exists: "{{ gcs_ls_output.rc == 0 }}"
 
     - name: Construct authenticated repo URL if GitHub token is set
       set_fact:
@@ -45,7 +44,7 @@
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Install Ubuntu dependencies
       ansible.builtin.apt:
@@ -69,7 +68,7 @@
       retries: 5
       delay: 60
       until: apt_result is success
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Install Rust programming language
       become_user: ubuntu
@@ -79,7 +78,7 @@
       args:
         executable: /bin/bash
         creates: "/home/ubuntu/.cargo/bin/rustup"
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Install sccache
       become_user: ubuntu
@@ -89,26 +88,26 @@
         sudo install -m 0755 sccache-*/sccache /usr/local/bin/sccache
       args:
         executable: /bin/bash
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Initialize envs_dict
       set_fact:
         envs_dict: {}
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Parse envs into a dictionary using dict filter
       set_fact:
         envs_dict: "{{ dict(envs | default('') | split(',') | map('split', '=', 1)) }}"
       when:
         - envs is defined and envs != ""
-        - not s3_binary_exists
+        - not gcs_binary_exists
 
     - name: Debug envs_dict
       debug:
         var: envs_dict
       when:
         - envs is defined and envs != ""
-        - not s3_binary_exists
+        - not gcs_binary_exists
 
     - name: Set features flag
       set_fact:
@@ -117,7 +116,7 @@
             "" if (features is not defined or features | length == 0)
             else "--features " ~ features
           }}
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Enable locktick build features in Cargo.toml
       become_user: ubuntu
@@ -132,7 +131,7 @@
         chdir: /home/ubuntu/snarkOS
       when:
         - features is defined and 'locktick' in features
-        - not s3_binary_exists
+        - not gcs_binary_exists
 
     - name: Source cargo env and install snarkOS with git CLI
       become_user: ubuntu
@@ -146,17 +145,16 @@
             'HOME': '/home/ubuntu',
             'CARGO_NET_GIT_FETCH_WITH_CLI': 'true',
             'RUSTC_WRAPPER': '/usr/local/bin/sccache',
-            'SCCACHE_BUCKET': 'snarkos-compiler-cache',
-            'SCCACHE_REGION': 'us-west-2',
-            'SCCACHE_S3_USE_SSL': 'true',
-            'SCCACHE_S3_KEY_PREFIX': 'linux_rust/'
+            'SCCACHE_GCS_BUCKET': '{{ compiler_cache_bucket | default("snarkos-compiler-cache") }}',
+            'SCCACHE_GCS_KEY_PREFIX': 'linux_rust/',
+            'SCCACHE_GCS_RW_MODE': 'READ_WRITE'
           } | combine(envs_dict | default({}))
         }}
       async: 7200
       poll: 0
       register: cargo_job
       throttle: 8     # limit concurrent compiles when you scale u
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Wait for build
       become_user: ubuntu
@@ -166,37 +164,34 @@
       until: cargo_done.finished
       retries: 720
       delay: 10
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
-    - name: Check if the binary for the git hash exists in S3 bucket (post)
-      aws_s3:
-        bucket: "{{ s3_bucket }}"
-        mode: list
-        prefix: "{{ release_name }}"
-      register: s3_ls_output
+    - name: Check if the binary for the git hash exists in GCS bucket (post)
+      ansible.builtin.command:
+        cmd: gcloud storage ls "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
+      register: gcs_ls_output_post
       failed_when: false
+      changed_when: false
 
     - name: Set fact if object exists (post)
       set_fact:
-        s3_binary_exists: "{{ release_name in (s3_ls_output.s3_keys | default([])) }}"
+        gcs_binary_exists: "{{ gcs_ls_output_post.rc == 0 }}"
 
-    - name: Upload the built snarkos binary to S3
+    - name: Upload the built snarkos binary to GCS
       become_user: ubuntu
-      aws_s3:
-        bucket: "{{ s3_bucket }}"
-        object: "{{ release_name | trim }}"
-        src: "/home/ubuntu/snarkOS/target/release/snarkos"
-        mode: put
+      ansible.builtin.command:
+        cmd: gcloud storage cp "/home/ubuntu/snarkOS/target/release/snarkos" "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
       when:
-        - not s3_binary_exists
-      register: s3_upload_output
+        - not gcs_binary_exists
+      register: gcs_upload_output
+      changed_when: gcs_upload_output.rc == 0
 
     - name: Debug message after upload
       debug:
-        msg: "Uploaded snarkos binary to S3."
+        msg: "Uploaded snarkos binary to GCS."
       when:
-        - not s3_binary_exists
-        - s3_upload_output.changed
+        - not gcs_binary_exists
+        - gcs_upload_output is changed
 
     - name: Ensure cargo bin dir exists
       ansible.builtin.file:
@@ -206,13 +201,11 @@
         group: ubuntu
         mode: '0755'
 
-    - name: Download snarkos binary from S3
-      aws_s3:
-        bucket: "{{ s3_bucket }}"
-        object: "{{ release_name | trim }}"
-        dest: "/usr/bin/snarkos"
-        mode: get
-      when: s3_binary_exists
+    - name: Download snarkos binary from GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp "gs://{{ gcs_bucket }}/{{ release_name | trim }}" "/usr/bin/snarkos"
+      when: gcs_binary_exists
+      changed_when: true
 
     - name: Copy locally built binary to /usr/bin/snarkos
       ansible.builtin.copy:
@@ -222,7 +215,7 @@
         mode: '0755'
         owner: ubuntu
         group: ubuntu
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Ensure the binary is executable
       file:

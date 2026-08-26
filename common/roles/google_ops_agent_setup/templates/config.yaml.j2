@@ -1,0 +1,187 @@
+# Google Cloud Ops Agent configuration
+# Managed by Ansible — do not edit manually
+#
+# Collects:
+#   - snarkOS journald logs → Cloud Logging (with commit/branch/suite/owner/role labels)
+#   - Full system journal → Cloud Logging (no custom labels; GCE metadata correlates)
+#   - Syslog files → Cloud Logging (with commit/branch/suite/owner/role labels)
+#   - System metrics (CPU, memory, disk, network) → Cloud Monitoring
+#   - Prometheus metrics from node_exporter (:9100) and process_exporter (:9256) → Cloud Monitoring
+
+logging:
+  receivers:
+    system_journal:
+      type: systemd_journald
+    syslog:
+      type: files
+      include_paths:
+        - /var/log/syslog
+        - /var/log/messages
+  processors:
+    metadata_labels:
+      type: modify_fields
+      fields:
+{% if ops_agent_commit_id %}
+        labels."commit_id":
+          static_value: "{{ ops_agent_commit_id }}"
+{% endif %}
+{% if ops_agent_branch_name %}
+        labels."branch_name":
+          static_value: "{{ ops_agent_branch_name }}"
+{% endif %}
+{% if ops_agent_test_suite %}
+        labels."test_suite":
+          static_value: "{{ ops_agent_test_suite }}"
+{% endif %}
+{% if ops_agent_owner %}
+        labels."owner":
+          static_value: "{{ ops_agent_owner }}"
+{% endif %}
+{% if ops_agent_role %}
+        labels."role":
+          static_value: "{{ ops_agent_role }}"
+{% endif %}
+{% if ops_agent_mode %}
+        labels."mode":
+          static_value: "{{ ops_agent_mode }}"
+{% endif %}
+{% if ops_agent_tests %}
+        labels."tests":
+          static_value: "{{ ops_agent_tests }}"
+{% endif %}
+{% if ops_agent_snarkos_network %}
+        labels."snarkos_network":
+          static_value: "{{ ops_agent_snarkos_network }}"
+{% endif %}
+    snarkos_service_only:
+      type: exclude_logs
+      match_any:
+      - jsonPayload._SYSTEMD_UNIT != "{{ ops_agent_snarkos_unit }}"
+    pueue_service_only:
+      type: exclude_logs
+      match_any:
+      - jsonPayload._SYSTEMD_UNIT != "pueued.service"
+    snarkos_extract_log:
+      type: parse_regex
+      field: MESSAGE
+      regex: '^(?<month>\w{3})\s+(?<day>\d{1,2})\s+(?<time>\d{2}:\d{2}:\d{2})\s+(?<host>\S+)\s+(?<service>\S+)\[(?<pid>\d+)\]:\s+(?<iso_ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(?<level>[A-Z]+)\s?(?<method>\S+)?:?\s?(?<message>.+)$'
+      time_key: iso_ts
+      time_format: "%Y-%m-%dT%H:%M:%S.%LZ"
+    pueue_multiline:
+      type: parse_json
+    exclude_debug:
+      type: exclude_logs
+      match_any:
+        - 'jsonPayload.level = "DEBUG"'
+    severity_level:
+      type: modify_fields
+      fields:
+        severity:
+          move_from: jsonPayload.level
+    journal_labels:
+      type: modify_fields
+      fields:
+        labels."hostname":
+          copy_from: jsonPayload._HOSTNAME
+
+  service:
+    pipelines:
+      system_pipeline:
+        receivers:
+          - syslog
+        processors:
+          - metadata_labels
+          - snarkos_extract_log
+          - severity_level
+      # #
+      # # SnarkOS Journal Logs
+      # snarkos_journal:
+      #   receivers:
+      #     - system_journal
+      #   processors:
+      #     - snarkos_service_only
+      #     - snarkos_extract_log
+      #     - metadata_labels
+      #     - severity_level
+      #     - journal_labels
+      # #
+      # # Pueued Journal Logs
+      # pueued_pipeline:
+      #   receivers:
+      #     - system_journal
+      #   processors:
+      #     - pueue_service_only
+      #     - pueue_multiline
+      #     - metadata_labels
+      #     - journal_labels
+
+metrics:
+  receivers:
+    hostmetrics:
+      type: hostmetrics
+      collection_interval: {{ ops_agent_metrics_interval }}
+    prometheus_localhost:
+      type: prometheus
+      config:
+        scrape_configs:
+          - job_name: snarkos
+            scrape_interval: {{ ops_agent_prometheus_scrape_interval | default('30s') }}
+            static_configs:
+              - targets:
+                  - "{{ ops_agent_snarkos_metrics_endpoint | default('localhost:9000') }}"
+                labels:
+                  commit_id: "{{ ops_agent_commit_id }}"
+                  branch_name: "{{ ops_agent_branch_name }}"
+                  test_suite: "{{ ops_agent_test_suite }}"
+                  owner: "{{ ops_agent_owner }}"
+                  role: "{{ ops_agent_role }}"
+                  snarkos_role: "{{ ops_agent_role }}"
+                  mode: "{{ ops_agent_mode }}"
+                  tests: "{{ ops_agent_tests }}"
+                  snarkos_network: "{{ ops_agent_snarkos_network }}"
+            relabel_configs:
+              - source_labels: [__meta_gce_public_ip]
+                target_label: public_ip
+              - source_labels: [__meta_gce_project]
+                target_label: project_id
+
+          - job_name: node_exporter
+            scrape_interval: {{ ops_agent_prometheus_scrape_interval | default('30s') }}
+            static_configs:
+              - targets:
+                  - "{{ ops_agent_node_exporter_endpoint | default('localhost:9100') }}"
+                labels:
+                  test_suite: "{{ ops_agent_test_suite }}"
+                  owner: "{{ ops_agent_owner }}"
+                  snarkos_role: "{{ ops_agent_role }}"
+                  snarkos_network: "{{ ops_agent_snarkos_network }}"
+            relabel_configs:
+              - source_labels: [__meta_gce_public_ip]
+                target_label: public_ip
+              - source_labels: [__meta_gce_project]
+                target_label: project_id
+
+          - job_name: process_exporter
+            scrape_interval: {{ ops_agent_prometheus_scrape_interval | default('30s') }}
+            static_configs:
+              - targets:
+                  - "{{ ops_agent_process_exporter_endpoint | default('localhost:9256') }}"
+                labels:
+                  test_suite: "{{ ops_agent_test_suite }}"
+                  owner: "{{ ops_agent_owner }}"
+                  snarkos_role: "{{ ops_agent_role }}"
+                  snarkos_network: "{{ ops_agent_snarkos_network }}"
+            relabel_configs:
+              - source_labels: [__meta_gce_public_ip]
+                target_label: public_ip
+              - source_labels: [__meta_gce_project]
+                target_label: project_id
+
+  service:
+    pipelines:
+      default_pipeline:
+        receivers:
+          - hostmetrics
+      prometheus_pipeline:
+        receivers:
+          - prometheus_localhost

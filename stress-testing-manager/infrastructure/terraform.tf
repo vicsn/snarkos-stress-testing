@@ -1,38 +1,25 @@
-variable "AWS_REGION" {
-  type    = string
-  default = "us-west-2"
-}
-variable "ARDBEG_SECRET" {
-  type    = string
-  default = "deprecated"
-}
-
-variable "RELEASES_BUCKET" {
-  default = "provable-binaries-releases"
-}
-
-variable "RESULTS_BUCKET" {
-  default = "provable-logs-results"
-}
-
-variable "STRESS_TESTING_BRANCH" {
-  type    = string
-  default = "main"
-}
+# ------------------------------------------------
+# Terraform backend + providers for the GCP Stress Testing Manager.
+#
+# State lives in GCS bucket "tfstate-snarkos-stress-testing" under
+# prefix "stress-testing-manager". Workspaces (default, staging)
+# map to state files "<prefix>/default.tfstate", "<prefix>/staging.tfstate".
+#
+# The GCS bucket is provisioned separately by
+# test_suites/single-region-tests/terraform_init/.
 
 terraform {
-  backend "s3" {
-    bucket               = "ephnet-terraform-state-bucket-stm"
-    workspace_key_prefix = "terraform/state/stm"
-    key                  = "terraform.tfstate"
-    region               = "us-west-2"
-    profile              = "ephnet"
+  required_version = ">= 1.10"
+
+  backend "gcs" {
+    bucket = "tfstate-snarkos-stress-testing"
+    prefix = "stress-testing-manager"
   }
 
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 7.32.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -42,11 +29,14 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.2"
     }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5"
+    }
   }
 }
 
-provider "aws" {
-  region  = var.AWS_REGION
-  profile = "ephnet"
+provider "google" {
+  project = var.gcp_project
+  region  = var.gcp_region
 }
-

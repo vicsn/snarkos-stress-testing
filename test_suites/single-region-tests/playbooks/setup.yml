@@ -41,15 +41,15 @@
   any_errors_fatal: true
   strategy: free
   vars:
-    s3_bucket: "{{ s3_bucket }}"
+    gcs_bucket: "{{ gcs_bucket | default('provable-binaries-releases') }}"
     snarkos_pre_build_location: "{{ snarkos_pre_build_location }}"
     snarkos_git_hash: "{{ hostvars['localhost'].snarkos_git_hash }}"
     release_name: "{{ hostvars['localhost'].release_name }}"
     dest_name: "snarkos"
   tasks:
-    - name: Install snarkOS from S3
+    - name: Install snarkOS from GCS
       ansible.builtin.include_role:
-        name: snarkos_install_s3
+        name: snarkos_install_gcs
       vars:
         release_name: "{{ release_name }}"
         snarkos_install_s3_dest_name: "{{ dest_name }}"
@@ -103,79 +103,22 @@
 # ------------------------------------------------
 # Observability setup
 
-- name: Force-Run docker-compose up with process exporter # noqa: no-changed-when
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  strategy: free
-  vars:
-    ansible_ssh_pipelining: false
-  tasks:
-    - name: Rename docker-compose.yml if process-exporter version does not exist
-      ansible.builtin.command: mv /home/ubuntu/docker-compose.yml /home/ubuntu/docker-compose-process-exporter.yml
-      args:
-        removes: /home/ubuntu/docker-compose.yml  # only runs if this file exists
-        creates: /home/ubuntu/docker-compose-process-exporter.yml  # only runs if this doesn't exist
-    - name: Force-Run docker-compose up with process exporter, restart
-      any_errors_fatal: true
-      command:
-        cmd: docker-compose -f docker-compose-process-exporter.yml up -d --force-recreate
-        chdir: /home/ubuntu/
-  tags: process_exporter
-
-# ------------------------------------------------
-# snarkOS Node Exporter
-
-- name: Force-Run docker-compose up with node exporter # noqa: no-changed-when
-  hosts: snarkos*
-  become: true
-  remote_user: ubuntu
-  any_errors_fatal: true
-  strategy: free
-  vars:
-    ansible_ssh_pipelining: false
-  tasks:
-    - name: Force-Run docker-compose up with node exporter, restart
-      command:
-        cmd: docker-compose -f docker-compose-node-exporter.yml up -d --force-recreate
-        chdir: /home/ubuntu/
-      retries: 5
-      delay: 20
-      register: docker_compose_up_result
-      until: docker_compose_up_result.rc == 0
-  tags: node_exporter
-
-# ------------------------------------------------
-# Metricbeat, Filebeat, Logstash
-
-- name: Install and Configure Metricbeat, Filebeat and Logstash
+- name: Install and Configure Google Cloud Ops Agent
   hosts: snarkos*
   become: true
   remote_user: ubuntu
   any_errors_fatal: true
   strategy: free
   roles:
-    - logstash_setup
-    - metricbeat_setup
-    - filebeat_setup
+    - google_ops_agent_setup
   vars:
-    preinstalled: true
-
-# ------------------------------------------------
-# Prometheus for Grafana metrics
-
-- name: Install and Configure Prometheus
-  hosts: prometheus_server
-  become: true
-  remote_user: ubuntu
-  gather_facts: true
-  any_errors_fatal: true
-  roles:
-    - prometheus_setup_with_clients
-    # - logstash_setup # Enable this again if we use a hosted logging solution.
-  vars:
-    test_runner_for_metrics_ip: "{{ test_runner_ip | default('localhost') }}"
+    ops_agent_commit_id: "{{ snarkos_git_hash | default('') }}"
+    ops_agent_branch_name: "{{ snarkos_branch | default('') }}"
+    ops_agent_owner: "{{ gcp_labels.owner | default('') }}"
+    ops_agent_role: "{{ gcp_labels.role | default('') }}"
+    ops_agent_mode: "{{ mode | default('') }}"
+    ops_agent_tests: "{{ tests | default('') }}"
+    ops_agent_snarkos_network: "{{ snarkos_network | default('') }}"
 
 # ------------------------------------------------
 # snarkOS validators
@@ -186,6 +129,9 @@
   remote_user: ubuntu
   any_errors_fatal: true
   strategy: free
+  vars:
+    snarkos_commit_id: "{{ snarkos_git_hash | default('') }}"
+    snarkos_branch_name: "{{ snarkos_branch | default('') }}"
   pre_tasks:
     - name: Set Validator facts
       include_tasks: set_validator_facts.yml

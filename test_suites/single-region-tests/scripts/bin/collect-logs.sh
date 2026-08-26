@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bin/collect-logs.sh [--label=NAME] [--vars=NAME]
 # Standalone download + analyze + upload, under the shared RUN_ID prefix.
-# --label sets the S3 sub-path (defaults to whatever SELECTED was, else generic).
+# --label sets the GCS sub-path (defaults to whatever SELECTED was, else generic).
 set -euo pipefail
 ORIG_ARGS=("$@")
 # shellcheck source=/dev/null

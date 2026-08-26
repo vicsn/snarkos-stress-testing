@@ -16,6 +16,17 @@ pueue_require() {
   command -v pueue >/dev/null || die "pueue not found on PATH."
 }
 
+# Separate from `default` so destroy can start immediately (it blocks on
+# `pueue wait`) without taking a default-group slot, and so it is not gated
+# by `--after` (which only fires on success).
+PUEUE_TEARDOWN_GROUP="${PUEUE_TEARDOWN_GROUP:-teardown}"
+
+pueue_ensure_group() {
+  local g="$1"
+  pueue group add "$g" >/dev/null 2>&1 || true
+  pueue parallel -g "$g" 1 >/dev/null 2>&1 || true
+}
+
 # Build a shell-safe command string for `pueue add -- …`.
 pueue_cmd_str() {
   local -a parts=(env PUEUE_WORKER=1 "PATH=${PATH}")
@@ -25,7 +36,9 @@ pueue_cmd_str() {
 }
 
 # pueue_enqueue <label> [pueue-opts...] -- <cmd> [args...]
-# Echoes the new task id. Opens a Slack thread when notifications are enabled.
+# Echoes the new task id. Reuses SLACK_THREAD_TS when the run already
+# opened a thread (full_run banner); otherwise notify_open_for_enqueue
+# starts one.
 pueue_enqueue() {
   pueue_enabled || die "pueue_enqueue called while PUEUE_DISABLED=1"
   local label="$1"; shift
@@ -60,45 +73,57 @@ pueue_dispatch_self() {
 }
 
 # Run a full provision → setup → tests → destroy pipeline.
+# tests_arg is the raw --tests= value from full_run.sh (e.g. "prerelease",
+# "all", or "t1,t2"); we forward it to setup.sh so the ops-agent config gets
+# stable `mode`/`tests` labels rather than an expanded per-run test list.
 run_pipeline() {
-  local mode="$1" vars="$2" util="$3"; shift 3
+  local mode="$1" vars="$2" util="$3" tests_arg="$4"; shift 4
   local -a run_tests=("$@")
   local bin="$BIN"
 
   if ! pueue_enabled; then
-    "$bin/provision.sh" --mode="$mode" --vars="$vars"
-    "$bin/setup.sh" --vars="$vars"
-    local t
-    for t in "${run_tests[@]}"; do "$bin/run-test.sh" --test="$t" --vars="$vars"; done
-    [[ -n "$util" ]] && "$bin/run-utility.sh" --utility="$util" --vars="$vars"
-    "$bin/destroy.sh"
+    local rc=0
+    (
+      "$bin/provision.sh" --mode="$mode" --vars="$vars"
+      "$bin/setup.sh" --vars="$vars" --mode="$mode" --tests="$tests_arg"
+      local t
+      for t in "${run_tests[@]}"; do "$bin/run-test.sh" --test="$t" --vars="$vars"; done
+      [[ -n "$util" ]] && "$bin/run-utility.sh" --utility="$util" --vars="$vars"
+    ) || rc=$?
+    "$bin/destroy.sh" || true
+    [[ $rc -eq 0 ]] || return "$rc"
     echo "Done (run=$RUN_ID)."
     return 0
   fi
 
   pueue_require
+  pueue_ensure_group "$PUEUE_TEARDOWN_GROUP"
+
   local prov setup dest
+  local -a pipeline_ids=()
   prov="$(pueue_enqueue "provision:$mode" -- "$bin/provision.sh" "--mode=$mode" "--vars=$vars")"
-  setup="$(pueue_enqueue "setup" --after "$prov" -- "$bin/setup.sh" "--vars=$vars")"
+  pipeline_ids+=("$prov")
+  setup="$(pueue_enqueue "setup" --after "$prov" -- "$bin/setup.sh" "--vars=$vars" "--mode=$mode" "--tests=$tests_arg")"
+  pipeline_ids+=("$setup")
 
   local -a test_ids=() t
   for t in "${run_tests[@]}"; do
     test_ids+=("$(pueue_enqueue "run-test:$t" --after "$setup" -- "$bin/run-test.sh" "--test=$t" "--vars=$vars")")
   done
+  ((${#test_ids[@]})) && pipeline_ids+=("${test_ids[@]}")
 
   local util_id=""
   [[ -n "$util" ]] && util_id="$(pueue_enqueue "run-utility:$util" --after "$setup" \
     -- "$bin/run-utility.sh" "--utility=$util" "--vars=$vars")"
+  [[ -n "$util_id" ]] && pipeline_ids+=("$util_id")
 
-  if [[ ${#test_ids[@]} -eq 0 && -z "$util_id" ]]; then
-    dest="$(pueue_enqueue "destroy" --after "$setup" -- "$bin/destroy.sh")"
-  else
-    local -a after=()
-    ((${#test_ids[@]})) && after+=("${test_ids[@]}")
-    [[ -n "$util_id" ]] && after+=("$util_id")
-    dest="$(pueue_enqueue "destroy" --after "${after[@]}" -- "$bin/destroy.sh")"
-  fi
+  # Teardown group: start now, block until pipeline ids are terminal (success,
+  # failed, or dependency-failed). `--after` would skip destroy on any failure.
+  # "$0"/$@ expand inside the worker, not at enqueue time.
+  # shellcheck disable=SC2016
+  dest="$(pueue_enqueue "destroy" --group "$PUEUE_TEARDOWN_GROUP" -- \
+    bash -c 'pueue wait "$@" || true; exec "$0"' "$bin/destroy.sh" "${pipeline_ids[@]}")"
 
-  echo "Enqueued provision($prov) -> setup($setup) -> ${#run_tests[@]} test job(s) -> destroy($dest)."
+  echo "Enqueued provision($prov) -> setup($setup) -> ${#run_tests[@]} test job(s); destroy($dest) in group '$PUEUE_TEARDOWN_GROUP'."
   echo "Watch with: pueue status"
 }

@@ -1,0 +1,3 @@
+# Managed by Ansible — do not edit manually.
+# Command-line arguments for prometheus-process-exporter.
+ARGS="--web.listen-address={{ process_exporter_listen_address }} --config.path={{ process_exporter_config_path }} {{ process_exporter_extra_args }}"

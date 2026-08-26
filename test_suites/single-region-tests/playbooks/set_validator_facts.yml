@@ -13,18 +13,18 @@
     formatted_validator_ips: >-
       {{
         groups['snarkos_validator']
-        | map('extract', hostvars, ['public_ip_address'])
+        | map('extract', hostvars, ['gcp_private_ip'])
         | map('regex_replace', '^(.*)$', '\1:5000')
         | join(',')
       }}
     formatted_validator_routers: >-
       {{
         groups['snarkos_validator']
-        | map('extract', hostvars, ['public_ip_address'])
+        | map('extract', hostvars, ['gcp_private_ip'])
         | map('regex_replace', '^(.*)$', '\1:4130')
         | join(',')
       }}
-    node_id: "{{ tags['Dev'] }}"
+    node_id: "{{ gcp_labels.dev }}"
 
 - name: Collect prover IPs
   set_fact:
@@ -33,7 +33,7 @@
         ('snarkos_prover' in groups)
           | ternary(groups['snarkos_prover'], [])
           | map('extract', hostvars)
-          | map(attribute='public_ip_address')
+          | map(attribute='gcp_private_ip')
           | map('regex_replace', '^(.*)$', '\1:4130')
           | list
         )
@@ -87,7 +87,7 @@
       {{
         client_hostnames
           | map('extract', hostvars)
-          | map(attribute='public_ip_address')
+          | map(attribute='gcp_private_ip')
           | map('regex_replace', '^(.*)$', '\1:4130')
           | list
           | join(',')

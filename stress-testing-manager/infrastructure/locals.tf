@@ -1,6 +1,20 @@
-locals {
-  env          = terraform.workspace
-  is_default   = terraform.workspace == "default"
+# ------------------------------------------------
+# Workspace-aware naming.
+#
+# STM resources are prefixed with the current Terraform workspace.
+# Default workspace produces `default-stress-testing-manager`;
+# non-default workspaces (e.g. `staging`) produce `staging-stress-testing-manager`.
 
-  name_suffix  = local.is_default ? "" : "-${local.env}"   # "" for the default workspace, "-staging" for staging
+locals {
+  # Workspace used as the naming prefix — mirrors single-region-tests' local.stm_workspace
+  stm_workspace = terraform.workspace
+
+  instance_name = "${local.stm_workspace}-stress-testing-manager"
+  network_tag   = "${local.stm_workspace}-stress-testing-manager"
+  vpc_name      = "${local.stm_workspace}-stress-testing-manager-vpc"
+
+  # Shared subnet CIDR. STM owns it; single-region-tests reuses it via
+  # terraform_remote_state (see
+  # test_suites/single-region-tests/terraform/locals.tf:resolved_subnet_self_link).
+  stm_subnet_cidr = "10.41.0.0/16"
 }

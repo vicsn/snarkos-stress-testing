@@ -20,7 +20,7 @@ install_exit_trap
 require_provisioned
 notify_job_begin "run-utility:$UTIL"
 
-if [ "$UTIL" == "upload_logs_to_s3" ]; then
+if [ "$UTIL" == "upload_logs_to_gcs" ]; then
   mkdir -p "$PARENT_DIR/log_files"
   download_and_upload_logs
 elif [[ "$UTIL" == download_* ]]; then

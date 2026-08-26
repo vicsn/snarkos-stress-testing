@@ -1,0 +1,10 @@
+---
+# Default listen address for prometheus-process-exporter (port 9256)
+process_exporter_listen_address: "0.0.0.0:9256"
+# Path to the process mappings config file
+process_exporter_config_path: "/etc/prometheus/process_mappings.yml"
+# List of process executable names to monitor (matches -procnames flag behavior)
+process_exporter_procnames:
+  - snarkos
+# Additional command-line flags (space-separated); leave empty for defaults
+process_exporter_extra_args: ""

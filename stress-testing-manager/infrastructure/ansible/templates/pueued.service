@@ -1,18 +1,21 @@
-# /etc/systemd/system/pueued.service
+# /etc/systemd/system/pueued.service — Ansible-managed
 [Unit]
 Description=Pueue Daemon
 After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
-WorkingDirectory=/home/ubuntu
-Environment=HOME=/home/ubuntu
-Environment=PATH=/home/ubuntu/.cargo/bin:/usr/local/bin:/usr/bin:/bin
-ExecStartPre=/bin/mkdir -p /home/ubuntu/.local/share/pueue
-ExecStartPre=/bin/chown ubuntu:ubuntu /home/ubuntu/.local/share/pueue
-ExecStart=/home/ubuntu/.cargo/bin/pueued -vv
+User={{ stm_user }}
+Group={{ stm_user }}
+WorkingDirectory=/home/{{ stm_user }}
+Environment=HOME=/home/{{ stm_user }}
+Environment=PATH=/home/{{ stm_user }}/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+Environment=SCCACHE_GCS_BUCKET={{ cache_bucket }}
+Environment=SCCACHE_GCS_RW_MODE=READ_WRITE
+Environment=SCCACHE_GCS_KEY_PREFIX=stm/
+ExecStartPre=/bin/mkdir -p /home/{{ stm_user }}/.local/share/pueue
+ExecStartPre=/bin/chown {{ stm_user }}:{{ stm_user }} /home/{{ stm_user }}/.local/share/pueue
+ExecStart=/home/{{ stm_user }}/.cargo/bin/pueued -vv
 Restart=on-failure
 SyslogIdentifier=pueued
 

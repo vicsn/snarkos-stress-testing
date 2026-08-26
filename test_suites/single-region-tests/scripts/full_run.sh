@@ -3,54 +3,58 @@
 #
 #   full_run.sh --mode=light --vars=vars --tests=prerelease
 #   full_run.sh --mode=heavy --tests=t1,t2
+#   full_run.sh --mode=light --vars=vars --tests=none
 #
 # Jobs enqueue via pueue by default (see lib/pueue.sh). Set PUEUE_DISABLED=1
 # to run sequentially in this shell.
 #
-# When stress-testing-manager-ip.txt exists at the repo root (or can be created
-# via tf_stack.sh ip), the run is delegated over SSH to that manager unless
-# already running on the manager. Set FULL_RUN_LOCAL=1 to force a local run.
+# STM delegation: unless we are already running ON the stress-testing manager
+# (detected via GCE metadata `role=stress-testing-manager`), we resolve the
+# manager's external IP from stress-testing-manager-ip.txt (written by the
+# STM terraform apply) and delegate over plain `ssh ubuntu@<ip>`. The caller
+# must be authorized via `external_ssh_users` in the STM tfvars (SSH pubkey
+# installed in ~ubuntu/.ssh/authorized_keys + /32 firewall allow). Set
+# FULL_RUN_LOCAL=1 to force a local run.
 set -euo pipefail
 # shellcheck source=/dev/null
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
-MANAGER_IP_FILE="${MONOREPO_ROOT}/stress-testing-manager-ip.txt"
-TF_STACK="${MONOREPO_ROOT}/stress-testing-manager/infrastructure/tf_stack.sh"
-REMOTE_SUITE="/home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests"
+STM_IP_FILE="${MONOREPO_ROOT}/stress-testing-manager-ip.txt"
 
-populate_manager_ip_file() {
-  [[ -x "$TF_STACK" ]] || die "Cannot resolve manager IP: $TF_STACK not found or not executable."
-  ensure_devnet_key
-  local manager_ip
-  manager_ip="$(resolve_manager_ip_from_tf_stack)"
-  [[ -n "$manager_ip" ]] || die "tf_stack.sh ip returned no IP (is the manager provisioned?)"
-  printf '%s\n' "$manager_ip" > "$MANAGER_IP_FILE"
-  echo "Wrote stress-testing-manager IP to $MANAGER_IP_FILE ($manager_ip)"
+# STM external IP. Written by terraform apply as local_file.stm_ip
+# (see stress-testing-manager/infrastructure/main.tf). We do NOT shell out
+# to `terraform output` here — the file is the canonical source and works
+# without terraform installed on the caller.
+resolve_manager_ip() {
+  [[ -f "$STM_IP_FILE" ]] || return 1
+  tr -d '[:space:]' < "$STM_IP_FILE"
 }
 
-resolve_manager_ip_from_tf_stack() {
-  "$TF_STACK" ip 2>/dev/null | tail -n1 | tr -d '[:space:]'
-}
-
-# True when this host is the stress-testing manager EC2 instance.
+# True when this host is the stress-testing manager GCE instance.
+# Read the `role` metadata attribute set by main.tf; skip DNS lookups.
 is_stress_testing_manager() {
-  local here meta
-  here="$(curl -sf --max-time 5 http://checkip.amazonaws.com | tr -d '[:space:]')" || return 1
-  meta="$(curl -sf --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)"
-  [[ -n "$meta" && "$here" == "$meta" ]]
+  local role
+  role="$(curl -sf --max-time 2 -H 'Metadata-Flavor: Google' \
+    http://metadata.google.internal/computeMetadata/v1/instance/attributes/role 2>/dev/null || true)"
+  [[ "$role" == "stress-testing-manager" ]]
 }
 
 delegate_full_run() {
-  ensure_devnet_key
-  local manager_ip
-  manager_ip="$(tr -d '[:space:]' < "$MANAGER_IP_FILE")"
-  [[ -n "$manager_ip" ]] || die "Empty manager IP in $MANAGER_IP_FILE"
+  local stm_ip
+  stm_ip="$(resolve_manager_ip)" \
+    || die "Cannot resolve STM IP: $STM_IP_FILE is missing. Run 'stress-testing-manager/infrastructure/tf_stack.sh provision' first."
+  [[ -n "$stm_ip" ]] \
+    || die "STM IP file exists but is empty: $STM_IP_FILE"
 
-  echo "==> Delegating full_run.sh to stress-testing-manager ($manager_ip)"
+  echo "==> Delegating full_run.sh to stress-testing-manager (ubuntu@$stm_ip)"
 
-  # Load Slack creds from local vars.yml when not exported (same file as tf_stack.sh setup).
-  load_slack_config_from_vars_yml || true
+  # Load Slack creds via profile / Secret Manager / vars.yml (best-effort).
+  load_slack_config || true
   : "${SLACK_CHANNEL_ID:=${CHANNEL_ID:-}}"
+
+  # We always log in as `ubuntu`, so the remote suite path is fixed.
+  # No $HOME roundtrip needed.
+  local remote_suite="/home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests"
 
   local -a env_args=()
   local var
@@ -62,39 +66,33 @@ delegate_full_run() {
 
   local -a inner=(env)
   inner+=("${env_args[@]+"${env_args[@]}"}")
-  inner+=("$REMOTE_SUITE/scripts/full_run.sh")
+  inner+=("${remote_suite}/scripts/full_run.sh")
   inner+=("$@")
   local inner_quoted
   inner_quoted="$(printf '%q ' "${inner[@]}")"
   inner_quoted="${inner_quoted% }"
 
-  # Login shell sources manager profile; explicit source covers non-interactive SSH.
-  # $HOME must expand on the remote host, not locally.
+  # Source the manager's Slack profile before running (login shell may not
+  # trigger for non-interactive SSH, so do it explicitly).
+  # $HOME must expand on the remote host, not locally — hence escaped $.
+  # shellcheck disable=SC2016
   local lc_cmd
   lc_cmd="if [[ -f \"\$HOME/.config/snarkos-stress-testing/slack_env.sh\" ]]; then . \"\$HOME/.config/snarkos-stress-testing/slack_env.sh\"; fi; exec ${inner_quoted}"
 
-  ssh -i "$DEVNET_KEY" \
-    -o StrictHostKeyChecking=accept-new \
-    -o ForwardAgent=yes \
-    "ubuntu@${manager_ip}" \
-    bash -lc "$(printf '%q' "$lc_cmd")"
+  ssh -o ForwardAgent=yes "ubuntu@$stm_ip" \
+    "bash -lc $(printf '%q' "$lc_cmd")"
 }
 
 if [[ -z "${FULL_RUN_LOCAL:-}" ]]; then
   if is_stress_testing_manager; then
     : # already on the manager; run locally below
   else
-    if [[ ! -f "$MANAGER_IP_FILE" ]]; then
-      populate_manager_ip_file
-    fi
-    manager_ip="$(tr -d '[:space:]' < "$MANAGER_IP_FILE")"
-    [[ -n "$manager_ip" ]] || die "Empty manager IP in $MANAGER_IP_FILE"
     delegate_full_run "$@"
     exit 0
   fi
 fi
 
-MODE="prerelease"; TESTS_ARG="prerelease"; UTIL=""
+MODE="light"; TESTS_ARG="prerelease"; UTIL=""
 for arg in "$@"; do
   case "$arg" in
     --mode=*)     MODE="${arg#*=}" ;;
@@ -109,7 +107,7 @@ done
 discover_tests
 mapfile -t RUN_TESTS < <(resolve_tests "$TESTS_ARG")
 
-echo "RUN_ID=$RUN_ID  mode=$MODE  vars=$VARS  tests=${RUN_TESTS[*]:-none}"
-notify_run_banner "🚀 Run \`$RUN_ID\` — mode=$MODE vars=$VARS tests=${RUN_TESTS[*]:-none}"
+echo "RUN_ID=$RUN_ID  mode=$MODE  vars=$VARS  tests=${RUN_TESTS[*]:-none}  owner=$OWNER"
+notify_run_banner "🚀 Run \`$RUN_ID\` — mode=$MODE vars=$VARS tests=${RUN_TESTS[*]:-none} owner=$OWNER"
 
-run_pipeline "$MODE" "$VARS" "$UTIL" "${RUN_TESTS[@]}"
+run_pipeline "$MODE" "$VARS" "$UTIL" "$TESTS_ARG" "${RUN_TESTS[@]}"

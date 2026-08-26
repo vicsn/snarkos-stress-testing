@@ -6,9 +6,9 @@
         var: groups
     - name: Store client IPs
       copy:
-        content: "{{ groups.get('snarkos_client', []) | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"
+        content: "{{ groups.get('snarkos_client', []) | map('extract', hostvars) | map(attribute='gcp_public_ip') | join('\n') }}"
         dest: ../client_ip_addresses.txt
     - name: Store validator IPs
       copy:
-        content: "{{ groups.get('snarkos_validator', []) | map('extract', hostvars) | map(attribute='public_ip_address') | join('\n') }}"
+        content: "{{ groups.get('snarkos_validator', []) | map('extract', hostvars) | map(attribute='gcp_public_ip') | join('\n') }}"
         dest: ../ip_addresses.txt

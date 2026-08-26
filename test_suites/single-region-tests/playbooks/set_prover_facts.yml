@@ -8,7 +8,7 @@
 
 - name: Assign prover to validator index
   set_fact:
-    validator_id: "{{ tags['Dev'] }}"
+    validator_id: "{{ gcp_labels.dev }}"
 
 - name: Set validator address
   set_fact:
@@ -16,7 +16,7 @@
       {{
         groups['snarkos_validator']
         | map('extract', hostvars)
-        | map(attribute='public_ip_address')
+        | map(attribute='gcp_private_ip')
         | map('regex_replace', '^(.*)$', '\1:4130')
         | list
         | reject("equalto","")
@@ -25,7 +25,7 @@
 
 - name: Set instance-specific facts
   set_fact:
-    node_id: "{{ tags['Dev'] }}"
+    node_id: "{{ gcp_labels.dev }}"
 
 - name: Set snarkos command with peers
   set_fact:

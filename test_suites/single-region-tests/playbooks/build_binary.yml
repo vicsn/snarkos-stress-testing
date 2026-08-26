@@ -7,7 +7,7 @@
     - name: Wait for SSH to become ready
       ansible.builtin.wait_for_connection:
 
-- name: Build snarkOS binary and upload to S3
+- name: Build snarkOS binary and upload to gcloud storage
   hosts: builder
   remote_user: ubuntu
   become: true

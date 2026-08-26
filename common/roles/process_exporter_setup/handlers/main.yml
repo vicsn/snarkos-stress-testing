@@ -1,0 +1,7 @@
+---
+- name: Restart prometheus-process-exporter
+  ansible.builtin.systemd:
+    name: prometheus-process-exporter
+    state: restarted
+    daemon_reload: true
+  become: true

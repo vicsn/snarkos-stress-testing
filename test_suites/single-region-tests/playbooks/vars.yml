@@ -1,0 +1,79 @@
+# Observability keys — now managed via GCP Secret Manager (see set_secrets.sh)
+#
+grafana_cloud_api_key: ${GRAFANA_API_TOKEN}
+
+# Your own github access token.
+#
+github_token: ${GITHUB_PERSONAL_ACCESS_TOKEN}
+
+# Set the devnet name using DEVNET_NAME
+#
+devnet_name: "stress-testing-manager"
+
+# Observability infra vars
+create_flamegraph: false
+flamegraph_node_id: "1"
+
+# Build vars
+#
+snarkos_repo: "https://github.com/ProvableHQ/snarkOS" # note the URL format
+# snarkos_git_commit_local_build: "your_commit_id"
+snarkos_git_hash: "89f5d81f8" # must be a commit hash
+
+# features: "test_network,tokio_console" # optional
+features: "test_network,locktick"
+
+#?# For GitHub build: (note that it uses the ProvableHQ/snarkOS-staging repository. Comment out if using another installation method)
+#?# For binary installation:
+# #
+# snarkos_binary_tag: "v4.9.0-testnet"
+
+# # For remote build: (leave commented out if using another installation method)
+# #
+# snarkos_git_hash: "mainnet-staging" # NOTE: can be a branch name or a commit hash
+# snarkos_repo: "https://github.com/ProvableHQ/snarkOS-staging" # note the URL format
+# envs: "RUSTFLAGS=--cfg tokio_unstable,RUST_BACKTRACE=0,CARGO_PROFILE_RELEASE_DEBUG=false" # optional, e.g., "RUST_BACKTRACE=0 CARGO_PROFILE_RELEASE_DEBUG=false"
+# features: "test_network,tokio_console" # optional
+
+
+# # To use malicious SnarkOS pre-built binary located on the configured `gcs_bucket` under folder named like the `snarkos_malice_tag`:
+# # use_malicious_snarkos_pre_build: true
+# # gcs_bucket: '<existing-bucket-containing-the-malicious-snarkos-binary>'
+# snarkos_malice_tag: "malice-2349f3eda" # NOTE: test_skip_tx_checks feature may cause a fork due to accepting invalid txs. Only GitHub build installation method currently supported.
+# #snarkos_malice_tag: "malice-2349f3eda" # depends on ProvableHQ/snarkVM/skip-tx-checks-* and ProvableHQ/snarkOS-staging/malice-2349f3eda
+
+
+# Application vars
+snarkos_verbosity: 1
+rest_rps: 1000000000
+
+# TX pre-generation variables:
+#
+txs_target_consensus_version: 10
+txs_target_consensus_version_height: 22
+
+# # 40 validators, testnet:
+# txs_target_state_root: sr1z5xdwjtm5caz603essyuu2jkdm3jczkflxqfj3egj29ajg0fv5qqnpqqa2
+#
+# 5 validators, testnet:
+txs_target_state_root: sr1pmfwxzm9r8ywud3mt6kdvaqdjz0d2s6sla3v4xa6jehhp7ky9y9s4wncjw
+
+# pregeneration_execution_tx_count: 6000
+# pregeneration_deployment_tx_count: 20
+# pregeneration_bucket_path: "pregenerated_transactions"
+pregenerate_transactions_num_validators: 5
+pregeneration_tx_batch_size: 5
+
+# Vars controlling load_saved_transactions:
+# load_saved_transactions_type: "executions" # Possible values executions,deployments,all, default: all
+
+# All these vars are use by the auto-builder that is triggered on new releases and shouldn't be used locally.
+# Adding them here for documentation purposes:
+
+# To use a snarkos binary put in the root of the configured `gcs_bucket`:
+#
+# use_snarkos_pre_build_gcs: true
+gcs_bucket: 'provable-binaries-releases'
+
+# Do not change the code below
+release_name: "{{ snarkos_git_hash }}{{ '_' + features if (features is defined and features | length > 0) else '' }}"

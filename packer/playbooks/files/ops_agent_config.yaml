@@ -1,0 +1,85 @@
+# Google Cloud Ops Agent configuration — Packer-baked default
+#
+# This file is deployed to /etc/google-cloud-ops-agent/config.yaml at Packer bake time.
+# On machines where Ansible does NOT run the google_ops_agent_setup role (e.g., the
+# Stress Testing Manager), this config remains active and identifies the machine as
+# role="stress-testing-manager".
+#
+# On snarkOS nodes (validators/clients/provers/tx_runner), the Ansible role
+# google_ops_agent_setup re-renders /etc/google-cloud-ops-agent/config.yaml with
+# its own template (test_suites/single-region-tests/playbooks/roles/google_ops_agent_setup/templates/config.yaml.j2)
+# at setup time, replacing this label set with commit_id/branch_name/test_suite labels.
+#
+# NOTE: The snarkOS systemd unit name is hardcoded to "snarkos" — matches the
+# ops_agent_snarkos_unit default in the role. Changing it requires rebuilding
+# the Packer image.
+#
+# Collects:
+#   - snarkOS journald logs → Cloud Logging (with role="stress-testing-manager" label)
+#   - Full system journal → Cloud Logging (no custom labels; GCE metadata correlates)
+#   - Syslog files → Cloud Logging (with role="stress-testing-manager" label)
+#   - System metrics (CPU, memory, disk, network) → Cloud Monitoring
+#   - Prometheus metrics from node_exporter (:9100) and process_exporter (:9256) → Cloud Monitoring
+
+logging:
+  receivers:
+    snarkos_journal:
+      type: systemd_journald
+      units:
+        - snarkos
+    syslog:
+      type: files
+      include_paths:
+        - /var/log/syslog
+        - /var/log/messages
+    system_journal:
+      type: systemd_journald
+  processors:
+    add_labels:
+      type: modify_fields
+      fields:
+        labels."role":
+          static_value: "stress-testing-manager"
+  service:
+    pipelines:
+      snarkos_pipeline:
+        receivers:
+          - snarkos_journal
+        processors:
+          - add_labels
+      system_pipeline:
+        receivers:
+          - syslog
+        processors:
+          - add_labels
+      system_journal_pipeline:
+        receivers:
+          - system_journal
+
+metrics:
+  receivers:
+    hostmetrics:
+      type: hostmetrics
+      collection_interval: 60s
+    prometheus_localhost:
+      type: prometheus
+      config:
+        scrape_configs:
+          - job_name: node_exporter
+            scrape_interval: 30s
+            static_configs:
+              - targets:
+                  - "localhost:9100"
+          - job_name: process_exporter
+            scrape_interval: 30s
+            static_configs:
+              - targets:
+                  - "localhost:9256"
+  service:
+    pipelines:
+      default_pipeline:
+        receivers:
+          - hostmetrics
+      prometheus_pipeline:
+        receivers:
+          - prometheus_localhost

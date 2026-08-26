@@ -8,7 +8,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
 for arg in "$@"; do
   case "$arg" in
-    --vars=*) VARS="${arg#*=}"; export VARS ;;
+    --vars=*)  VARS="${arg#*=}"; export VARS ;;
+    --mode=*)  MODE="${arg#*=}"; export MODE ;;
+    --tests=*) TESTS="${arg#*=}"; export TESTS ;;
     *) die "Unknown argument: $arg" ;;
   esac
 done
@@ -23,13 +25,13 @@ set_network_vars || exit 1
 VARS_FILE="$PARENT_DIR/playbooks/${VARS}.yml"
 SNARKOS_GIT_HASH=$(grep -E '^snarkos_git_hash:' "$VARS_FILE" | awk '{print $2}' | tr -d "\"'")
 FEATURES=$(grep -E '^features:'  "$VARS_FILE" | awk '{print $2}' | tr -d "\"'" || true)
-S3_BUCKET=$(grep -E '^s3_bucket:' "$VARS_FILE" | awk '{print $2}' | tr -d "\"'" || true)
-S3_BUCKET="${S3_BUCKET:-$RELEASE_BUCKET}"
+GCS_BUCKET=$(grep -E '^gcs_bucket:' "$VARS_FILE" | awk '{print $2}' | tr -d "\"'" || true)
+GCS_BUCKET="${GCS_BUCKET:-$RELEASE_BUCKET}"
 RELEASE_NAME="$SNARKOS_GIT_HASH"
 [[ -n "$FEATURES" ]] && RELEASE_NAME="${RELEASE_NAME}_${FEATURES}"
 
-if aws_cli s3api head-object --bucket "$S3_BUCKET" --key "$RELEASE_NAME" --profile ephnet &>/dev/null; then
-  echo "snarkOS binary '$RELEASE_NAME' found in S3, skipping build."
+if gcloud storage ls "gs://$GCS_BUCKET/$RELEASE_NAME" &>/dev/null; then
+  echo "snarkOS binary '$RELEASE_NAME' found in GCS, skipping build."
 else
   echo "Binary '$RELEASE_NAME' missing; spinning up ephemeral builder..."
   apply_ephemeral_builder
@@ -39,7 +41,7 @@ else
   echo "Builder running at $BUILDER_IP"
 
   BUILDER_INVENTORY="$PARENT_DIR/builder_inventory.tmp"
-  printf '[builder]\n%s ansible_user=ubuntu\n' "$BUILDER_IP" > "$BUILDER_INVENTORY"
+  printf '[builder]\n%s ansible_user=ubuntu ansible_ssh_private_key_file=/home/ubuntu/snarkos-stress-testing/devnet-key\n' "$BUILDER_IP" > "$BUILDER_INVENTORY"
   ( cd "$PARENT_DIR/playbooks"
     ansible-playbook -i "$BUILDER_INVENTORY" build_binary.yml \
       --extra-vars="devnet_name=${DEVNET_NAME}" \

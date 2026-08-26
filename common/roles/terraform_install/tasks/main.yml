@@ -1,0 +1,31 @@
+---
+# common/roles/terraform_install/tasks/main.yml
+#
+# Install the Terraform CLI on Ubuntu via HashiCorp's official APT
+# repository. See ./README.md for full documentation.
+
+- name: Install HashiCorp APT GPG key at /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 022
+    wget -qO- https://apt.releases.hashicorp.com/gpg \
+      | gpg --batch --yes --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    chmod 0644 /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  args:
+    executable: /bin/bash
+    creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+- name: Add HashiCorp APT repository at /etc/apt/sources.list.d/hashicorp.list
+  ansible.builtin.deb822_repository:
+    name: hashicorp
+    types: deb
+    uris: https://apt.releases.hashicorp.com
+    suites: '{{ ansible_facts["distribution_release"] }}'
+    components: main
+    architectures: amd64
+    signed_by: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+- name: Install Terraform CLI
+  ansible.builtin.apt:
+    name: "terraform{{ ('=' + terraform_version) if terraform_version | length > 0 else '' }}"
+    state: present

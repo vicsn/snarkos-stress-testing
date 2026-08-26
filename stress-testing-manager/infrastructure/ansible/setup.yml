@@ -1,103 +1,115 @@
-- name: Setup the stress testing manager machine
+---
+- name: Setup the stress testing manager machine (GCP)
   hosts: all
   become: true
   gather_facts: true
-  remote_user: ubuntu
-  become_user: ubuntu
   vars:
+    # STM SSH user. Populated at invocation time by tf_stack.sh from
+    # `gcloud compute ssh ... whoami`. Falls back to ansible_user
+    # (from -u/--user or inventory) or the legacy "ubuntu" default.
+    stm_user: "{{ ansible_user | default('ubuntu') }}"
+    stm_home: "/home/{{ stm_user }}"
+
+    # GCP configuration — override via `-e` on ansible-playbook.
+    gcp_project: "protocol-development-sandbox"
+    releases_bucket: "provable-binaries-releases"
+    results_bucket: "provable-logs-results"
+    cache_bucket: "snarkos-compiler-cache"
+
+    # Target selector — controls which sections of the play run.
+    #   full             = everything (default)
+    #   stress-testing   = repo sync only
+    #   pueue            = pueue install + systemd + Slack
+    #   both             = stress-testing + pueue
     _setup_target: "{{ setup_target | default('full') }}"
     setup_full: "{{ _setup_target == 'full' }}"
     setup_stress_testing: "{{ _setup_target in ['full', 'both', 'stress-testing'] }}"
     setup_pueue: "{{ _setup_target in ['full', 'both', 'pueue'] }}"
+
   tasks:
+    # ------------------------------------------------
+    # Shared SSH keys (target=full)
+
     - name: Install shared SSH keys from repo keys.pub
       ansible.builtin.include_role:
         name: shared_ssh_keys
       when: setup_full
 
-    - name: Ensure .ssh directory exists
-      file:
-        path: /home/ubuntu/.ssh
-        state: directory
-        mode: '0700'
-      when: setup_full
-
     - name: Ensure GitHub is in known_hosts
-      shell: |
-        grep -q '^github.com' ~/.ssh/known_hosts 2>/dev/null || \
-        ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts
+      become: true
+      become_user: "{{ stm_user }}"
+      ansible.builtin.shell: |
+        set -eu
+        grep -q '^github.com' {{ stm_home }}/.ssh/known_hosts 2>/dev/null || \
+          ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> {{ stm_home }}/.ssh/known_hosts
       args:
         executable: /bin/bash
+      changed_when: false
       when: setup_full
 
+    # ------------------------------------------------
+    # Stress-testing repo — pull artifact from GCS
+    # (target=stress-testing,both,full)
+    #
+    # Replaces the old rsync-from-laptop pattern with a pull from
+    # gs://<releases_bucket>/stress-testing/latest.tar.gz packaged by
+    # scripts/bin/upload-artifact.sh (locally or via GitHub Actions).
+    # devnet-key deployment is removed entirely — OS Login handles SSH.
+
     - name: Ensure stress-testing repo destination exists
-      file:
-        path: /home/ubuntu/snarkos-stress-testing
+      ansible.builtin.file:
+        path: "{{ stm_home }}/snarkos-stress-testing"
         state: directory
-        owner: ubuntu
-        group: ubuntu
+        owner: "{{ stm_user }}"
+        group: "{{ stm_user }}"
         mode: '0755'
       when: setup_stress_testing
 
-    - name: Sync local snarkos-stress-testing checkout to manager
-      ansible.posix.synchronize:
-        src: "{{ stress_testing_local_path }}/"
-        dest: /home/ubuntu/snarkos-stress-testing/
-        mode: push
-        delete: true
-        use_ssh_args: true
-        rsync_opts:
-          - "--exclude=.git"
-          - "--exclude=**/.terraform"
-          - "--exclude=**/.terraform.lock.hcl"
-          - "--exclude=**/target"
-          - "--exclude=**/__pycache__"
-          - "--exclude=**/.venv"
-          - "--exclude=**/.venv-lint"
-          - "--exclude=**/node_modules"
-          - "--exclude=devnet-key"
-          - "--exclude=devnet-key.pub"
-          - "--exclude=stress-testing-manager-ip.txt"
-      delegate_to: localhost
-      become: false
+    - name: Pull latest stress-testing artifact from GCS
+      become: true
+      become_user: "{{ stm_user }}"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        gcloud storage cp \
+          "gs://{{ releases_bucket }}/stress-testing/latest.tar.gz" \
+          /tmp/stress-testing-latest.tar.gz
+        tar xzf /tmp/stress-testing-latest.tar.gz \
+          -C {{ stm_home }}/snarkos-stress-testing
+        rm -f /tmp/stress-testing-latest.tar.gz
+      args:
+        executable: /bin/bash
+      register: artifact_pull
+      changed_when: "'Copying' in artifact_pull.stderr or 'Copying' in artifact_pull.stdout"
       when: setup_stress_testing
 
-    - name: Check local devnet-key exists
-      ansible.builtin.stat:
-        path: "{{ stress_testing_local_path }}/devnet-key"
-      delegate_to: localhost
-      become: false
-      register: local_devnet_key
+    - name: Delete macOS AppleDouble metadata files from extracted archive
+      become: true
+      become_user: "{{ stm_user }}"
+      ansible.builtin.command:
+        cmd: find snarkos-stress-testing/ -type f -name "._*" -delete
+        chdir: "{{ stm_home }}"
+      changed_when: false
       when: setup_stress_testing
-
-    - name: Copy devnet-key pair to manager
-      ansible.builtin.copy:
-        src: "{{ stress_testing_local_path }}/{{ item.src }}"
-        dest: "/home/ubuntu/snarkos-stress-testing/{{ item.dest }}"
-        mode: "{{ item.mode }}"
-        owner: ubuntu
-        group: ubuntu
-      loop:
-        - { src: devnet-key, dest: devnet-key, mode: '0400' }
-        - { src: devnet-key.pub, dest: devnet-key.pub, mode: '0644' }
-      when: setup_stress_testing and local_devnet_key.stat.exists
 
     - name: Set ownership on synced stress-testing repo
-      file:
-        path: /home/ubuntu/snarkos-stress-testing
+      ansible.builtin.file:
+        path: "{{ stm_home }}/snarkos-stress-testing"
         state: directory
-        owner: ubuntu
-        group: ubuntu
+        owner: "{{ stm_user }}"
+        group: "{{ stm_user }}"
         recurse: true
       become: true
       become_user: root
       when: setup_stress_testing
 
+    # ------------------------------------------------
+    # APT packages (target=full)
+
     - name: Update APT package index and install dependencies
       become: true
       become_user: root
-      apt:
-        update_cache: yes
+      ansible.builtin.apt:
+        update_cache: true
         cache_valid_time: 3600
         name:
           - apt-transport-https
@@ -115,22 +127,20 @@
           - clang
           - libclang-dev
           - llvm-dev
-          - pkg-config
           - lld
           - cmake
           - wget
+          - acl
+          - ansible
+          - python3-google-auth
       when: setup_full
 
-    - name: Ensure Python boto3 is installed
-      apt:
-        name: python3-boto3
-        state: present
-        executable: pip3
-      when: setup_full
+    # ------------------------------------------------
+    # Rust toolchain (target=full)
 
     - name: Download rustup-init script
-      become: false
-      run_once: false
+      become: true
+      become_user: "{{ stm_user }}"
       ansible.builtin.get_url:
         url: https://sh.rustup.rs
         dest: /tmp/rustup-init.sh
@@ -138,131 +148,207 @@
       when: setup_full
 
     - name: Run rustup-init.sh to install Rust and Cargo
-      become: false
-      run_once: false
+      become: true
+      become_user: "{{ stm_user }}"
       ansible.builtin.command: >
         /tmp/rustup-init.sh -y --no-modify-path
       environment:
-        CARGO_HOME: /home/ubuntu/.cargo
-        RUSTUP_HOME: /home/ubuntu/.rustup
-        HOME: /home/ubuntu
+        CARGO_HOME: "{{ stm_home }}/.cargo"
+        RUSTUP_HOME: "{{ stm_home }}/.rustup"
+        HOME: "{{ stm_home }}"
       args:
-        creates: /home/ubuntu/.cargo/bin/cargo
+        creates: "{{ stm_home }}/.cargo/bin/cargo"
       register: rustup_result
       changed_when: "'Rust is installed now' in rustup_result.stdout or rustup_result.rc == 0"
-      become_user: ubuntu
       when: setup_full
 
     - name: Add Cargo to PATH in .bashrc
-      lineinfile:
-        path: /home/ubuntu/.bashrc
+      become: true
+      become_user: "{{ stm_user }}"
+      ansible.builtin.lineinfile:
+        path: "{{ stm_home }}/.bashrc"
         line: 'export PATH="$HOME/.cargo/bin:$PATH"'
         insertafter: EOF
-      become: false
-      become_user: ubuntu
+        create: true
+        mode: '0644'
       when: setup_full
 
-    - name: Add Cargo to PATH for this session
-      shell: |
-        source $HOME/.cargo/env
-        echo $PATH
-      args:
-        executable: /bin/bash
-      register: cargo_path
-      when: setup_full
-
-    - name: Show cargo path
-      debug:
-        var: cargo_path.stdout
-      when: setup_full
+    # ------------------------------------------------
+    # sccache (target=full) — binary + GCS backend config
 
     - name: Check if sccache exists
-      stat:
+      ansible.builtin.stat:
         path: /usr/local/bin/sccache
       register: sccache
       when: setup_full
 
-    - name: Install sccache
-      shell: |
-        wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
+    - name: Install sccache binary
+      become: true
+      become_user: root
+      ansible.builtin.shell: |
+        set -eu
+        cd /tmp
+        wget -q https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
         tar -xf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz
-        sudo install -m 0755 sccache-*/sccache /usr/local/bin/sccache
-      when: setup_full and not sccache.stat.exists
+        install -m 0755 sccache-*/sccache /usr/local/bin/sccache
+        rm -rf sccache-v0.10.0-x86_64-unknown-linux-musl*
       args:
         executable: /bin/bash
+        creates: /usr/local/bin/sccache
+      when: setup_full and not sccache.stat.exists
 
-    - name: Load Slack vars from vars.yml
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/templates/vars.yml"
-      failed_when: false
-      when: setup_pueue
+    - name: Configure sccache for GCS backend in .bashrc
+      become: true
+      become_user: "{{ stm_user }}"
+      ansible.builtin.blockinfile:
+        path: "{{ stm_home }}/.bashrc"
+        marker: "# {mark} ANSIBLE MANAGED - sccache GCS config"
+        block: |
+          # sccache: use GCS backend authenticated via the STM instance SA.
+          export SCCACHE_GCS_BUCKET={{ cache_bucket }}
+          export SCCACHE_GCS_RW_MODE=READ_WRITE
+          export SCCACHE_GCS_KEY_PREFIX=stm/
+        create: true
+        mode: '0644'
+      when: setup_full
+
+    # ------------------------------------------------
+    # gcloud CLI config (target=full) — replaces `aws configure`
+
+    - name: Configure gcloud default project for stm_user
+      become: true
+      become_user: "{{ stm_user }}"
+      ansible.builtin.command:
+        cmd: gcloud config set project {{ gcp_project }}
+      changed_when: true
+      when: setup_full
+
+    # ------------------------------------------------
+    # Terraform CLI (target=full) — via HashiCorp APT repo
+
+    - name: Install Terraform CLI via terraform_install role
+      ansible.builtin.include_role:
+        name: terraform_install
+      when: setup_full
+
+    # ------------------------------------------------
+    # Google Cloud Ops Agent (target=full) — replaces the Packer-baked
+    # /etc/google-cloud-ops-agent/config.yaml so config edits ship via
+    # `tf_stack.sh update` rather than image rebuild. Only role="stress-
+    # testing-manager" is set; commit_id/branch_name/test_suite/owner
+    # stay blank (STM is a persistent host, not a per-run test node).
+    # The role template's `snarkos` Prometheus scrape (:9000) is dead on
+    # this host — snarkOS does not run here — so ops-agent logs will
+    # carry recurring "connection refused" entries for that job.
+    # node_exporter (:9100) and process_exporter (:9256) are baked into
+    # the STM image and scrape successfully.
+
+    - name: Install and configure Google Cloud Ops Agent
+      ansible.builtin.include_role:
+        name: google_ops_agent_setup
+      vars:
+        # noqa: var-naming[no-role-prefix] — the shared role's defaults use
+        # unprefixed `ops_agent_*` names (see common/roles/google_ops_agent_setup/
+        # defaults/main.yml); renaming here would fail to bind the override.
+        ops_agent_role: "stress-testing-manager"
+        ops_agent_test_suite: ""
+      when: setup_full
+
+    # ------------------------------------------------
+    # Slack credentials via GCP Secret Manager
+    # (target=pueue,both,full) — replaces vars.yml loading
 
     - name: Ensure snarkos-stress-testing config directory exists
       become: true
-      become_user: ubuntu
-      file:
-        path: /home/ubuntu/.config/snarkos-stress-testing
+      become_user: "{{ stm_user }}"
+      ansible.builtin.file:
+        path: "{{ stm_home }}/.config/snarkos-stress-testing"
         state: directory
         mode: '0700'
       when: setup_pueue
 
-    - name: Deploy Slack env for ubuntu shell sessions
+    - name: Fetch Slack credentials from Secret Manager
       become: true
-      become_user: ubuntu
-      template:
-        src: slack_env.sh
-        dest: /home/ubuntu/.config/snarkos-stress-testing/slack_env.sh
-        mode: '0600'
+      become_user: "{{ stm_user }}"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        token="$(gcloud secrets versions access latest --secret=stress-testing-manager-slack-token --project={{ gcp_project }} 2>/dev/null || true)"
+        channel="$(gcloud secrets versions access latest --secret=stress-testing-manager-slack-channel-id --project={{ gcp_project }} 2>/dev/null || true)"
+        dest="{{ stm_home }}/.config/snarkos-stress-testing/slack_env.sh"
+        if [[ -n "$token" && -n "$channel" ]]; then
+          cat >"$dest" <<EOF
+        # Ansible-managed — sourced from GCP Secret Manager (do not edit)
+        export SLACK_TOKEN="$token"
+        export SLACK_CHANNEL_ID="$channel"
+        export CHANNEL_ID="$channel"
+        EOF
+          chmod 600 "$dest"
+          echo "wrote $dest"
+        else
+          rm -f "$dest"
+          echo "no slack secrets configured; removed $dest"
+        fi
+      args:
+        executable: /bin/bash
+      register: slack_fetch
+      changed_when: "'wrote' in slack_fetch.stdout"
       no_log: true
-      when:
-        - setup_pueue
-        - slack_token | default('') | length > 0
-        - slack_channel_id | default('') | length > 0
-
-    - name: Remove Slack env file when vars not configured
-      become: true
-      become_user: ubuntu
-      file:
-        path: /home/ubuntu/.config/snarkos-stress-testing/slack_env.sh
-        state: absent
-      when:
-        - setup_pueue
-        - slack_token | default('') | length == 0 or slack_channel_id | default('') | length == 0
+      when: setup_pueue
 
     - name: Source Slack env from .bashrc
       become: true
-      become_user: ubuntu
-      blockinfile:
-        path: /home/ubuntu/.bashrc
+      become_user: "{{ stm_user }}"
+      ansible.builtin.blockinfile:
+        path: "{{ stm_home }}/.bashrc"
         marker: "# {mark} ANSIBLE MANAGED - snarkos stress testing slack"
         block: |
-          # Slack notifications for snarkos-stress-testing (from ansible vars.yml)
+          # Slack notifications for snarkos-stress-testing (from GCP Secret Manager)
           if [[ -f "$HOME/.config/snarkos-stress-testing/slack_env.sh" ]]; then
             # shellcheck source=/dev/null
             . "$HOME/.config/snarkos-stress-testing/slack_env.sh"
           fi
-        state: "{{ 'present' if (slack_token | default('') | length > 0 and slack_channel_id | default('') | length > 0) else 'absent' }}"
+          [[ -e "/etc/profile.d/bash_completion.sh" ]] && . "/etc/profile.d/bash_completion.sh"
+        create: true
+        mode: '0644'
       when: setup_pueue
 
     - name: Source Slack env from .profile
       become: true
-      become_user: ubuntu
-      blockinfile:
-        path: /home/ubuntu/.profile
+      become_user: "{{ stm_user }}"
+      ansible.builtin.blockinfile:
+        path: "{{ stm_home }}/.profile"
         marker: "# {mark} ANSIBLE MANAGED - snarkos stress testing slack"
         block: |
-          # Slack notifications for snarkos-stress-testing (from ansible vars.yml)
+          # Slack notifications for snarkos-stress-testing (from GCP Secret Manager)
           if [[ -f "$HOME/.config/snarkos-stress-testing/slack_env.sh" ]]; then
             # shellcheck source=/dev/null
             . "$HOME/.config/snarkos-stress-testing/slack_env.sh"
           fi
-        state: "{{ 'present' if (slack_token | default('') | length > 0 and slack_channel_id | default('') | length > 0) else 'absent' }}"
+          alias tf=terraform
+          if (which pueue &>/dev/null) ; then
+            source <(pueue completions bash)
+          fi
+          export LESS="--IGNORE-CASE --LONG-PROMPT --QUIET --RAW-CONTROL-CHARS --no-init"
+        create: true
+        mode: '0644'
+      when: setup_pueue
+
+    # ------------------------------------------------
+    # pueue (target=pueue,both,full)
+
+    - name: Check if pueued systemd service already exists
+      become: true
+      become_user: root
+      ansible.builtin.stat:
+        path: /etc/systemd/system/pueued.service
+      register: pueued_service_file
       when: setup_pueue
 
     - name: Stop pueued before install
       become: true
       become_user: root
-      systemd:
+      ansible.builtin.systemd:
         name: pueued.service
         state: stopped
       failed_when: false
@@ -270,103 +356,100 @@
 
     - name: Stop pueued user service if present
       become: true
-      become_user: ubuntu
-      shell: systemctl --user stop pueued
+      become_user: "{{ stm_user }}"
+      ansible.builtin.command:
+        cmd: systemctl --user stop pueued
       failed_when: false
       changed_when: false
+      # noqa: command-instead-of-module — ansible.builtin.systemd's `scope: user`
+      # requires user D-Bus + XDG_RUNTIME_DIR which the non-interactive setup
+      # session lacks; the raw systemctl call is the reliable path.
       when: setup_pueue
 
     - name: Remove pueued user systemd unit if present
       become: true
-      become_user: ubuntu
-      file:
-        path: /home/ubuntu/.config/systemd/user/pueued.service
+      become_user: "{{ stm_user }}"
+      ansible.builtin.file:
+        path: "{{ stm_home }}/.config/systemd/user/pueued.service"
         state: absent
       when: setup_pueue
 
     - name: Install pueue via cargo (provides pueue + pueued)
-      shell: |
+      become: true
+      become_user: "{{ stm_user }}"
+      ansible.builtin.shell: |
         set -euo pipefail
         source $HOME/.cargo/env
-        cargo install --locked --force {% if pueue_version | default('') | length > 0 %}--version {{ pueue_version }} {% endif %}pueue
+        cargo install --locked --force \
+          {% if pueue_version | default('') | length > 0 %}--version {{ pueue_version }} {% endif %}pueue
       args:
         executable: /bin/bash
       environment:
         RUSTC_WRAPPER: '/usr/local/bin/sccache'
-        SCCACHE_BUCKET: 'snarkos-compiler-cache'
-        SCCACHE_REGION: 'us-west-2'
-        SCCACHE_S3_USE_SSL: 'true'
-        SCCACHE_S3_KEY_PREFIX: 'pueue_linux_rust/'
+        SCCACHE_GCS_BUCKET: '{{ cache_bucket }}'
+        SCCACHE_GCS_RW_MODE: 'READ_WRITE'
+        SCCACHE_GCS_KEY_PREFIX: 'pueue_linux_rust/'
         CARGO_INCREMENTAL: '0'
       async: 7200
       poll: 15
-      when: setup_pueue
+      changed_when: true
+      when: setup_pueue and not pueued_service_file.stat.exists
 
     - name: Ensure pueue config directory exists
       become: true
-      become_user: ubuntu
-      file:
-        path: /home/ubuntu/.config/pueue
+      become_user: "{{ stm_user }}"
+      ansible.builtin.file:
+        path: "{{ stm_home }}/.config/pueue"
         state: directory
         mode: '0755'
       when: setup_pueue
 
     - name: Deploy pueue config with fixed unix socket path
       become: true
-      become_user: ubuntu
-      template:
+      become_user: "{{ stm_user }}"
+      ansible.builtin.template:
         src: pueue.yml
-        dest: /home/ubuntu/.config/pueue/pueue.yml
+        dest: "{{ stm_home }}/.config/pueue/pueue.yml"
         mode: '0644'
-      no_log: true
       when: setup_pueue
 
     - name: Deploy the pueued systemd service file
       become: true
       become_user: root
-      template:
+      ansible.builtin.template:
         src: pueued.service
         dest: /etc/systemd/system/pueued.service
         mode: '0644'
-      no_log: true
       when: setup_pueue
 
     - name: Reload systemd to read new pueued service file
       become: true
       become_user: root
-      systemd:
+      ansible.builtin.systemd:
         daemon_reload: true
       when: setup_pueue
 
-    - name: Run aws config
-      ansible.builtin.shell: |
-        aws configure set default.region us-central-1
-      environment:
-        PYTHONNOUSERSITE: "1"   # ignore ~/.local site-packages
-      when: setup_full
-
-    - name: Setup aws config
-      template:
-        src: aws.config
-        dest: /home/ubuntu/.aws/config
-        mode: '0600'
+    - name: Get STM external IP from GCE metadata
       become: true
-      when: setup_full
-
-    - name: Get IP from inside the stress testing manager EC2 instance
-      shell: curl -s http://checkip.amazonaws.com
+      become_user: root
+      ansible.builtin.uri:
+        url: http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip
+        headers:
+          Metadata-Flavor: Google
+        return_content: true
+        timeout: 5
       register: ip_result
       when: setup_pueue
 
     - name: Set fact for the stress testing manager IP
-      set_fact:
-        stress_testing_manager_ip: "{{ ip_result.stdout | trim }}"
-      when: setup_pueue
+      ansible.builtin.set_fact:
+        stress_testing_manager_ip: "{{ ip_result.content | trim }}"
+      when: setup_pueue and ip_result is defined and ip_result.content is defined
 
     - name: Enable and (re)start pueued service
       become: true
       become_user: root
-      systemd:
+      ansible.builtin.systemd:
         name: pueued
         enabled: true
         state: restarted

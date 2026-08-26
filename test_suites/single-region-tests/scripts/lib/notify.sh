@@ -8,8 +8,8 @@
 #   * Loud enough to debug: when the vars are set but the notifier can't be
 #     found, or the API returns an error, say so on stderr (don't hide it).
 #   * Thread-aware across processes: if SLACK_THREAD_TS is already in the
-#     environment (orchestrator opened the thread at enqueue time and pueue
-#     carried it into the task), reuse it; otherwise open a fresh thread.
+#     environment (full_run banner, or orchestrator enqueue), reuse it so
+#     every job in a run replies in one thread. Otherwise open a fresh thread.
 #
 # Env knobs:
 #   SLACK_TOKEN, SLACK_CHANNEL_ID (or CHANNEL_ID)  — required to enable.
@@ -112,13 +112,110 @@ notify_job_end() {
   return "$rc"
 }
 
-# notify_open_for_enqueue <job_label> — orchestrator-side: open a thread and
-# echo its ts so the caller can pass SLACK_THREAD_TS=<ts> into `pueue add`.
+# notify_open_for_enqueue <job_label> — orchestrator-side: echo a thread ts
+# so the caller can pass SLACK_THREAD_TS=<ts> into `pueue add`. Reuses
+# SLACK_THREAD_TS when the run banner (or a parent job) already opened one.
 notify_open_for_enqueue() {
   notify_enabled || return 0
+  if [[ -n "${SLACK_THREAD_TS:-}" ]]; then
+    _slack_post "⏳ Enqueuing job: *${1:-job}* (run \`${RUN_ID}\`)" "$SLACK_THREAD_TS" >/dev/null
+    printf '%s\n' "$SLACK_THREAD_TS"
+    return 0
+  fi
   _slack_post "⏳ Enqueuing job: *${1:-job}* (run \`${RUN_ID}\`)"
 }
 
-# notify_run_banner <text> — un-threaded one-liner. Also handy as a self-test:
+# notify_run_banner <text> — parent Slack message for the whole run, plus
+# Grafana / Cloud Logging links windowed from RUN_ID. Exports SLACK_THREAD_TS
+# so later jobs reply in this thread. Self-test:
 #   NOTIFY_DEBUG=1 bash -c 'source scripts/lib/common.sh; notify_run_banner hi'
-notify_run_banner() { _slack_post "$1" >/dev/null; }
+notify_run_banner() {
+  local text="$1"
+  local links
+  links="$(observability_slack_links || true)"
+  if [[ -n "$links" ]]; then
+    text="${text}"$'\n'"${links}"
+  fi
+  if [[ -n "${SLACK_THREAD_TS:-}" ]]; then
+    _slack_post "$text" "$SLACK_THREAD_TS" >/dev/null
+  else
+    SLACK_THREAD_TS="$(_slack_post "$text")"
+    export SLACK_THREAD_TS
+    _notify_dbg "opened run thread ts=${SLACK_THREAD_TS:-<none>}"
+  fi
+}
+
+# Slack mrkdwn links for the snarkOS on-call Grafana dashboard and Cloud Logging,
+# windowed from RUN_ID (UTC). Grafana `to` is `now` so the live window follows
+# the run; logs use start−1m .. start+12h so the explorer still has a range
+# after the banner is posted. Do not include GCP `rapt=` (session-only).
+observability_slack_links() {
+  command -v python3 >/dev/null || return 1
+  RUN_ID="${RUN_ID:-}" \
+  GCP_PROJECT="${GCP_PROJECT:-protocol-development-sandbox}" \
+  NETWORK="${NETWORK:-testnet}" \
+  python3 - <<'PY'
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote, urlencode
+import os
+
+rid = os.environ.get("RUN_ID", "")
+project = os.environ.get("GCP_PROJECT", "protocol-development-sandbox")
+network = os.environ.get("NETWORK", "testnet")
+try:
+    start = datetime.strptime(rid, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+except ValueError:
+    start = datetime.now(timezone.utc)
+
+grafana_from = start.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+logs_start = (start - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+logs_end = (start + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+grafana_qs = urlencode(
+    {
+        "var-interval": "$__auto",
+        "var-rate_interval": "$__auto",
+        "var-rate_interval_short": "$__auto",
+        "from": grafana_from,
+        "to": "now",
+        "timezone": "utc",
+        "var-project": project,
+        "var-network": network,
+        "var-severity": "WARNING",
+        "var-search": "",
+        "var-role": "$__all",
+        "var-DS_GOOGLE_CLOUD_MONITORING": "cex6fj2p02m0wd",
+        "var-DS_LOGGING": "bf6hh0chl7xtse",
+        "var-DS_PROMETHEUS": "cfv3f1jscpx4we",
+        "refresh": "30s",
+    },
+    safe="$:",
+    quote_via=quote,
+)
+grafana = (
+    "https://provable.grafana.net/d/snarkos-oncall/snarkos-incident-response?"
+    + grafana_qs
+)
+
+query = (
+    f'logName="projects/{project}/logs/syslog"\n'
+    'labels.role!=""'
+)
+logs = (
+    "https://console.cloud.google.com/logs/query;"
+    f"query={quote(query, safe='')};"
+    "storageScope=project;"
+    "summaryFields="
+    + quote(
+        "labels/commit_id,jsonPayload/_HOSTNAME,"
+        "jsonPayload/SYSLOG_IDENTIFIER,labels/role,labels/owner"
+        ":false:32:beginning",
+        safe=",:_",
+    )
+    + f";startTime={logs_start};endTime={logs_end}"
+    f"?project={quote(project, safe='')}"
+)
+
+print(f"<{grafana}|Grafana>  <{logs}|Logs>")
+PY
+}

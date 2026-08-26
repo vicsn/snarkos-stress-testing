@@ -1,6 +1,6 @@
-s3_bucket: "release-bucket-2122415"
+gcs_bucket: "provable-binaries-releases"
 clone_dir_base: "snarkos-shallow"
-s3_profile: "ephnet"
+compiler_cache_bucket: "{{ compiler_cache_bucket | default('snarkos-compiler-cache') }}"
 openssl_version: "3.4.0"
 openssl_url: "https://github.com/openssl/openssl/releases/download/openssl-{{ openssl_version }}/openssl-{{ openssl_version }}.tar.gz"
 openssl_tarball: "openssl-{{ openssl_version }}.tar.gz"

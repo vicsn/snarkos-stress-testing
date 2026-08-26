@@ -37,16 +37,20 @@ send_slack_message() {
         code) message="\`\`\`${message}\`\`\`" ;;
     esac
 
-    # Build JSON payload
-    if [[ -n "$color" ]]; then
-        payload="{\"channel\":\"$channel\",\"attachments\":[{\"color\":\"$color\",\"text\":\"$message\"}]"
-        [[ -n "$thread_ts" ]] && payload+=", \"thread_ts\":\"$thread_ts\""
-        payload+="}"
-    else
-        payload="{\"channel\":\"$channel\",\"text\":\"$message\""
-        [[ -n "$thread_ts" ]] && payload+=", \"thread_ts\":\"$thread_ts\""
-        payload+="}"
-    fi
+    # jq so URLs, $, and newlines in the text cannot break the JSON payload.
+    payload="$(jq -nc \
+      --arg channel "$channel" \
+      --arg text "$message" \
+      --arg thread "${thread_ts:-}" \
+      --arg color "${color:-}" \
+      '
+      (if $color != "" then
+        {channel: $channel, attachments: [{color: $color, text: $text}]}
+      else
+        {channel: $channel, text: $text}
+      end)
+      + (if $thread != "" then {thread_ts: $thread} else {} end)
+      ')"
 
     # Send message
     response=$(curl -s -X POST "https://slack.com/api/chat.postMessage" \

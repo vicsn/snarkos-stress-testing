@@ -18,7 +18,7 @@ cd "$PARENT_DIR"
 # If we *source* it, $0 is this entrypoint (scripts/bin/destroy.sh) and it builds
 # scripts/bin/terraform. Run it as its own process so $0 is destroy_infra.sh and
 # its internal `dirname "$0"` resolves back to the project root. Exported env
-# (OWNER, AWS_*, TF_*) propagates to the child; export the helper functions too
+# (OWNER, GCP_*, TF_*) propagates to the child; export the helper functions too
 # in case it calls into any of them.
 export -f set_network_vars run_test run_utility common_ansible \
           download_and_upload_logs prepare_log_files_dir runner_manages_logs \

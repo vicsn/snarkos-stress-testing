@@ -1,0 +1,5 @@
+---
+# Default listen address for prometheus-node-exporter (port 9100)
+node_exporter_listen_address: "0.0.0.0:9100"
+# Additional command-line flags (space-separated); leave empty for defaults
+node_exporter_extra_args: ""

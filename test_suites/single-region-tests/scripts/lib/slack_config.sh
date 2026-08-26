@@ -24,7 +24,7 @@ _slack_read_var() {
 # Returns 0 when both slack_token and slack_channel_id were loaded.
 load_slack_config_from_vars_yml() {
   local root="${MONOREPO_ROOT:-}"
-  local vars_file="${root}/stress-testing-manager/infrastructure/vars.yml";
+  local vars_file="${root}/test_suites/single-region-tests/playbooks/vars.yml";
   SLACK_TOKEN="$(_slack_read_var slack_token "$vars_file")"
   SLACK_CHANNEL_ID="$(_slack_read_var slack_channel_id "$vars_file")"
   export SLACK_TOKEN SLACK_CHANNEL_ID CHANNEL_ID="$SLACK_CHANNEL_ID"
@@ -40,11 +40,26 @@ load_slack_config_from_profile() {
   [[ -n "${SLACK_TOKEN:-}" && -n "${SLACK_CHANNEL_ID:-${CHANNEL_ID:-}}" ]]
 }
 
-# load_slack_config — best-effort; prefers existing env, then profile, then vars.yml.
+# load_slack_config_from_secret_manager — fetch from GCP Secret Manager
+# using the STM SA's implicit metadata-server credentials (works from the
+# manager itself) or the local user's ADC (works from laptops).
+load_slack_config_from_secret_manager() {
+  command -v gcloud &>/dev/null || return 1
+  local project="${GCP_PROJECT:-protocol-development-sandbox}"
+  SLACK_TOKEN="$(gcloud secrets versions access latest --secret=stress-testing-manager-slack-token --project="$project" 2>/dev/null)" || return 1
+  SLACK_CHANNEL_ID="$(gcloud secrets versions access latest --secret=stress-testing-manager-slack-channel-id --project="$project" 2>/dev/null)" || return 1
+  [[ -n "$SLACK_TOKEN" && -n "$SLACK_CHANNEL_ID" ]] || return 1
+  export SLACK_TOKEN SLACK_CHANNEL_ID CHANNEL_ID="$SLACK_CHANNEL_ID"
+  return 0
+}
+
+# load_slack_config — best-effort; prefers existing env, then profile, then
+# Secret Manager, then vars.yml (legacy fallback).
 load_slack_config() {
   : "${SLACK_CHANNEL_ID:=${CHANNEL_ID:-}}"
   [[ -n "${SLACK_TOKEN:-}" && -n "${SLACK_CHANNEL_ID:-}" ]] && return 0
   load_slack_config_from_profile && return 0
+  load_slack_config_from_secret_manager && return 0
   load_slack_config_from_vars_yml && return 0
   return 1
 }

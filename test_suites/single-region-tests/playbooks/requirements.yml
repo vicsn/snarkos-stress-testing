@@ -1,0 +1,8 @@
+---
+collections:
+  - name: google.cloud
+    version: ">=1.13.0"
+roles:
+  - name: googlecloudplatform.google_cloud_ops_agents
+    src: git+https://github.com/GoogleCloudPlatform/google-cloud-ops-agents-ansible
+    version: ">=1.0.7"

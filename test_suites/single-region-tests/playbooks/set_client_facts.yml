@@ -9,11 +9,11 @@
 
 - name: Set own address
   set_fact:
-    own_address: "{{ hostvars[inventory_hostname]['public_ip_address'] }}"
+    own_address: "{{ hostvars[inventory_hostname]['gcp_private_ip'] }}"
 
-- name: Set node_id based on instance tag
+- name: Set node_id based on instance label
   set_fact:
-    node_id: "{{ (groups['snarkos_validator'] | length | int) + (tags['Dev'] | int) + 1 }}"
+    node_id: "{{ (groups['snarkos_validator'] | length | int) + (gcp_labels.dev | int) + 1 }}"
 
 
 - name: Assert that num_instances is lower than 100

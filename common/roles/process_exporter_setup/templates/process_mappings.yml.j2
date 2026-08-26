@@ -1,0 +1,9 @@
+# Managed by Ansible — do not edit manually.
+# Process matching configuration for prometheus-process-exporter.
+# Matches processes by executable basename (equivalent to -procnames flag).
+process_names:
+{% for name in process_exporter_procnames %}
+  - name: {{ name }}
+    exe:
+      - {{ name }}
+{% endfor %}

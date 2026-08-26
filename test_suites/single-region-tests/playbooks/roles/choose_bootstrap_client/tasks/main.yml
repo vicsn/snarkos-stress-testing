@@ -15,7 +15,7 @@
           {{
             _selected_bootstrap_clients
             | map('extract', hostvars)
-            | map(attribute='public_ip_address')
+            | map(attribute='gcp_private_ip')
             | select('string') | list | unique | sort
           }}
       vars:

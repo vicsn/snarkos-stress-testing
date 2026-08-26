@@ -1,3 +1,9 @@
+## Hidden files
+#.*
+
+# Thumbnails
+._*
+
 /.idea/
 /.venv-lint/
 **/.terraform/
@@ -15,6 +21,8 @@
 **/*.swp
 **/*.log
 **/vars.yml
+**/vars.*.yml
+**/vars.*.yaml
 **/logs/
 **/ledger_backups
 /test_suites/network-sync-tests/playbooks/snarkos-shallow/
@@ -27,6 +35,15 @@
 /test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/target
 /test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/*.log
 
+# ignore service account secrets
+.gcp-key-*-snarkos-sa.json
+.ssh-key-*-snarkos-sa
+.ssh-key-*-snarkos-sa.pub
+
+
+# ignore "roles/googlecloudplatform.google_cloud_ops_agents" - install with `ansible-galaxy install googlecloudplatform.google_cloud_ops_agents`
+/test_suites/single-region-tests/playbooks/roles/googlecloudplatform.google_cloud_ops_agents
+
 # General
 .DS_Store
 .AppleDouble
@@ -34,9 +51,6 @@
 
 # Icon must end with two \r
 Icon
-
-# Thumbnails
-._*
 
 # Files that might appear in the root of a volume
 .DocumentRevisions-V100
@@ -46,6 +60,7 @@ Icon
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
+.codegraph/daemon.*
 
 # Directories potentially created on remote AFP share
 .AppleDB
@@ -62,6 +77,7 @@ output.json
 programs_to_deploy
 variables.tf
 log_files
+
 
 # Ansible related
 **/.ansible

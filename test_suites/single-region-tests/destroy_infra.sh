@@ -3,7 +3,8 @@
 ulimit -n 2048
 
 PARENT_DIR=$(cd "$(dirname "$0")" && pwd)
-export OWNER="${OWNER:-$USER}"
+: "${OWNER:?OWNER environment variable must be set (e.g. export OWNER=\$USER) before running destroy_infra.sh}"
+export OWNER
 
 cd "$PARENT_DIR/terraform" || exit
 terraform init -input=false

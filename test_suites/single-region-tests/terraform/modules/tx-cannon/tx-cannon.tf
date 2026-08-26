@@ -1,6 +1,6 @@
 variable "tx_cannon_instance_type" {
-  description = "Instance type for tx-cannon nodes"
-  default     = "m5.2xlarge"
+  description = "Machine type for tx-cannon nodes"
+  default     = "c3d-standard-30"
 }
 
 variable "tx_cannon_instance_count" {
@@ -8,92 +8,114 @@ variable "tx_cannon_instance_count" {
   default     = 4
 }
 
-variable "ami_id" {
-  description = "The ami id"
+variable "image_self_link" {
+  description = "Self-link of the base image to use for tx-cannon instances"
+  type        = string
 }
 
-variable "key_name" {
-  description = "The key name"
-}
-
-variable "sec_group_name" {
-  description = "The security group"
+variable "network_tag" {
+  description = "Network tag for firewall rule targeting"
+  type        = string
 }
 
 variable "devnet_name" {
-  description = "The devnet"
+  description = "Unique name for this devnet deployment"
+  type        = string
 }
 
 variable "owner" {
-  description = "The deployment owner"
+  description = "Identifier for the user or team deploying this infrastructure"
+  type        = string
 }
 
-resource "aws_iam_role" "tx_cannon_node_ec2_role" {
-  name = "${var.owner}-TXCannon-EC2-Role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect    = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-        Action    = "sts:AssumeRole"
-      }
-    ]
-  })
+variable "project" {
+  description = "GCP project ID"
+  type        = string
 }
 
-resource "aws_iam_policy" "tx_cannon_node_s3_access" {
-  name        = "${var.owner}-TXCannon-S3-Access-Policy"
-  description = "Allows SnarkOS EC2 instances to access the S3 bucket for binaries."
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = [
-          "s3:GetObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          "arn:aws:s3:::provable-binaries-releases",
-          "arn:aws:s3:::provable-binaries-releases/*"
-        ]
-      }
-    ]
-  })
+variable "region" {
+  description = "GCP region"
+  type        = string
 }
 
-resource "aws_iam_role_policy_attachment" "tx_cannon_node_access_attach" {
-  role       = aws_iam_role.tx_cannon_node_ec2_role.name
-  policy_arn = aws_iam_policy.tx_cannon_node_s3_access.arn
+variable "zones" {
+  description = "List of zones to spread tx-cannon nodes across"
+  type        = list(string)
 }
 
-resource "aws_iam_instance_profile" "tx_cannon_node_ec2_instance_profile" {
-  name = "${var.owner}-TXCannon-EC2-Instance-Profile"
-  role = aws_iam_role.tx_cannon_node_ec2_role.name
+variable "vpc_id" {
+  description = "VPC network ID to attach tx-cannon instances to"
+  type        = string
 }
 
-resource "aws_instance" "tx_cannon_node" {
-  count         = var.tx_cannon_instance_count
-  ami           = var.ami_id
-  instance_type = var.tx_cannon_instance_type
-  key_name      = var.key_name
-  iam_instance_profile = aws_iam_instance_profile.tx_cannon_node_ec2_instance_profile.name
+variable "subnet_self_link" {
+  description = "Subnet self-link to attach tx-cannon instances to"
+  type        = string
+}
 
-  security_groups = [var.sec_group_name]
+variable "ssh_metadata" {
+  description = "Instance metadata map for SSH access (OS Login or metadata SSH keys)"
+  type        = map(string)
+  default     = { enable-oslogin = "TRUE" }
+}
 
-  ebs_block_device {
-    device_name = "/dev/sda1"
-    volume_size = 20  # Adjust the volume size if needed
+# ------------------------------------------------
+# Service Account for tx-cannon instances (GCS read-only to release bucket)
+
+resource "google_service_account" "tx_cannon_sa" {
+  account_id   = "${substr(lower(replace(var.owner, "/[^a-z0-9-]/", "-")), 0, 20)}-txcannon-sa"
+  display_name = "TX Cannon Service Account (${var.owner})"
+  project      = var.project
+}
+
+resource "google_project_iam_member" "tx_cannon_gcs_viewer" {
+  project = var.project
+  role    = "roles/storage.objectViewer"
+  member  = "serviceAccount:${google_service_account.tx_cannon_sa.email}"
+
+  condition {
+    title       = "release_bucket_only"
+    description = "Restrict to provable-binaries-releases bucket"
+    expression  = "resource.name.startsWith(\"projects/_/buckets/provable-binaries-releases\")"
+  }
+}
+
+# ------------------------------------------------
+# Compute instances
+
+resource "google_compute_instance" "tx_cannon_node" {
+  count        = var.tx_cannon_instance_count
+  name         = "${var.owner}-tx-cannon-node-${count.index}"
+  machine_type = var.tx_cannon_instance_type
+  zone         = var.zones[count.index % length(var.zones)]
+
+  tags = [var.network_tag]
+
+  labels = {
+    role   = "tx-cannon-node"
+    dev    = count.index
+    owner  = lower(replace(var.owner, "/[^a-z0-9-]/", "-"))
+    devnet = lower(replace(var.devnet_name, "/[^a-z0-9-]/", "-"))
   }
 
-  tags = {
-    Name   = "${var.owner}-tx-cannon-node-${count.index}",
-    Role   = "tx-cannon-node",
-    Owner  = "${var.owner}",
-    Dev    = count.index,
-    Devnet = var.devnet_name
+  metadata = var.ssh_metadata
+
+  boot_disk {
+    initialize_params {
+      image = var.image_self_link
+      size  = 20
+      type  = "pd-ssd"
+    }
+  }
+
+  network_interface {
+    network    = var.vpc_id
+    subnetwork = var.subnet_self_link
+    access_config {}
+  }
+
+  service_account {
+    email  = google_service_account.tx_cannon_sa.email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 }

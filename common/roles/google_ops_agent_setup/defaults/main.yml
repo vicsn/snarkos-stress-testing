@@ -1,0 +1,29 @@
+---
+# Google Ops Agent defaults
+
+# snarkOS journald unit to collect logs from
+ops_agent_snarkos_unit: "snarkos"
+
+# Log level filter — collect all levels by default
+ops_agent_log_min_severity: "DEFAULT"
+
+# Metrics collection interval
+ops_agent_metrics_interval: "60s"
+
+# Labels attached to every log entry for Cloud Logging filtering
+ops_agent_commit_id: ""
+ops_agent_branch_name: ""
+ops_agent_test_suite: "single-region-tests"
+ops_agent_owner: ""
+ops_agent_role: ""
+
+# full_run.sh option values — empty on hosts outside a test run (STM, packer)
+ops_agent_mode: ""
+ops_agent_tests: ""
+ops_agent_snarkos_network: ""
+
+# Prometheus scrape configuration for local exporters
+ops_agent_prometheus_scrape_interval: "30s"
+ops_agent_node_exporter_endpoint: "localhost:9100"
+ops_agent_process_exporter_endpoint: "localhost:9256"
+ops_agent_snarkos_metrics_endpoint: "localhost:9000"

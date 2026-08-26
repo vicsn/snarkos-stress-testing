@@ -21,13 +21,11 @@ install_exit_trap
 
 ensure_devnet_key
 
-case "$MODE" in
-  light|l)        cp "$PARENT_DIR/terraform/variables.tf.light"      "$PARENT_DIR/terraform/variables.tf" ;;
-  heavy|h)        cp "$PARENT_DIR/terraform/variables.tf.heavy"      "$PARENT_DIR/terraform/variables.tf" ;;
-  prerelease|pr)  cp "$PARENT_DIR/terraform/variables.tf.prerelease" "$PARENT_DIR/terraform/variables.tf" ;;
-  *) die "Invalid --mode (light|heavy|prerelease), got: '$MODE'" ;;
-esac
+TFVARS=$(tfvars_for_mode "$MODE") \
+  || die "Invalid --mode (light|heavy|prerelease), got: '$MODE'"
+
+[[ -f "$PARENT_DIR/terraform/$TFVARS" ]] || die "Profile not found: terraform/$TFVARS"
 
 notify_job_begin "provision:$MODE"
-init_and_apply_terraform
+init_and_apply_terraform -var-file="$TFVARS"
 echo "Provisioning complete (mode=$MODE, run=$RUN_ID)."

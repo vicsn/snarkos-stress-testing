@@ -58,7 +58,7 @@
     release_name: "{{ hostvars['localhost'].release_name }}"
     snarkos_install_s3_dest_name: "snarkos"
   roles:
-    - snarkos_install_s3
+    - snarkos_install_gcs
   tags: tx-sender
 
 #- name: Check if the tx_sender_node is available
@@ -110,13 +110,23 @@
       set_fact:
         transactions_file_id_prefix: "{{ snarkos_network }}-{{ num_validators_fact }}val"
 
+    - name: Build GCS search prefix for pregenerated transactions
+      ansible.builtin.set_fact:
+        pregen_gcs_prefix: >-
+          gs://provable-pregenerated-transactions/{{ pregeneration_bucket_path
+          }}/transactions-{{ transactions_file_id_prefix
+          }}-{{ txs_target_consensus_version
+          }}-{{ txs_target_consensus_version_height
+          }}-{{ release_name
+          }}-{{ pregeneration_execution_tx_count
+          }}-{{ pregeneration_deployment_tx_count }}*
+
     - name: List existing pregenerated transaction zips for this network + validator count
-      aws_s3:
-        bucket: "provable-pregenerated-transactions"
-        mode: list
-        prefix: "{{ pregeneration_bucket_path }}/transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}" # noqa yaml[line-length]
-      register: s3_zip_list
+      ansible.builtin.command:
+        cmd: "gcloud storage ls \"{{ pregen_gcs_prefix }}\""
+      register: gcs_zip_list
       failed_when: false
+      changed_when: false
 
     - name: Reset zip list
       set_fact:
@@ -125,7 +135,7 @@
     - name: Collect .zip files
       set_fact:
         matched_zip_files: "{{ matched_zip_files + [item] }}"
-      loop: "{{ s3_zip_list.s3_keys }}"
+      loop: "{{ (gcs_zip_list.stdout_lines | default([])) }}"
       when: item is search('\\.zip$')
 
     - name: Set first matched zip (if any)
@@ -133,17 +143,17 @@
         matched_zip_file: "{{ matched_zip_files[0] }}"
       when: matched_zip_files | length > 0
 
-    - name: Found existing pregenerated zip(s) on S3
+    - name: Found existing pregenerated zip(s) on GCS
       debug:
         msg: |
-          Found existing pregenerated zip(s) on S3: {{ matched_zip_file }};
+          Found existing pregenerated zip(s) on GCS: {{ matched_zip_file }};
 
           Current release name : {{ release_name }},
           Number of execution transactions to pre-generate : {{ pregeneration_execution_tx_count }}.
           Number of deployment transactions to pre-generate : {{ pregeneration_deployment_tx_count }}.
       when: matched_zip_file is defined
 
-    - name: Found existing pregenerated zip on S3, do you want to overwrite it (yes/no)?
+    - name: Found existing pregenerated zip on GCS, do you want to overwrite it (yes/no)?
       pause:
         prompt: >-
           Do you want to overwrite? (yes/no)
@@ -231,14 +241,14 @@
       vars:
         zip_name: "transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}.zip" # noqa yaml[line-length]
 
-    - name: Upload zipped transactions to S3
-      aws_s3:
-        bucket: "provable-pregenerated-transactions"
-        object: "{{ pregeneration_bucket_path }}/{{ zip_name }}"
-        src: "/tmp/{{ zip_name }}"
-        mode: put
+    - name: Upload zipped transactions to GCS
+      ansible.builtin.command:
+        cmd: >-
+          gcloud storage cp "/tmp/{{ zip_name }}"
+          "gs://provable-pregenerated-transactions/{{ pregeneration_bucket_path }}/{{ zip_name }}"
       vars:
         zip_name: "transactions-{{ transactions_file_id_prefix }}-{{ txs_target_consensus_version }}-{{ txs_target_consensus_version_height }}-{{ release_name }}-{{ pregeneration_execution_tx_count }}-{{ pregeneration_deployment_tx_count }}.zip" # noqa yaml[line-length]
+      changed_when: true
 
     - name: Fetch pregeneration log
       fetch:

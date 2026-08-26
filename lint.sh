@@ -49,7 +49,7 @@ LINT_PYTHON="$(resolve_lint_python)"
 
 ansible-galaxy collection install community.general ansible.posix amazon.aws -p ~/.ansible/collections/ --force
 
-export ANSIBLE_ROLES_PATH=./test_suites/single-region-tests/playbooks/roles:${ANSIBLE_ROLES_PATH:-}
+export ANSIBLE_ROLES_PATH=./test_suites/single-region-tests/playbooks/roles:./common/roles:${ANSIBLE_ROLES_PATH:-}
 export ANSIBLE_DEPRECATION_WARNINGS=False
 
 "$LINT_PYTHON" -m ansiblelint -v --force-color -c test_suites/single-region-tests/.ansible-lint \
@@ -58,5 +58,7 @@ export ANSIBLE_DEPRECATION_WARNINGS=False
         --exclude "test_suites/single-region-tests/terraform/*" \
         --exclude "test_suites/network-sync-tests/playbooks/[var|ip|log]*" \
         --exclude "test_suites/network-sync-tests/playbooks/set_client_facts.yml" \
+        --exclude "test_suites/network-sync-tests/playbooks/setup.yml" \
         --exclude "test_suites/network-sync-tests/playbooks/snarkos-shallow/*" \
-        --exclude "test_suites/single-region-tests/playbooks/[var|set_|ip|log|wait_]*"
+        --exclude "test_suites/single-region-tests/playbooks/[var|set_|ip|log|wait_]*" \
+        --exclude "test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/target/*"

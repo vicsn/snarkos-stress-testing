@@ -4,7 +4,9 @@
 # Rules for this file:
 #   * It is sourced, never executed. Do NOT set -e/-u/-o pipefail here:
 #     that would change the behaviour of whatever sources it. Each entrypoint
-#     sets its own `set -euo pipefail`.
+#     sets its own `set -euo pipefail`. Sourcing bash_err_trap.sh enables
+#     errtrace + an ERR trap so failures print file:line (callers already
+#     use errexit).
 #   * It must NEVER prompt (no `read -r -p` without a `[ -t 0 ]` guard). A
 #     pueue/background job has no TTY and would block forever.
 #   * Path resolution uses BASH_SOURCE, not $0, so it is correct regardless of
@@ -23,6 +25,12 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$SCRIPTS_DIR/.." && pwd)"
 export SCRIPTS_DIR REPO_ROOT
 MONOREPO_ROOT="$(cd "$REPO_ROOT/../.." && pwd)"
+# shellcheck source=/dev/null
+source "${MONOREPO_ROOT}/scripts/lib/bash_err_trap.sh"
+# DEVNET_KEY + ensure_devnet_key: retained for the AWS-based
+# network-sync-tests suite which still relies on a static key pair. The GCP
+# single-region-tests + stress-testing-manager stack uses OS Login and does
+# not read these; new callers should avoid them.
 DEVNET_KEY="${MONOREPO_ROOT}/devnet-key"
 SHARED_KEYS_PUB="${MONOREPO_ROOT}/keys.pub"
 export MONOREPO_ROOT DEVNET_KEY SHARED_KEYS_PUB
@@ -35,7 +43,7 @@ export INVENTORY_DIR
 # --- Run identity (shared across every job of one logical run) ---------------
 # The orchestrator exports RUN_ID once before enqueuing; pueue snapshots the
 # environment at `pueue add` time, so all jobs of a run share this value and
-# therefore the same S3 prefix. A bare manual invocation gets its own RUN_ID.
+# therefore the same GCS prefix. A bare manual invocation gets its own RUN_ID.
 : "${RUN_ID:=$(date -u '+%Y%m%dT%H%M%SZ')}"
 export RUN_ID
 
@@ -54,26 +62,33 @@ if [[ -d "${HOME}/.cargo/bin" ]]; then
 fi
 export PATH
 
-# System awscli (/usr/bin/aws) breaks if pip-installed botocore in ~/.local is
-# on PYTHONPATH (KeyError: 'opsworkscm'). Scope PYTHONNOUSERSITE to aws only —
-# Ansible's EC2 inventory plugin needs boto3 from user site-packages.
-unset PYTHONNOUSERSITE
-
-aws_cli() {
-  env PYTHONNOUSERSITE=1 aws "$@"
-}
-
 # tput fails noisily without a TERM (e.g. under pueue); degrade gracefully.
 bold=$(tput bold 2>/dev/null || true)
 normal=$(tput sgr0 2>/dev/null || true)
 
-export AWS_REGION="${TF_STATE_REGION:-us-west-2}"
+export GCP_REGION="${GCP_REGION:-us-central1}"
 RELEASE_BUCKET="${RELEASE_BUCKET:-provable-binaries-releases}"
 export TF_VAR_RELEASE_BUCKET="$RELEASE_BUCKET"
-export OWNER="${OWNER:-$USER}"
-export ANSIBLE_ENABLE_PLUGINS=amazon.aws.aws_ec2
+export OWNER=${OWNER:-$USER}
+export ANSIBLE_ENABLE_PLUGINS=google.cloud.gcp_compute
 export TF_VAR_devnet_name="${DEVNET_NAME:-single-region-tests}"
 
+# Auto-detect a local personal SSH public key to layer on top of the
+# always-injected devnet-key.pub (see terraform/locals.tf ssh_metadata).
+# Checked in order: gcloud key > ed25519 > rsa. Leave TF_VAR_ssh_public_key
+# empty to skip — devnet-key.pub alone remains authorized on every host.
+if [[ -z "${TF_VAR_ssh_public_key:-}" ]]; then
+  for _key in ~/.ssh/google_compute_engine.pub ~/.ssh/id_ed25519.pub ~/.ssh/id_rsa.pub; do
+    if [[ -f "$_key" ]]; then
+      TF_VAR_ssh_public_key="$(cat "$_key")"
+      break
+    fi
+  done
+  export TF_VAR_ssh_public_key="${TF_VAR_ssh_public_key:-}"
+fi
+
+LB_URL="${LB_URL:-}"
+export LB_URL
 RESULTS_AND_LOGS_BUCKET="${RESULTS_AND_LOGS_BUCKET:-provable-logs-results}"
 BASE_BUCKET_PATH="manual_test_runs/$USER/$RUN_ID"
 export BASE_BUCKET_PATH
@@ -86,7 +101,10 @@ export VARS
 isuint() { [[ "$1" =~ ^[0-9]+$ ]]; }
 runner_manages_logs() { [ "${RUNNER_MANAGES_LOGS:-}" = "1" ]; }
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+die() {
+  echo "ERROR: $* (${BASH_SOURCE[1]}:${BASH_LINENO[0]} ${FUNCNAME[1]}())" >&2
+  exit 1
+}
 
 ensure_devnet_key() {
   bash "${MONOREPO_ROOT}/scripts/ensure_devnet_key.sh"
@@ -102,18 +120,18 @@ say_done() { if [ "$(uname)" = "Darwin" ]; then say "$*" || true; fi; return 0; 
 require_provisioned() {
   if [[ ! -f "$PARENT_DIR/lb_url.txt" ]]; then
     ensure_lb_url_file \
-      || die "lb_url.txt not found and LB DNS could not be read from terraform state — run provision.sh first."
+      || die "lb_url.txt not found and LB IP could not be read from terraform state — run provision.sh first."
   fi
 }
 
-# Best-effort: recreate lb_url.txt from the shared (S3) terraform state. Lets a
+# Best-effort: recreate lb_url.txt from the local terraform state. Lets a
 # host that did not run provision (e.g. setup on the manager, provision on a
-# laptop) still resolve the load balancer URL.
+# laptop) still resolve the load balancer IP.
 ensure_lb_url_file() {
   [[ -f "$PARENT_DIR/lb_url.txt" ]] && return 0
   local url
   url=$(cd "$PARENT_DIR/terraform" && tf_init >/dev/null 2>&1 \
-    && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_lb_dns_name 2>/dev/null) || true
+    && TF_CLI_ARGS="-no-color" terraform output -raw snarkos_lb_ip 2>/dev/null) || true
   if [[ -n "$url" && "$url" != *"No outputs found"* ]]; then
     printf '%s\n' "$url" > "$PARENT_DIR/lb_url.txt"
     return 0
@@ -121,91 +139,60 @@ ensure_lb_url_file() {
   return 1
 }
 
-# Initialise terraform (S3 backend is configured in terraform/main.tf).
+# Initialise terraform (local backend configured in terraform/provider.tf).
 tf_init() {
   terraform init -input=false
 }
 
-# Import shared resources into terraform state when they already exist in AWS but
-# are missing locally. The ephemeral builder depends on the key pair, instance
-# profile (IAM role/policy) and security group; a hollow local state (e.g. infra
-# provisioned elsewhere or state lost) would otherwise try to recreate them and
-# fail with "EntityAlreadyExists"/"InvalidGroup.Duplicate".
-import_shared_terraform_resources() {
-  local owner="$OWNER"
-  local devnet="${DEVNET_NAME:-${TF_VAR_devnet_name:-single-region-tests}}"
-  local region="${AWS_REGION:-us-west-2}"
-
-  ( cd "$PARENT_DIR/terraform" || exit 1
-    tf_init >/dev/null
-
-    local state; state="$(terraform state list 2>/dev/null || true)"
-    in_state() { grep -qxF "$1" <<<"$state"; }
-    tf_import() {
-      local addr="$1" id="$2"
-      echo "==> terraform import ${addr} (${id})" >&2
-      terraform import -input=false -var="owner=${owner}" "$addr" "$id"
-    }
-
-    local account_id
-    account_id="$(aws_cli sts get-caller-identity --profile ephnet --query Account --output text 2>/dev/null || true)"
-    local policy_arn=""
-    [[ -n "$account_id" ]] && policy_arn="arn:aws:iam::${account_id}:policy/${owner}-SnarkOS-S3-Access-Policy"
-
-    if ! in_state 'aws_iam_role.snarkos_ec2_role' \
-        && aws_cli iam get-role --role-name "${owner}-SnarkOS-EC2-Role" --profile ephnet >/dev/null 2>&1; then
-      tf_import aws_iam_role.snarkos_ec2_role "${owner}-SnarkOS-EC2-Role"
-    fi
-
-    if [[ -n "$policy_arn" ]] && ! in_state 'aws_iam_policy.snarkos_s3_access' \
-        && aws_cli iam get-policy --policy-arn "$policy_arn" --profile ephnet >/dev/null 2>&1; then
-      tf_import aws_iam_policy.snarkos_s3_access "$policy_arn"
-    fi
-
-    if [[ -n "$policy_arn" ]] && ! in_state 'aws_iam_role_policy_attachment.snarkos_s3_access_attach' \
-        && aws_cli iam get-role --role-name "${owner}-SnarkOS-EC2-Role" --profile ephnet >/dev/null 2>&1; then
-      tf_import aws_iam_role_policy_attachment.snarkos_s3_access_attach "${owner}-SnarkOS-EC2-Role/${policy_arn}"
-    fi
-
-    if ! in_state 'aws_iam_instance_profile.snarkos_ec2_instance_profile' \
-        && aws_cli iam get-instance-profile --instance-profile-name "${owner}-SnarkOS-EC2-Instance-Profile" --profile ephnet >/dev/null 2>&1; then
-      tf_import aws_iam_instance_profile.snarkos_ec2_instance_profile "${owner}-SnarkOS-EC2-Instance-Profile"
-    fi
-
-    if ! in_state 'aws_key_pair.generated_key' \
-        && aws_cli ec2 describe-key-pairs --key-names "${owner}-${devnet}-devnet-key" \
-             --profile ephnet --region "$region" >/dev/null 2>&1; then
-      tf_import aws_key_pair.generated_key "${owner}-${devnet}-devnet-key"
-    fi
-
-    if ! in_state 'module.sg.aws_security_group.this'; then
-      local sg_id
-      sg_id="$(aws_cli ec2 describe-security-groups \
-        --filters "Name=group-name,Values=${owner}-${devnet}-sg" \
-        --query 'SecurityGroups[0].GroupId' --output text \
-        --profile ephnet --region "$region" 2>/dev/null || true)"
-      if [[ -n "$sg_id" && "$sg_id" != "None" ]]; then
-        tf_import module.sg.aws_security_group.this "$sg_id"
-      fi
-    fi )
+# Map --mode to the terraform var-file used at provision time.
+tfvars_for_mode() {
+  case "${1:-}" in
+    light|l)       echo "light.tfvars" ;;
+    heavy|h)       echo "heavy.tfvars" ;;
+    prerelease|pr) echo "prerelease.tfvars" ;;
+    *)             return 1 ;;
+  esac
 }
 
-# Ephemeral snarkOS builder (shared IAM/key pair/SG are imported first if needed).
+# Args that must match the original provision. Without them, a targeted
+# builder apply uses default.auto.tfvars (devnet_name=single-region-tests)
+# and tags the VM for a different firewall than the fleet — STM SSH to the
+# private IP then times out (GCP default-deny ingress).
+_ephemeral_builder_tf_args() {
+  local -n _out=$1
+  local tfvars
+  _out=()
+  if tfvars=$(tfvars_for_mode "${MODE:-}"); then
+    _out+=(-var-file="$tfvars")
+  fi
+  if [[ -n "${DEVNET_NAME:-}" ]]; then
+    _out+=(-var="devnet_name=${DEVNET_NAME}")
+  fi
+  _out+=(-var="owner=$OWNER" -var="add_builder=true")
+}
+
+# Ephemeral snarkOS builder.
 apply_ephemeral_builder() {
-  import_shared_terraform_resources
+  local tf_args=()
+  _ephemeral_builder_tf_args tf_args
+  echo "Applying ephemeral builder (devnet_name=${DEVNET_NAME:-} mode=${MODE:-})"
   ( cd "$PARENT_DIR/terraform" || exit 1
     tf_init
     terraform apply \
-      -target=aws_instance.snarkos_builder \
-      -var="owner=$OWNER" -var="add_builder=true" -auto-approve )
+      -target=google_compute_instance.snarkos_builder \
+      "${tf_args[@]}" \
+      -auto-approve )
 }
 
 destroy_ephemeral_builder() {
+  local tf_args=()
+  _ephemeral_builder_tf_args tf_args
   ( cd "$PARENT_DIR/terraform" || exit 1
     tf_init
     terraform destroy \
-      -target=aws_instance.snarkos_builder \
-      -var="owner=$OWNER" -var="add_builder=true" -auto-approve )
+      -target=google_compute_instance.snarkos_builder \
+      "${tf_args[@]}" \
+      -auto-approve )
 }
 
 # --- Discovery ---------------------------------------------------------------
@@ -226,6 +213,7 @@ discover_utilities() {
 
 resolve_tests() {
   case "$1" in
+    ""|none|-)  return 0 ;;
     all)        printf '%s\n' "${TESTS[@]}" | grep -v '^_' ;;
     prerelease) printf '%s\n' "${TESTS[@]}" | grep '^prerelease_' ;;
     *)          tr ',' '\n' <<<"$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' ;;
@@ -239,11 +227,13 @@ resolve_tests() {
 common_ansible() {
   local playbook="$1"; shift
   ansible-playbook -i "$INVENTORY_DIR" "$playbook" \
-    --limit "$LIMIT" \
-    --extra-vars="devnet_name=${DEVNET_NAME}" \
-    --extra-vars="snarkos_network=${NETWORK}" \
-    --extra-vars="snarkos_network_int=${NETWORK_INT}" \
-    --extra-vars="test_network_url=${LB_URL}" \
+    --limit "${LIMIT:-all}" \
+    --extra-vars="devnet_name=${DEVNET_NAME:-single-region-tests}" \
+    --extra-vars="snarkos_network=${NETWORK:-testnet}" \
+    --extra-vars="snarkos_network_int=${NETWORK_INT:-1}" \
+    --extra-vars="test_network_url=${LB_URL:-}" \
+    --extra-vars="mode=${MODE:-}" \
+    --extra-vars="tests=${TESTS:-}" \
     --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
     --extra-vars="@${VARS}.yml" \
     "$@"
@@ -291,6 +281,9 @@ set_network_vars() {
       || DEVNET_NAME="${TF_VAR_devnet_name:-single-region-tests}"
   fi
   export DEVNET_NAME
+  # Keep TF_VAR in sync so later terraform applies (ephemeral builder)
+  # cannot silently fall back to default.auto.tfvars' single-region-tests.
+  export TF_VAR_devnet_name="$DEVNET_NAME"
 
   export ANSIBLE_DEVNET_GROUP="${DEVNET_NAME//-/_}"
   export ANSIBLE_OWNER_GROUP="${OWNER//-/_}"
@@ -389,23 +382,22 @@ download_and_upload_logs() {
   export SELECTED=analyze_logs
   run_utility || echo "WARNING: analyze_logs failed; continuing without landing stats."
 
-  echo "Uploading test logs to S3..."
+  echo "Uploading test logs to GCS..."
   if [ -d "$PARENT_DIR/log_files" ]; then
     local log_file destination
     for log_file in "$PARENT_DIR/log_files/"*; do
       [ -f "$log_file" ] || continue
-      destination="s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/$(basename "$log_file")"
+      destination="gs://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/$(basename "$log_file")"
       echo "Copying $log_file to $destination ..."
-      aws_cli s3 cp "$log_file" "$destination" --profile ephnet
+      gcloud storage cp "$log_file" "$destination"
     done
   fi
   if [ -f "$PARENT_DIR/observability_runner.log" ]; then
-    aws_cli s3 cp "$PARENT_DIR/observability_runner.log" \
-      "s3://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/observability_runner.log" \
-      --profile ephnet
+    gcloud storage cp "$PARENT_DIR/observability_runner.log" \
+      "gs://$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/observability_runner.log"
     rm -f "$PARENT_DIR/observability_runner.log"
   fi
-  echo "Logs: https://console.aws.amazon.com/s3/buckets/$RESULTS_AND_LOGS_BUCKET?prefix=$BASE_BUCKET_PATH/$test_ran/"
+  echo "Logs: https://console.cloud.google.com/storage/browser/$RESULTS_AND_LOGS_BUCKET/$BASE_BUCKET_PATH/$test_ran/"
 }
 
 # --- EXIT trap ---------------------------------------------------------------
@@ -428,28 +420,29 @@ react_on_exit() {
 install_exit_trap() { trap react_on_exit EXIT; }
 
 # --- Terraform apply ---------------------------------------------------------
+# Usage: init_and_apply_terraform [extra terraform args...]
+# Example: init_and_apply_terraform -var-file=light.tfvars
 init_and_apply_terraform() {
   rm -f "$PARENT_DIR/lb_url.txt"
-  import_shared_terraform_resources
   ( cd "$PARENT_DIR/terraform" || exit 1
     tf_init
-    terraform apply -auto-approve -var="owner=$OWNER"
-    terraform output -raw snarkos_lb_dns_name > "$PARENT_DIR/lb_url.txt" )
+    terraform apply -auto-approve -var="owner=$OWNER" "$@"
+    terraform output -raw snarkos_lb_ip > "$PARENT_DIR/lb_url.txt" )
   LB_URL=$(cat "$PARENT_DIR/lb_url.txt"); export LB_URL
   set_network_vars || return 1
 
-  echo "Terraform finished; waiting for AWS to sync tags..."
+  echo "Terraform finished; waiting for GCP labels to propagate..."
   local MAX_RETRIES=20 SLEEP_INTERVAL=5 RETRY_COUNT=0 HOST_COUNT
   while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     HOST_COUNT=$(ansible -i "$INVENTORY_DIR" "$TARGET_PATTERN" --list-hosts 2>/dev/null \
       | grep -o 'hosts ([0-9]*)' | grep -o '[0-9]*')
     if [[ -n "$HOST_COUNT" && "$HOST_COUNT" -gt 0 ]]; then
-      echo "AWS synced tags. Ansible sees $HOST_COUNT hosts."; break
+      echo "GCP labels synced. Ansible sees $HOST_COUNT hosts."; break
     fi
-    echo "Waiting for tags... ($((RETRY_COUNT+1))/$MAX_RETRIES)"
+    echo "Waiting for labels... ($((RETRY_COUNT+1))/$MAX_RETRIES)"
     sleep $SLEEP_INTERVAL; RETRY_COUNT=$((RETRY_COUNT+1))
   done
-  [ $RETRY_COUNT -eq $MAX_RETRIES ] && die "Timeout waiting for AWS tag propagation."
+  [ $RETRY_COUNT -eq $MAX_RETRIES ] && die "Timeout waiting for GCP label propagation."
 
   ( cd "$PARENT_DIR/playbooks" && common_ansible ips.yml )
   say_done "Finished running Terraform"

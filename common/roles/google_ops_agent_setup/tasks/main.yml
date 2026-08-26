@@ -1,0 +1,34 @@
+---
+# Install and configure Google Cloud Ops Agent
+# Replaces logstash + metricbeat + filebeat (ELK stack)
+# Ships logs → Cloud Logging, system metrics → Cloud Monitoring
+
+- name: Download Ops Agent install script
+  ansible.builtin.get_url:
+    url: https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+    dest: /tmp/add-google-cloud-ops-agent-repo.sh
+    mode: "0755"
+
+- name: Install Ops Agent
+  ansible.builtin.command:
+    cmd: bash /tmp/add-google-cloud-ops-agent-repo.sh --also-install
+    creates: /opt/google-cloud-ops-agent/libexec/google_cloud_ops_agent_engine
+  register: ops_agent_install
+  retries: 3
+  delay: 15
+  until: ops_agent_install is success
+
+- name: Ensure Ops Agent is running
+  ansible.builtin.systemd:
+    name: google-cloud-ops-agent
+    state: started
+    enabled: true
+
+- name: Deploy Ops Agent config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/google-cloud-ops-agent/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Ops Agent

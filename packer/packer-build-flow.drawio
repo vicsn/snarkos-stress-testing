@@ -1,0 +1,127 @@
+<mxfile host="Electron">
+  <diagram name="Packer GCP Build Flow" id="0">
+    <mxGraphModel dx="2054" dy="1272" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontColor=#333333;" value="&lt;b&gt;Packer GCP Base Image Build&lt;/b&gt;&#xa;stress-test-base.pkr.hcl" vertex="1">
+          <mxGeometry height="50" width="400" x="500" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1" parent="1" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;html=1;rounded=1;" value="Local Machine (macOS/Linux)" vertex="1">
+          <mxGeometry height="370" width="380" x="40" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="start" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="packer init&#xa;stress-test-base.pkr.hcl" vertex="1">
+          <mxGeometry height="50" width="180" x="110" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="plugins" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Download plugins&#xa;googlecompute + ansible" vertex="1">
+          <mxGeometry height="50" width="180" x="110" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="build_cmd" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="packer build&#xa;-var network=...&#xa;-var subnetwork=..." vertex="1">
+          <mxGeometry height="60" width="180" x="110" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="adc" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" value="Auth via ADC&#xa;(gcloud auth&#xa;application-default)" vertex="1">
+          <mxGeometry height="50" width="180" x="110" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="phase1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="plugins">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="phase1" source="plugins" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="build_cmd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="phase1" source="build_cmd" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" target="adc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2" parent="1" style="swimlane;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;html=1;rounded=1;" value="GCP Compute Engine (Ephemeral Builder)" vertex="1">
+          <mxGeometry height="570" width="440" x="480" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="create_vm" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Create c3d-standard-8 VM&#xa;Ubuntu 22.04 base&#xa;50GB pd-ssd" vertex="1">
+          <mxGeometry height="60" width="200" x="120" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ssh" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="SSH connect&#xa;(metadata key injection)" vertex="1">
+          <mxGeometry height="50" width="200" x="120" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ansible_group" parent="phase2" style="swimlane;startSize=25;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=11;html=1;rounded=1;" value="Ansible Provisioner (dependencies.yml)" vertex="1">
+          <mxGeometry height="200" width="380" x="30" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="docker" parent="ansible_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" value="Docker + Compose v2.24.6" vertex="1">
+          <mxGeometry height="35" width="160" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="gcloud" parent="ansible_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" value="Google Cloud CLI" vertex="1">
+          <mxGeometry height="35" width="160" x="200" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="github" parent="ansible_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" value="GitHub CLI (gh)" vertex="1">
+          <mxGeometry height="35" width="160" x="20" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="monitoring" parent="ansible_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" value="Node + Process Exporter" vertex="1">
+          <mxGeometry height="35" width="160" x="200" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tools" parent="ansible_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" value="libclang-dev, zip, unzip,&#xa;python3, pip3" vertex="1">
+          <mxGeometry height="40" width="160" x="20" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="cleanup_apt" parent="ansible_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" value="Purge unattended-upgrades" vertex="1">
+          <mxGeometry height="40" width="160" x="200" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="shell_cleanup" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Shell: rm ~/.ansible/*" vertex="1">
+          <mxGeometry height="40" width="200" x="120" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="stop_vm" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" value="Stop VM + create image" vertex="1">
+          <mxGeometry height="40" width="200" x="120" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="phase2" source="create_vm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="ssh">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="phase2" source="ssh" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="ansible_group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="phase2" source="ansible_group" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="shell_cleanup">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="phase2" source="shell_cleanup" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="stop_vm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cross1" edge="1" parent="phase2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#6c8ebf;fillColor=#dae8fc;dashed=1;dashPattern=1 1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="create_vm" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="-30" y="240" />
+              <mxPoint x="-30" y="80" />
+            </Array>
+            <mxPoint x="-150" y="240" as="sourcePoint" />
+            <mxPoint x="140" y="110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="phase3" parent="1" style="swimlane;startSize=30;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;html=1;rounded=1;" value="GCP Image Registry" vertex="1">
+          <mxGeometry height="370" width="360" x="980" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="image" parent="phase3" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;size=15;" value="&lt;b&gt;stress-test-base&lt;/b&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;image family&lt;br&gt;protocol-development-sandbox&lt;/div&gt;" vertex="1">
+          <mxGeometry height="80" width="180" x="90" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="labels" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;align=left;spacingLeft=10;" value="Labels:&#xa;managed-by = packer&#xa;purpose = stress-testing" vertex="1">
+          <mxGeometry height="60" width="180" x="90" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="terraform_use" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=10;" value="Terraform uses image:&#xa;-var image_family=stress-test-base&#xa;-var image_project=...sandbox" vertex="1">
+          <mxGeometry height="60" width="260" x="50" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="el1" edge="1" parent="phase3" source="image" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="labels">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="el2" edge="1" parent="phase3" source="labels" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" target="terraform_use">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cross2" edge="1" parent="1" source="stop_vm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d6b656;fillColor=#fff2cc;dashed=1;dashPattern=1 1;" target="image" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="620" />
+              <mxPoint x="950" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note" parent="1" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#666666;" value="&lt;i&gt;Note: snarkOS binary is NOT baked in.&#xa;Built separately via ephemeral builder&#xa;and cached in GCS at runtime.&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="280" x="980" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="time_note" parent="1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#999999;fontStyle=2;" value="~10 min build time" vertex="1">
+          <mxGeometry height="30" width="140" x="560" y="680" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

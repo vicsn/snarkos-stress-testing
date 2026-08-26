@@ -35,18 +35,13 @@
     state: restarted
   become: true
 
-- name: Get local repo git hash
-  set_fact:
-    local_git_hash: "{{ lookup('pipe', 'git rev-parse HEAD') }}"
-  run_once: true
-
 - name: Prepare to print snarkos version and timestamp
   shell: |
     echo "Timestamp: $(date -Iseconds)"
-    echo "SnarkOS Stress Tests git hash:"
-    echo "{{ local_git_hash }}"
+    echo "SnarkOS Stress Tests commit_id: {{ snarkos_commit_id }}"
+    echo "SnarkOS Branch: {{ snarkos_branch_name }}"
     echo "SnarkOS version:"
-    "{{ snarkos_real_bin }}" -V
+    {{ snarkos_real_bin }} -V
   register: snarkos_version_output
   args:
     executable: /bin/bash

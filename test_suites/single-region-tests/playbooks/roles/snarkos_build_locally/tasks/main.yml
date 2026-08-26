@@ -1,4 +1,4 @@
-- name: Prepare release for S3 and local build
+- name: Prepare release for GCS and local build
   block:
     - name: Debug envs variable
       debug:
@@ -17,23 +17,21 @@
       debug:
         msg: "Release name: '{{ release_name }}'"
 
-    - name: Check if the binary for the git hash exists in S3 bucket
-      aws_s3:
-        bucket: "{{ s3_bucket }}"
-        mode: list
-        prefix: "{{ release_name }}"
-        profile: "{{ s3_profile }}"
-      register: s3_ls_output
+    - name: Check if the binary for the git hash exists in GCS bucket
+      ansible.builtin.command:
+        cmd: gcloud storage ls "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
+      register: gcs_ls_output
       failed_when: false
+      changed_when: false
 
     - name: Set fact if object exists
       set_fact:
-        s3_binary_exists: "{{ release_name in (s3_ls_output.s3_keys | default([])) }}"
+        gcs_binary_exists: "{{ gcs_ls_output.rc == 0 }}"
 
     - name: Fail if compiling with the 'locktick' feature on macOS - cross-compilation is not supported
       fail:
         msg: "Compiling with the 'locktick' feature is not supported on macOS. Please remove it from the features variable."
-      when: not s3_binary_exists and ansible_system == 'Darwin' and features is defined and 'locktick' in features
+      when: not gcs_binary_exists and ansible_system == 'Darwin' and features is defined and 'locktick' in features
 
     - name: Construct authenticated repo URL if GitHub token is set
       set_fact:
@@ -43,7 +41,7 @@
             if github_token is defined and github_token != '' and github_token != 'your_github_token_here'
             else snarkos_repo
           }}
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Clone the repository if the binary is not found in S3
       git:
@@ -52,7 +50,7 @@
         version: "{{ snarkos_git_commit_to_build }}"
         depth: 1
         force: true
-      when: not s3_binary_exists
+      when: not gcs_binary_exists
 
     - name: Ensure .cargo folder exists (macOS)
       ansible.builtin.file:
@@ -60,7 +58,7 @@
         state: directory
         mode: '0755'
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Ensure .cargo/config.toml exists (macOS)
@@ -69,7 +67,7 @@
         state: touch
         mode: '0644'
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Replace entire [target.x86_64-unknown-linux-gnu] section (macOS)
@@ -83,7 +81,7 @@
         backup: yes
       register: cargo_cfg_replaced
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Append section if it did not exist (macOS)
@@ -95,14 +93,14 @@
         marker: "# {mark} managed by Ansible (cargo-target-linker)"
         insertafter: EOF
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
         - not cargo_cfg_replaced.changed
 
     - name: Override Rust version (macOS only)
       shell: cd {{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }} && rustup override set nightly-aarch64-apple-darwin
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Check if OpenSSL is installed
@@ -120,7 +118,7 @@
         state: directory
         mode: '0755'
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.exists
 
@@ -130,7 +128,7 @@
         dest: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_tarball }}"
         mode: '0755'
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.exists
 
@@ -139,7 +137,7 @@
       args:
         chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.exists
 
@@ -154,7 +152,7 @@
         CROSS_COMPILE: "x86_64-unknown-linux-gnu-"
         CFLAGS: "-fPIC -fPIE -pie"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.exists
 
@@ -163,7 +161,7 @@
       args:
         chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.exists
 
@@ -172,7 +170,7 @@
       args:
         chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/tmp/{{ openssl_dir }}"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
         - not openssl_stat.stat.exists
 
@@ -216,19 +214,19 @@
       args:
         executable: /bin/bash
         chdir: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}"
-      when: not s3_binary_exists and features is defined and 'locktick' in features and ansible_system != 'Darwin'
+      when: not gcs_binary_exists and features is defined and 'locktick' in features and ansible_system != 'Darwin'
 
     - name: Read CONSENSUS_VERSION_HEIGHTS env var (if set)
       set_fact:
         consensus_version_heights_env: "{{ lookup('env', 'CONSENSUS_VERSION_HEIGHTS') | default('', true) }}"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
 
     - name: Compute absolute sccache dir inside workspace
       set_fact:
         sccache_dir_abs: "{{ base_workspace_folder }}/{{ clone_dir_base }}/shared/sccache"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Ensure sccache dir exists and is writable
@@ -238,13 +236,13 @@
         mode: "0775"
         recurse: true
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Restart sccache daemon to pick up env
       shell: sccache --stop || true
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Build the Rust project with OpenSSL (macOS)
@@ -270,7 +268,7 @@
         }}
       register: build_output_mac
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
 
     - name: Build the Rust project (Linux)
@@ -282,10 +280,9 @@
         {{
           {
             'RUSTC_WRAPPER': '/usr/local/bin/sccache',
-            'SCCACHE_BUCKET': 'snarkos-compiler-cache',
-            'SCCACHE_REGION': 'us-west-2',
-            'SCCACHE_S3_USE_SSL': 'true',
-            'SCCACHE_S3_KEY_PREFIX': 'linux_rust/'
+            'SCCACHE_GCS_BUCKET': '{{ compiler_cache_bucket }}',
+            'SCCACHE_GCS_KEY_PREFIX': 'linux_rust/',
+            'SCCACHE_GCS_RW_MODE': 'READ_WRITE'
           }
           | combine(
               consensus_version_heights_env is defined and (consensus_version_heights_env | length > 0)
@@ -295,7 +292,7 @@
         }}
       register: build_output
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system != 'Darwin'
 
     - name: Debug build_output_mac
@@ -306,34 +303,28 @@
       debug:
         var: build_output
 
-    - name: Upload the built snarkos binary to S3 (macOS)
-      aws_s3:
-        bucket: "{{ s3_bucket }}"
-        object: "{{ release_name | trim }}"
-        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/target/x86_64-unknown-linux-gnu/release/snarkos"
-        mode: put
-        profile: "{{ s3_profile }}"
+    - name: Upload the built snarkos binary to GCS (macOS)
+      ansible.builtin.command:
+        cmd: gcloud storage cp "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/target/x86_64-unknown-linux-gnu/release/snarkos" "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system == 'Darwin'
-      register: s3_upload_output
+      register: gcs_upload_output
+      changed_when: gcs_upload_output.rc == 0
 
-    - name: Upload the built snarkos binary to S3 (Linux)
-      aws_s3:
-        bucket: "{{ s3_bucket }}"
-        object: "{{ release_name | trim }}"
-        src: "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/target/release/snarkos"
-        mode: put
-        profile: "{{ s3_profile }}"
+    - name: Upload the built snarkos binary to GCS (Linux)
+      ansible.builtin.command:
+        cmd: gcloud storage cp "{{ base_workspace_folder }}/{{ clone_dir_base }}/{{ snarkos_git_commit_to_build }}/target/release/snarkos" "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
       when:
-        - not s3_binary_exists
+        - not gcs_binary_exists
         - ansible_system != 'Darwin'
-      register: s3_upload_output
+      register: gcs_upload_output
+      changed_when: gcs_upload_output.rc == 0
 
     - name: Debug message after upload
       debug:
-        msg: "Uploaded snarkos binary to S3."
-      when: s3_upload_output.changed
+        msg: "Uploaded snarkos binary to GCS."
+      when: gcs_upload_output is changed
 
     - name: Set snarkos_git_hash fact for later use
       set_fact:

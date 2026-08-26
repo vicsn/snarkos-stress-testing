@@ -1,0 +1,10 @@
+---
+# terraform_install/defaults/main.yml
+#
+# Overrideable via -e on ansible-playbook or via role invocation vars.
+
+# Terraform version to pin (empty string = latest from HashiCorp APT repo).
+# When set, must be a version string valid for apt (e.g. "1.9.5-1", "1.14.9-1").
+# Discover available versions with `apt-cache madison terraform` on a machine
+# that already has the HashiCorp APT repo configured.
+terraform_version: ""
