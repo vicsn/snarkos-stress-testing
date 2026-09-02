@@ -81,22 +81,28 @@ Now you can run:
 
 ```
 export SSH_KEY_PATH=<absolute-path-to-your-private-key-to-be-forwarded>
-export SSH_KEY_PATH_PUB=<absolute-path-to-the-public-counterpart-of-the-key-so-the-instance-can-be-created-with-it>
 
 ./run.sh setup
 ```
 
-This will do the key forwarding and create an instance for testing, also check the ssh forwarding.
-It also will print the IP of the instance. Now:
+`SSH_KEY_PATH` is only forwarded through the ssh-agent so the instance can reach private
+GitHub repositories — it is never installed on the machine.
+
+Login to the machine uses a separate ephemeral key pair that `run.sh` generates at
+`ephemeral-key` in this directory. Its public half is registered as the AWS key pair and
+installed into `~ubuntu/.ssh/authorized_keys` by the playbook. It is reused across repeated
+`setup` runs (rotating it would force instance replacement) and deleted by `./run.sh cleanup`.
+
+`run.sh` also writes an SSH config entry, so after setup you can connect with:
 
 ```
-ssh -A -i <path-to-the-same-private-key> ubuntu@<the-public-ip-printed>
+ssh single-machine-with-ssh-forwarding
 ```
 
-For example it can be done with:
+Or explicitly, using the printed IP:
 
 ```
-ssh -A -i ~/.ssh/id_rsa ubuntu@52.12.101.154
+ssh -A -i ephemeral-key ubuntu@52.12.101.154
 ```
 
 Now you can use the machine and will have full access to github private repositories.

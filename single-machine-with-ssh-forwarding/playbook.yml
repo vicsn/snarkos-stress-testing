@@ -6,7 +6,16 @@
     snarkos_rev: origin/staging
     snarkos_user: "{{ ansible_user }}"
     snarkos_dir: "{{ ('/root' if snarkos_user == 'root' else '/home/' + snarkos_user) }}/snarkOS"
+    ephemeral_public_key_path: ""
   tasks:
+    # Read on the control node: the key lives next to run.sh, not on the host.
+    - name: Authorize the ephemeral SSH key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', ephemeral_public_key_path) }}"
+        state: present
+      when: ephemeral_public_key_path | length > 0
+
     - name: Ensure git is installed
       apt:
         name: git
@@ -87,4 +96,4 @@
 
     - name: Print SSH example command
       debug:
-        msg: "Try: ssh -A -i ${SSH_KEY_PATH} ubuntu@{{ inventory_hostname }}"
+        msg: "Try: ssh -A -i ephemeral-key ubuntu@{{ ansible_host }}"
