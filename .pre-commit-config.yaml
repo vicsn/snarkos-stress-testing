@@ -10,7 +10,7 @@ repos:
 
       - id: shellcheck
         name: ShellCheck
-        entry: bash -c 'find test_suites/single-region-tests -name "*.sh" -print0 | xargs -0 shellcheck -x --source-path=SCRIPTDIR'
+        entry: bash -c 'find test_suites/snarkos-p2p-tests -name "*.sh" -print0 | xargs -0 shellcheck -x --source-path=SCRIPTDIR'
         language: system
         pass_filenames: false
         always_run: true

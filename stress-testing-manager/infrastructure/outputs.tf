@@ -44,7 +44,7 @@ output "external_ssh_users" {
 }
 
 output "subnet_cidrs" {
-  description = "Map of region to subnet CIDR for STM subnets; consumed by single-region-tests via terraform_remote_state"
+  description = "Map of region to subnet CIDR for STM subnets; consumed by snarkos-p2p-tests via terraform_remote_state"
   value       = { (var.gcp_region) = local.stm_subnet_cidr }
 }
 

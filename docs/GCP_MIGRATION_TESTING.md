@@ -1,6 +1,6 @@
-# Migration Testing: single-region-tests on GCP
+# Migration Testing: snarkos-p2p-tests on GCP
 
-Step-by-step validation of the AWS → GCP migration for `test_suites/single-region-tests/`.
+Step-by-step validation of the AWS → GCP migration for `test_suites/snarkos-p2p-tests/`.
 
 ---
 
@@ -99,14 +99,14 @@ All `aws_s3` module calls → `gcloud storage`. SCCACHE S3 → GCS.
 |-----------|--------|
 | TX submitter (Rust) | `tests/load_saved_transactions/tx_submitter/` — `aws-sdk-s3` → `google-cloud-storage` crate rewrite tracked separately |
 | TX cannon migration | Legacy `terraform_tx_cannon/` directory; module in `modules/tx-cannon/` is already GCP |
-| `network-sync-tests` | Separate AWS test suite; not part of this migration |
+| `snarkos-cdn-tests` | Separate AWS test suite; not part of this migration |
 | `stress-testing-manager` | Separate infrastructure stack with its own Packer/Terraform |
 
 ---
 
 ## AWS Dependency Inventory
 
-Complete audit of every file in `test_suites/single-region-tests/` that referenced AWS.
+Complete audit of every file in `test_suites/snarkos-p2p-tests/` that referenced AWS.
 86 files scanned; 14 originally contained AWS references. **12 migrated, 2 remain.**
 
 ### ~~BLOCKER~~ ✅ MIGRATED
@@ -162,7 +162,7 @@ Role name should be renamed `snarkos_install_gcs` or `snarkos_install_binary` (c
 Stale AWS EC2 inventory. GCP equivalent exists at `inventory/dynamic_inventory.gcp.yaml`.
 
 ```bash
-rm test_suites/single-region-tests/inventory/dynamic_inventory.aws_ec2.yml
+rm test_suites/snarkos-p2p-tests/inventory/dynamic_inventory.aws_ec2.yml
 ```
 
 #### ~~`utils/pregenerate_transactions/run_utility.yml`~~ ✅
@@ -208,7 +208,7 @@ All stale AWS comments updated:
 
 ```bash
 # Delete stale AWS inventory
-rm test_suites/single-region-tests/inventory/dynamic_inventory.aws_ec2.yml
+rm test_suites/snarkos-p2p-tests/inventory/dynamic_inventory.aws_ec2.yml
 ```
 
 ---
@@ -244,7 +244,7 @@ ansible-galaxy collection install google.cloud
 pip3.13 install google-auth requests   # adjust version to match Ansible's Python
 
 # 7. Install Ansible requirements
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 ansible-galaxy install -r playbooks/requirements.yml
 ```
 
@@ -257,7 +257,7 @@ Until `main.tf` is rewritten, validate individual GCP modules in isolation.
 ### 1.1 Validate provider configuration
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Confirm provider.tf is clean GCP
 cat provider.tf
@@ -347,7 +347,7 @@ grep 'bucket' storage.tf
 ### 2.1 Validate inventory plugin
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Confirm GCP inventory file is valid YAML
 python3 -c "import yaml; yaml.safe_load(open('inventory/dynamic_inventory.gcp.yaml'))"
@@ -412,7 +412,7 @@ ansible-galaxy collection list google.cloud
 ### 3.1 Check for AWS remnants in scripts
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Critical: common.sh has most AWS references
 grep -n 'aws\|ec2\|s3://' scripts/lib/common.sh
@@ -449,7 +449,7 @@ bash -c 'source scripts/lib/pueue.sh && echo "pueue lib OK"'
 ### 4.1 Provision with light profile
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
 export OWNER="$USER"
@@ -471,7 +471,7 @@ terraform output snarkos_lb_ip
 ### 4.2 Validate Ansible can reach hosts
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Test connectivity
 ansible all -i inventory/dynamic_inventory.gcp.yaml -m ping
@@ -483,7 +483,7 @@ ansible-inventory -i inventory/dynamic_inventory.gcp.yaml --graph
 ### 4.3 Run setup playbook
 
 ```bash
-cd test_suites/single-region-tests/playbooks
+cd test_suites/snarkos-p2p-tests/playbooks
 
 # Setup nodes
 ansible-playbook setup.yml \
@@ -498,7 +498,7 @@ ansible-playbook is_synced.yml \
   -i ../inventory/dynamic_inventory.gcp.yaml
 
 # SSH to validator and check
-gcloud compute ssh ${OWNER}-single-region-tests-validator-0 \
+gcloud compute ssh ${OWNER}-snarkos-p2p-tests-validator-0 \
   --zone=us-central1-b \
   --project=protocol-development-sandbox \
   -- 'sudo systemctl status snarkos && curl -s http://localhost:3030/testnet/block/height/latest'
@@ -507,7 +507,7 @@ gcloud compute ssh ${OWNER}-single-region-tests-validator-0 \
 ### 4.5 Run a test
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Run a simple test inline (no pueue)
 PUEUE_DISABLED=1 ./scripts/bin/run-test.sh --test=swap_ledgers
@@ -521,7 +521,7 @@ pueue log
 ### 4.6 Collect logs
 
 ```bash
-cd test_suites/single-region-tests/playbooks
+cd test_suites/snarkos-p2p-tests/playbooks
 
 # Fetch logs from validators
 ansible-playbook fetch_and_zip_snarkos_logs.yml \
@@ -531,7 +531,7 @@ ansible-playbook fetch_and_zip_snarkos_logs.yml \
 ### 4.7 Destroy infrastructure
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 terraform destroy \
   -var-file=light.tfvars \
@@ -574,7 +574,7 @@ First `terraform apply` hit 409 errors for resources that already existed in
 the project from a prior run. Imported into state:
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 terraform import -var-file=light.tfvars -var="owner=mikenichols" \
   google_service_account.snarkos_sa \
   projects/protocol-development-sandbox/serviceAccounts/mikenichols-snarkos-sa@protocol-development-sandbox.iam.gserviceaccount.com
@@ -586,7 +586,7 @@ terraform import -var-file=light.tfvars -var="owner=mikenichols" \
 # The import below was run during initial migration before VPC consolidation.
 terraform import -var-file=light.tfvars -var="owner=mikenichols" \
   'module.network[0].google_compute_network.vpc' \
-  projects/protocol-development-sandbox/global/networks/mikenichols-single-region-tests-vpc
+  projects/protocol-development-sandbox/global/networks/mikenichols-snarkos-p2p-tests-vpc
 
 terraform import -var-file=light.tfvars -var="owner=mikenichols" \
   'module.network[0].google_compute_subnetwork.subnets["us-central1"]' \
@@ -612,7 +612,7 @@ Vars file: `playbooks/vars.MIKEN.yml` (pass `--vars=vars.MIKEN`).
 Validates the full pipeline end-to-end in a single shell. Start here.
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 \
   ./scripts/full_run.sh --mode=light --vars=vars.MIKEN --tests=swap_ledgers
@@ -640,7 +640,7 @@ PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 \
 Same pipeline, but jobs dispatched via pueue.
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Ensure pueue daemon is running
 pueued -d 2>/dev/null || true
@@ -710,7 +710,7 @@ If infra is already up from a previous run (or provision separately), test
 each `scripts/bin/` entrypoint in isolation:
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Provision only
 PUEUE_DISABLED=1 ./scripts/bin/provision.sh --mode=light --vars=vars.MIKEN
@@ -751,7 +751,7 @@ After any successful run, verify these GCP-migrated behaviors:
 | Check | Command | Expected |
 |-------|---------|----------|
 | Manager detection | `grep ifconfig.me scripts/full_run.sh` | ✅ Present (no `amazonaws.com`) |
-| Packer image used | `gcloud compute instances describe ${OWNER}-single-region-tests-validator-0 --zone=us-central1-b --format="value(disks[0].source)"` | Image from `stress-test-base` family |
+| Packer image used | `gcloud compute instances describe ${OWNER}-snarkos-p2p-tests-validator-0 --zone=us-central1-b --format="value(disks[0].source)"` | Image from `stress-test-base` family |
 | Ops Agent running | SSH to node → `sudo systemctl status google-cloud-ops-agent` | Active |
 | Ops Agent labels | SSH to node → `cat /etc/google-cloud-ops-agent/config.yaml` | `commit_id`, `branch_name`, `test_suite` present |
 | GCS log upload | `gcloud storage ls gs://provable-logs-results/manual_test_runs/$USER/$RUN_ID/` | Log files present |
@@ -764,7 +764,7 @@ After a run, confirm Ops Agent shipped snarkOS logs:
 ```bash
 # Filter by test suite label
 gcloud logging read \
-  'labels.test_suite="single-region-tests"' \
+  'labels.test_suite="snarkos-p2p-tests"' \
   --project=protocol-development-sandbox \
   --limit=10 \
   --format="table(timestamp, labels.commit_id, labels.branch_name, textPayload)"
@@ -817,7 +817,7 @@ If a run fails mid-pipeline, the EXIT trap in `common.sh` fires:
 To manually recover:
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 terraform destroy -auto-approve -var="owner=$USER"
 
 # Clear pueue queue
@@ -829,7 +829,7 @@ pueue reset
 > usage, adding tests/utilities, post-run analysis, and troubleshooting, see
 > [`COMMON_WORKFLOWS.md`](./COMMON_WORKFLOWS.md). For the `full_run.sh` CLI reference,
 > manager delegation, and Slack notification setup, see
-> [`RUN_TEST_SUITE.md`](../test_suites/single-region-tests/RUN_TEST_SUITE.md).
+> [`RUN_TEST_SUITE.md`](../test_suites/snarkos-p2p-tests/RUN_TEST_SUITE.md).
 
 ---
 
@@ -870,7 +870,7 @@ All `aws_s3` module calls replaced with `gcloud storage` commands. SCCACHE S3 en
 Run these after each migration batch to confirm progress:
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # 1. No conflict markers
 grep -rn '<<<<<<< \|>>>>>>> ' . && echo "FAIL: conflict markers" || echo "OK: no conflicts"

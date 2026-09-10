@@ -1,7 +1,7 @@
 # Terraform → shared keys.pub bridge.
 # Writes <repo-root>/keys.pub from var.external_ssh_users so the
 # common/roles/shared_ssh_keys role installs the same key list on
-# every host that runs the role (STM + single-region-tests).
+# every host that runs the role (STM + snarkos-p2p-tests).
 #
 # The role filters lines matching ^ssh-, so this resource writes
 # each public_key on its own line with a trailing newline. Entry

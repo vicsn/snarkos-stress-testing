@@ -50,4 +50,4 @@ To analyze whether requested transmissions have been in the mempool:
 
 # Flamegraph analysis
 To count frequently occurring tasks from a flamegraph, you can use:
-`python3 analysis_flamegraph_svg.py ../test_suites/single-region-tests/log_files/val-0.svg`
+`python3 analysis_flamegraph_svg.py ../test_suites/snarkos-p2p-tests/log_files/val-0.svg`

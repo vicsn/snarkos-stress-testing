@@ -45,8 +45,8 @@ snarkos-stress-testing/
 │   └── infrastructure/              # Terraform + Ansible for STM EC2
 ├── single-machine-with-ssh-forwarding/  # Dev utility machine (AWS)
 └── test_suites/
-    ├── single-region-tests/         # PRIMARY suite — GCP, validators/clients/provers
-    └── network-sync-tests/          # Sync/load suite — AWS, EC2 clients
+    ├── snarkos-p2p-tests/         # P2P network suite — GCP, validators/clients/provers
+    └── snarkos-cdn-tests/          # CDN / ledger / sync suite — AWS, single machine
 ```
 
 ---
@@ -59,10 +59,10 @@ Four-layer system:
 Talisker daemon (STM EC2, t3a.large)
   └─ watches GitHub for new SnarkOS releases
   └─ triggers test suites via JSON-RPC on :3030
-      ├─ test_suites/single-region-tests/scripts/full_run.sh  (GCP)
+      ├─ test_suites/snarkos-p2p-tests/scripts/full_run.sh  (GCP)
       │     └─ delegates over SSH to stress-testing-manager
       │     └─ enqueues pipeline via pueue: provision → setup → tests → destroy
-      └─ test_suites/network-sync-tests/run_*.sh               (AWS)
+      └─ test_suites/snarkos-cdn-tests/run_*.sh               (AWS)
             ├─ Terraform  →  provision cloud infra
             └─ Ansible    →  configure nodes + run tests
                                └─ Packer-built base images (Ubuntu 22.04)
@@ -70,11 +70,11 @@ Talisker daemon (STM EC2, t3a.large)
 
 ---
 
-## Test Suite: single-region-tests (GCP)
+## Test Suite: snarkos-p2p-tests (GCP)
 
-**Primary stress test suite.** Provisions a full SnarkOS devnet on GCP Compute Engine.
+**P2P network suite.** Provisions a full SnarkOS devnet on GCP Compute Engine so nodes can interact over P2P.
 
-### Terraform (`test_suites/single-region-tests/terraform/`)
+### Terraform (`test_suites/snarkos-p2p-tests/terraform/`)
 
 | Resource | File | Description |
 |---|---|---|
@@ -130,7 +130,7 @@ Talisker daemon (STM EC2, t3a.large)
 - Conditional (`count = var.add_tx_cannons ? 1 : 0`)
 - Runs tx-cannon Docker container from ECR
 
-### Ansible (`test_suites/single-region-tests/playbooks/`)
+### Ansible (`test_suites/snarkos-p2p-tests/playbooks/`)
 
 **Main entry points:**
 - `setup.yml` — full network setup (install snarkOS, configure systemd, keys, logging)
@@ -208,11 +208,11 @@ Talisker daemon (STM EC2, t3a.large)
 
 ---
 
-## Test Suite: network-sync-tests (AWS)
+## Test Suite: snarkos-cdn-tests (AWS)
 
-**Sync speed and ledger load benchmarking suite.** Provisions AWS EC2 clients + ELB.
+**CDN / ledger / sync suite.** Single-machine AWS EC2 client for loading a ledger or syncing from snapshots.
 
-### Terraform (`test_suites/network-sync-tests/terraform/`)
+### Terraform (`test_suites/snarkos-cdn-tests/terraform/`)
 - AWS provider, S3 backend
 - `aws_instance` for sync clients
 - `aws_instance.prometheus_server` — Prometheus metrics collection
@@ -268,7 +268,7 @@ Installed by `packer/playbooks/dependencies.yml`:
 - GitHub CLI (`gh`)
 - Docker (`docker.io`) + Docker Compose v2.24.6
 - Prometheus Node Exporter + Process Exporter (via shared roles in
-  `test_suites/single-region-tests/playbooks/roles/`)
+  `test_suites/snarkos-p2p-tests/playbooks/roles/`)
 - Google Cloud Ops Agent (with default `packer/playbooks/files/ops_agent_config.yaml`;
   runtime labels re-rendered by the `google_ops_agent_setup` Ansible role at setup time)
 - Google Cloud CLI (`gcloud`)
@@ -334,7 +334,7 @@ repo root.
 ## Common Workflows
 
 ### Add a new compute instance type
-1. Add resource in `test_suites/single-region-tests/terraform/main.tf`
+1. Add resource in `test_suites/snarkos-p2p-tests/terraform/main.tf`
 2. Add network tags: `[module.fwrule.network_tag]`
 3. Add labels: `role` (e.g. `snarkos-<role>`), `owner`, `devnet`
 4. Add service account, boot disk, OS login metadata (follow existing pattern)
@@ -342,12 +342,12 @@ repo root.
 6. Update Ansible inventory keyed_groups if needed
 
 ### Add a new test
-1. Create `test_suites/single-region-tests/tests/<test-name>/run_test.yml`
+1. Create `test_suites/snarkos-p2p-tests/tests/<test-name>/run_test.yml`
 2. Add optional `pre-test.sh` / `check.sh` / `post-test.sh` hooks
 3. Tests are auto-discovered from `tests/*/` — no registration needed
 
 ### Add a new utility
-1. Create `test_suites/single-region-tests/utils/<util-name>/run_utility.yml`
+1. Create `test_suites/snarkos-p2p-tests/utils/<util-name>/run_utility.yml`
 2. Add optional `pre-utility.sh` / `check.sh` / `post-utility.sh` hooks
 3. Utilities are auto-discovered from `utils/*/` — no registration needed
 
@@ -409,7 +409,7 @@ gcloud compute images describe-from-family stress-test-base \
 
 ### Provision + run a test manually
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Full pipeline (provision + setup + test + destroy via pueue)
 scripts/full_run.sh --mode=light --tests=swap_ledgers

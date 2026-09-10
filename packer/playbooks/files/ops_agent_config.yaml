@@ -7,7 +7,7 @@
 #
 # On snarkOS nodes (validators/clients/provers/tx_runner), the Ansible role
 # google_ops_agent_setup re-renders /etc/google-cloud-ops-agent/config.yaml with
-# its own template (test_suites/single-region-tests/playbooks/roles/google_ops_agent_setup/templates/config.yaml.j2)
+# its own template (test_suites/snarkos-p2p-tests/playbooks/roles/google_ops_agent_setup/templates/config.yaml.j2)
 # at setup time, replacing this label set with commit_id/branch_name/test_suite labels.
 #
 # NOTE: The snarkOS systemd unit name is hardcoded to "snarkos" — matches the

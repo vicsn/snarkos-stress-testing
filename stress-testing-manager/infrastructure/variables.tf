@@ -164,18 +164,18 @@ variable "srt_source_cidrs" {
 }
 
 # ------------------------------------------------
-# Single-region-tests firewall source tag allowlist
+# snarkos-p2p-tests firewall source tag allowlist
 #
 # SRT tag format is `${terraform.workspace}-${devnet_name}` (see
-# single-region-tests/terraform/locals.tf:network_tag_prefix). The default
-# matches the `default` workspace + default devnet_name (`single-region-tests`).
+# snarkos-p2p-tests/terraform/locals.tf:network_tag_prefix). The default
+# matches the `default` workspace + default devnet_name (`snarkos-p2p-tests`).
 # Operators on a non-default workspace or devnet_name must override this
 # variable to list every SRT tag that should be permitted ingress to the STM.
 
 variable "srt_source_tags" {
-  description = "Network tags applied to single-region-tests instances. Used as source_tags on stm_allow_srt_internal so any SRT-tagged VM in the STM VPC can reach the STM. Default matches the `default` workspace paired with the default devnet_name (single-region-tests), producing the tag `default-single-region-tests`."
+  description = "Network tags applied to snarkos-p2p-tests instances. Used as source_tags on stm_allow_srt_internal so any SRT-tagged VM in the STM VPC can reach the STM. Default matches the `default` workspace paired with the default devnet_name (snarkos-p2p-tests), producing the tag `default-snarkos-p2p-tests`."
   type        = list(string)
-  default     = ["default-single-region-tests"]
+  default     = ["default-snarkos-p2p-tests"]
 
   validation {
     condition     = length(var.srt_source_tags) > 0

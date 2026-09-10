@@ -11,7 +11,7 @@ Complete flow from provision → setup → test → collect.
 ### 1. **Provisioning** (5-10 min)
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Initialize Terraform (once per workspace)
 terraform init
@@ -158,7 +158,7 @@ python analysis_02_sync_profiling.py \
 Recommended for development/debugging:
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 ./scripts/full_run.sh
 ```
 
@@ -199,7 +199,7 @@ Collect logs
 For automation (Talisker, CI/CD):
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 ./scripts/full_run.sh \
   --test=swap_ledgers \
   --tfvars=light.tfvars \
@@ -231,8 +231,8 @@ Create a pluggable test in `tests/` directory.
 ### Minimal Test (1 file)
 
 ```bash
-mkdir -p test_suites/single-region-tests/tests/my_custom_test
-cd test_suites/single-region-tests/tests/my_custom_test
+mkdir -p test_suites/snarkos-p2p-tests/tests/my_custom_test
+cd test_suites/snarkos-p2p-tests/tests/my_custom_test
 ```
 
 **`run_test.yml`** (required):
@@ -256,8 +256,8 @@ cd test_suites/single-region-tests/tests/my_custom_test
 ### Full Test (3 files: pre-run-post)
 
 ```bash
-mkdir -p test_suites/single-region-tests/tests/my_complex_test
-cd test_suites/single-region-tests/tests/my_complex_test
+mkdir -p test_suites/snarkos-p2p-tests/tests/my_complex_test
+cd test_suites/snarkos-p2p-tests/tests/my_complex_test
 ```
 
 **`pre-test.sh`** (optional setup):
@@ -348,7 +348,7 @@ tests/my_custom_test/
 ### Run Your Test
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Via pueue
 ./scripts/bin/run-test.sh --test=my_custom_test
@@ -366,7 +366,7 @@ ansible-playbook playbooks/run_test.yml \
 Useful for manual exploration:
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Initialize
 terraform init
@@ -391,7 +391,7 @@ Now you have a live network to explore manually.
 
 ```bash
 # Get node IP from Terraform output
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 VALIDATOR_IP=$(terraform output -raw validator_ips | head -1)
 
 # SSH
@@ -415,7 +415,7 @@ snarkos node --help
 ## Run Ansible Playbook Manually
 
 ```bash
-cd test_suites/single-region-tests/playbooks
+cd test_suites/snarkos-p2p-tests/playbooks
 
 # Generate dynamic inventory
 ../inventory/dynamic_inventory.gcp.yaml
@@ -441,7 +441,7 @@ ansible-playbook setup.yml \
 ## Check Network Sync Status
 
 ```bash
-cd test_suites/single-region-tests/playbooks
+cd test_suites/snarkos-p2p-tests/playbooks
 
 ansible-playbook is_synced.yml \
   -i ../inventory/dynamic_inventory.gcp.yaml
@@ -456,8 +456,8 @@ Blocks until all nodes reach same block height.
 Utilities are similar to tests but with pre/post hooks.
 
 ```bash
-mkdir -p test_suites/single-region-tests/utils/my_utility
-cd test_suites/single-region-tests/utils/my_utility
+mkdir -p test_suites/snarkos-p2p-tests/utils/my_utility
+cd test_suites/snarkos-p2p-tests/utils/my_utility
 ```
 
 **Structure:**
@@ -504,7 +504,7 @@ rm -rf /tmp/utility_data
 Clean up GCP resources:
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Plan destroy
 terraform plan -destroy -var-file=light.tfvars
@@ -522,7 +522,7 @@ terraform destroy -var-file=light.tfvars -auto-approve
 Change cluster size without destroying:
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Edit variables
 cp light.tfvars custom.tfvars
@@ -549,7 +549,7 @@ ansible-playbook setup.yml \
 Add/remove firewall rules, change instance types:
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Edit main.tf or modules/
 vim main.tf
@@ -670,13 +670,13 @@ ssh ubuntu@stress-testing-manager
 **Move to the playbooks directory:**
 
 ```bash
-cd ~/snarkos-stress-testing/test_suites/single-region-tests/playbooks
+cd ~/snarkos-stress-testing/test_suites/snarkos-p2p-tests/playbooks
 ```
 
 **List hosts grouped by devnet label:**
 
 ```bash
-ansible-inventory --graph devnet_single_region_tests
+ansible-inventory --graph devnet_snarkos_p2p_tests
 ansible-inventory --graph devnet_stress_testing_manager
 ```
 
@@ -691,7 +691,7 @@ ansible-inventory --graph role_tx_runner
 **Test connectivity to every SRT host:**
 
 ```bash
-ansible -m ping devnet_single_region_tests
+ansible -m ping devnet_snarkos_p2p_tests
 ```
 
 **If a host is missing from the graph, verify:**
@@ -711,7 +711,7 @@ ansible -m ping devnet_single_region_tests
 
 **Check pueue queue:**
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 pueue status
 
 ## example failing job
@@ -723,7 +723,7 @@ pueue status
 # ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 #  10   Failed (127)                  env PUEUE_WORKER=1 PATH=/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/loc   /home/ubuntu   2026-08-07   2026-08-07 
 #                                     al/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/b                  11:03:58     11:03:59   
-#                                     in /home/ubuntu/snarkos-stress-testing/test_suites/single-region-tests/s                                          
+#                                     in /home/ubuntu/snarkos-stress-testing/test_suites/snarkos-p2p-tests/s                                          
 #                                     cripts/bin/provision.sh --mode=light --vars=vars
 
 # inspect logs for failing task GroupId: 10

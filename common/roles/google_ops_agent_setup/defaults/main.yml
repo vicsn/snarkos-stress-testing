@@ -13,7 +13,7 @@ ops_agent_metrics_interval: "60s"
 # Labels attached to every log entry for Cloud Logging filtering
 ops_agent_commit_id: ""
 ops_agent_branch_name: ""
-ops_agent_test_suite: "single-region-tests"
+ops_agent_test_suite: "snarkos-p2p-tests"
 ops_agent_owner: ""
 ops_agent_role: ""
 

@@ -22,7 +22,7 @@ Detailed breakdown of infrastructure layers, modules, and components.
 
 ### Tier 1: Test Suites (`test_suites/`)
 
-**Location:** `test_suites/single-region-tests/` (primary) + `test_suites/network-sync-tests/` (secondary)
+**Location:** `test_suites/snarkos-p2p-tests/` (P2P network) + `test_suites/snarkos-cdn-tests/` (CDN / ledger / sync)
 
 **Components:**
 - **Terraform** (624 lines total) — Infrastructure provisioning
@@ -84,7 +84,7 @@ snarkos-stress-testing/
 │   └── COMMON_WORKFLOWS.md             # Step-by-step procedures
 │
 ├── test_suites/                        # Two independent test suites
-│   ├── single-region-tests/            # GCP PRIMARY SUITE
+│   ├── snarkos-p2p-tests/            # GCP P2P network suite
 │   │   ├── terraform/                  # Main validator/client network
 │   │   ├── terraform_tx_cannon/        # Separate TX runner stack
 │   │   ├── playbooks/                  # Ansible orchestration (20 files)
@@ -92,7 +92,7 @@ snarkos-stress-testing/
 │   │   ├── utils/                      # 14 utility helpers (pre/post hooks)
 │   │   └── scripts/                    # CLI orchestration (8 bin + 3 libs)
 │   │
-│   └── network-sync-tests/             # AWS SECONDARY SUITE
+│   └── snarkos-cdn-tests/             # AWS CDN / ledger / sync suite
 │       ├── terraform/                  # EC2 instances, ELB
 │       ├── playbooks/                  # Ansible orchestration
 │       └── scripts/                    # Sync benchmarking
@@ -118,7 +118,7 @@ snarkos-stress-testing/
 
 ---
 
-## GCP Single-Region-Tests (Primary Suite)
+## GCP snarkos-p2p-tests (P2P Network Suite)
 
 ### Dual Terraform Stacks (Non-Obvious Pattern)
 
@@ -260,7 +260,7 @@ Generated at runtime by the `google.cloud.gcp_compute` inventory plugin. The
 plugin queries the GCE API for instances in `protocol-development-sandbox`,
 filters by status and `devnet` label, and builds host groups from GCE labels.
 
-**File:** `test_suites/single-region-tests/inventory/dynamic_inventory.gcp.yaml`
+**File:** `test_suites/snarkos-p2p-tests/inventory/dynamic_inventory.gcp.yaml`
 
 **Hostname source:** `private_ip` (`networkInterfaces[0].networkIP`). The
 plugin assigns the private IP to both the Ansible hostname (`hostnames:
@@ -273,16 +273,16 @@ the same subnet).
 ```yaml
 filters:
   - status = RUNNING
-  - labels.devnet = "single-region-tests"
+  - labels.devnet = "snarkos-p2p-tests"
       OR labels.devnet = "stress-testing-manager"
-      OR labels.devnet = "network-sync-tests"
+      OR labels.devnet = "snarkos-cdn-tests"
 ```
 
 **Keyed groups** (built from GCE labels):
 
 | Group prefix | Source label | Example group |
 |---|---|---|
-| `devnet_` | `labels.devnet` | `devnet_single_region_tests` |
+| `devnet_` | `labels.devnet` | `devnet_snarkos_p2p_tests` |
 | `owner_` | `labels.owner` | `owner_mikenichols` |
 | `role_` | `labels.role` | `role_snarkos_validator`, `role_snarkos_prover`, `role_snarkos_builder`, `role_tx_runner`, `role_tx_cannon` |
 | `gcp_` | `zone`, `machineType` | `gcp_us_central1_b`, `gcp_n2_standard_4` |
@@ -290,10 +290,10 @@ filters:
 **Inspect the inventory** (run from the STM):
 
 ```bash
-cd ~/snarkos-stress-testing/test_suites/single-region-tests/playbooks
-ansible-inventory --graph devnet_single_region_tests
+cd ~/snarkos-stress-testing/test_suites/snarkos-p2p-tests/playbooks
+ansible-inventory --graph devnet_snarkos_p2p_tests
 ansible-inventory --graph role_snarkos_validator
-ansible -m ping devnet_single_region_tests
+ansible -m ping devnet_snarkos_p2p_tests
 ```
 
 ---
@@ -493,7 +493,7 @@ cargo run --release -- --input logs.json --output stats.json
 
 ### Terraform
 
-**Profiles (stored in test_suites/single-region-tests/terraform/):**
+**Profiles (stored in test_suites/snarkos-p2p-tests/terraform/):**
 ```hcl
 # light.tfvars
 validator_instance_count = 3

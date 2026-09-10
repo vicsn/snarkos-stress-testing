@@ -11,7 +11,7 @@ Quick reference for using Agents and tools with the snarkos-stress-testing proje
 **Location:** `.agents/skills/snarkos-stress-testing/SKILL.md`
 
 Expert knowledge of the snarkos-stress-testing framework:
-- Infrastructure provisioning (Terraform GCP — single-region-tests + stress-testing-manager; AWS retained only for network-sync-tests)
+- Infrastructure provisioning (Terraform GCP — snarkos-p2p-tests + stress-testing-manager; AWS retained only for snarkos-cdn-tests)
 - Configuration management (Ansible)
 - Test orchestration (pueue task queue)
 - Stress Testing Manager (GCE-based; delegates full_run.sh over `gcloud compute ssh`)
@@ -49,7 +49,7 @@ Use the skill when:
 # 2. Ask for help modifying Terraform
 # "I want to add a new analytics instance type to the GCP network"
 
-# 3. Reference ARCHITECTURE.md section "GCP Single-Region-Tests"
+# 3. Reference ARCHITECTURE.md section "GCP snarkos-p2p-tests"
 # or follow COMMON_WORKFLOWS.md "Modify Terraform Configuration"
 ```
 
@@ -169,7 +169,7 @@ docs/
 ### Provision & Run a Test
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Full pipeline (provision + setup + test + destroy via pueue)
 scripts/full_run.sh --mode=light --tests=swap_ledgers
@@ -193,7 +193,7 @@ PUEUE_DISABLED=1 scripts/full_run.sh --mode=light --tests=swap_ledgers
 ### SSH Into a Node
 
 ```bash
-gcloud compute ssh mike-single-region-tests-snarkos-validator-0 --zone=us-central1-b
+gcloud compute ssh mike-snarkos-p2p-tests-snarkos-validator-0 --zone=us-central1-b
 
 # Inside node
 sudo systemctl status snarkos
@@ -204,7 +204,7 @@ curl http://localhost:3030/testnet/block/height/latest
 ### Terraform Operations
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 terraform plan -var-file=light.tfvars
 terraform apply -var-file=light.tfvars -auto-approve -var="owner=$USER"
@@ -214,7 +214,7 @@ terraform destroy -auto-approve -var="owner=$USER"
 ### Ansible Playbooks
 
 ```bash
-cd test_suites/single-region-tests/playbooks
+cd test_suites/snarkos-p2p-tests/playbooks
 
 # Check sync status
 ansible-playbook is_synced.yml -i ../inventory/dynamic_inventory.gcp.yaml
@@ -240,7 +240,7 @@ cd stress-testing-manager/infrastructure
 ./tf_stack.sh update --update-target both
 
 # Delegated full test run (from your laptop; SSH is gcloud compute ssh)
-cd ../../test_suites/single-region-tests
+cd ../../test_suites/snarkos-p2p-tests
 export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
 scripts/full_run.sh --mode=light --tests=prerelease
 
@@ -273,7 +273,7 @@ packer build \
   stress-test-base.pkr.hcl
 
 # 4. Use the custom image in Terraform (optional — default is stock Ubuntu)
-cd ../test_suites/single-region-tests/terraform
+cd ../test_suites/snarkos-p2p-tests/terraform
 terraform apply \
   -var 'image_family=stress-test-base' \
   -var 'image_project=protocol-development-sandbox' \
@@ -307,7 +307,7 @@ Logs are uploaded to GCS by `download_and_upload_logs()` in `scripts/lib/common.
 
 The **machine running the scripts** (laptop or stress-testing-manager) — not the GCE compute instances. The uploader needs `gcloud` auth with write access to the bucket.
 
-**SRT compute-node upload capability (enabled, not yet exercised):** The SRT `snarkos_sa` service account now has `roles/storage.objectCreator` on `provable-logs-results`. On-node scripts CAN upload directly (`gcloud storage cp gs://provable-logs-results/…`) under the attached instance SA. No workflow today uses this — uploads still run from the STM/laptop. See `test_suites/single-region-tests/terraform/iam.tf` for the binding.
+**SRT compute-node upload capability (enabled, not yet exercised):** The SRT `snarkos_sa` service account now has `roles/storage.objectCreator` on `provable-logs-results`. On-node scripts CAN upload directly (`gcloud storage cp gs://provable-logs-results/…`) under the attached instance SA. No workflow today uses this — uploads still run from the STM/laptop. See `test_suites/snarkos-p2p-tests/terraform/iam.tf` for the binding.
 
 ### When uploads happen
 
@@ -346,7 +346,7 @@ In addition to GCS log files, the Google Ops Agent on each node streams snarkOS 
 
 ```bash
 gcloud logging read \
-  'labels.test_suite="single-region-tests" AND labels.commit_id="<hash>"' \
+  'labels.test_suite="snarkos-p2p-tests" AND labels.commit_id="<hash>"' \
   --project=protocol-development-sandbox --limit=10
 ```
 
@@ -373,7 +373,7 @@ gcloud logging read \
 
 | Component | Where to Reference |
 |---|---|
-| GCP Terraform modules | `ARCHITECTURE.md` → "GCP Single-Region-Tests" |
+| GCP Terraform modules | `ARCHITECTURE.md` → "GCP snarkos-p2p-tests" |
 | Ansible playbooks | `ARCHITECTURE.md` → "Ansible Structure" |
 | Stress Testing Manager | `ARCHITECTURE.md` → "Stress Testing Manager (STM)" and `stress-testing-manager/README.md` |
 | Packer configuration | `packer/README.md` and `ARCHITECTURE.md` → "Packer (Base Image Builder)" |
@@ -408,7 +408,7 @@ Save these as bookmarks:
 docs/QUICK_REFERENCE.md
 
 # Run a test (full pipeline)
-test_suites/single-region-tests/scripts/full_run.sh --mode=light --tests=swap_ledgers
+test_suites/snarkos-p2p-tests/scripts/full_run.sh --mode=light --tests=swap_ledgers
 
 # Get node status
 gcloud compute ssh <instance> -- 'curl http://localhost:3030/testnet/block/height/latest'
@@ -430,20 +430,20 @@ Save these as references:
 docs/ARCHITECTURE.md
 
 # Terraform patterns
-test_suites/single-region-tests/terraform/main.tf
-test_suites/single-region-tests/terraform/variables.tf
+test_suites/snarkos-p2p-tests/terraform/main.tf
+test_suites/snarkos-p2p-tests/terraform/variables.tf
 
 # Ansible patterns
-test_suites/single-region-tests/playbooks/setup.yml
-test_suites/single-region-tests/inventory/dynamic_inventory.gcp.yaml
+test_suites/snarkos-p2p-tests/playbooks/setup.yml
+test_suites/snarkos-p2p-tests/inventory/dynamic_inventory.gcp.yaml
 
 # Configuration profiles
-test_suites/single-region-tests/terraform/light.tfvars
-test_suites/single-region-tests/terraform/heavy.tfvars
+test_suites/snarkos-p2p-tests/terraform/light.tfvars
+test_suites/snarkos-p2p-tests/terraform/heavy.tfvars
 
 # Script architecture
-test_suites/single-region-tests/scripts/full_run.sh
-test_suites/single-region-tests/scripts/lib/common.sh
+test_suites/snarkos-p2p-tests/scripts/full_run.sh
+test_suites/snarkos-p2p-tests/scripts/lib/common.sh
 ```
 
 ---
@@ -482,9 +482,9 @@ test_suites/single-region-tests/scripts/lib/common.sh
 
 ### "How do I run the swap_ledgers test?"
 
-1. No need to load skill — reference `test_suites/single-region-tests/RUN_TEST_SUITE.md` directly
+1. No need to load skill — reference `test_suites/snarkos-p2p-tests/RUN_TEST_SUITE.md` directly
 2. Or: `docs/COMMON_WORKFLOWS.md` → "Provision & Run a GCP Test"
-3. Quick: `cd test_suites/single-region-tests && scripts/full_run.sh --mode=light --tests=swap_ledgers`
+3. Quick: `cd test_suites/snarkos-p2p-tests && scripts/full_run.sh --mode=light --tests=swap_ledgers`
 
 ---
 
@@ -493,8 +493,8 @@ test_suites/single-region-tests/scripts/lib/common.sh
 | Path | Purpose |
 |---|---|
 | `docs/` | Comprehensive engineering documentation (start here) |
-| `test_suites/single-region-tests/` | GCP primary test suite |
-| `test_suites/network-sync-tests/` | AWS secondary test suite |
+| `test_suites/snarkos-p2p-tests/` | GCP P2P network suite |
+| `test_suites/snarkos-cdn-tests/` | AWS CDN / ledger / sync suite (single machine) |
 | `stress-testing-manager/` | Central automation (GCE-based; pueue task queue on GCP) |
 | `packer/` | Base image builder |
 | `scripts/` | Operational utilities |
@@ -516,7 +516,7 @@ LINT_PYTHON=python3.13 bash lint.sh
 ### Terraform
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 terraform fmt -check -recursive    # formatting
 terraform validate                 # syntax + provider schema

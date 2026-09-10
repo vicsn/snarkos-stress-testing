@@ -11,7 +11,7 @@ Builds pre-configured machine images with all dependencies for stress-test insta
 ## What Gets Installed (`playbooks/dependencies.yml`)
 
 The Ansible provisioner playbook installs all runtime dependencies onto the base image.
-Roles are shared from `test_suites/single-region-tests/playbooks/roles/` via `ansible.cfg`.
+Roles are shared from `test_suites/snarkos-p2p-tests/playbooks/roles/` via `ansible.cfg`.
 
 | Category | Components |
 |----------|-----------|
@@ -26,7 +26,7 @@ Roles are shared from `test_suites/single-region-tests/playbooks/roles/` via `an
 | **Cleanup** | Purge `unattended-upgrades` (blocks apt) |
 
 > The default ops-agent config baked into the image lives at `packer/playbooks/files/ops_agent_config.yaml`.
-> Keep it in sync with `test_suites/single-region-tests/playbooks/roles/google_ops_agent_setup/templates/config.yaml.j2` — the Ansible role re-renders the same pipeline structure with runtime labels at setup time.
+> Keep it in sync with `test_suites/snarkos-p2p-tests/playbooks/roles/google_ops_agent_setup/templates/config.yaml.j2` — the Ansible role re-renders the same pipeline structure with runtime labels at setup time.
 
 > **Note:** snarkOS itself is **not** baked into the image. The binary is compiled separately
 > (ephemeral builder or local build), cached in GCS (`provable-binaries-releases`), and
@@ -84,10 +84,10 @@ Build takes ~10 minutes. Output: image in family `stress-test-base` in project `
 
 ## Using the Custom Image in Terraform
 
-By default, the `single-region-tests` Terraform uses stock Ubuntu 22.04. To use the Packer-built image:
+By default, the `snarkos-p2p-tests` Terraform uses stock Ubuntu 22.04. To use the Packer-built image:
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Use Packer-built image
 terraform apply \
@@ -111,10 +111,10 @@ terraform apply \
 
 ## Ansible Roles
 
-Shared from `test_suites/single-region-tests/playbooks/roles/` via `ansible.cfg`:
+Shared from `test_suites/snarkos-p2p-tests/playbooks/roles/` via `ansible.cfg`:
 
 ```
-roles_path = ../common/roles/:../test_suites/single-region-tests/playbooks/roles/
+roles_path = ../common/roles/:../test_suites/snarkos-p2p-tests/playbooks/roles/
 ```
 
 Roles used: `process_exporter_setup`, `node_exporter_setup`.

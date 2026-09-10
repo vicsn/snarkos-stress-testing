@@ -1,13 +1,13 @@
 # ------------------------------------------------
-# VPC + subnet (shared module from single-region-tests)
+# VPC + subnet (shared module from snarkos-p2p-tests)
 #
-# STM owns this VPC AND subnet. Single-region-tests and other test suites
+# STM owns this VPC AND subnet. snarkos-p2p-tests and other test suites
 # consume both via terraform_remote_state, reading vpc_id, subnet_self_links,
 # and subnet_cidrs. All suites share the 10.41.0.0/16 subnet — no separate
 # per-suite subnets.
 
 module "network" {
-  source     = "../../test_suites/single-region-tests/terraform/modules/gcp-snarkos-network"
+  source     = "../../test_suites/snarkos-p2p-tests/terraform/modules/gcp-snarkos-network"
   project_id = var.gcp_project
   vpc_name   = local.vpc_name
   subnets = {
@@ -32,7 +32,7 @@ module "network" {
 # metrics rules.
 
 module "firewall" {
-  source             = "../../test_suites/single-region-tests/terraform/modules/firewall_rule"
+  source             = "../../test_suites/snarkos-p2p-tests/terraform/modules/firewall_rule"
   target_network_tag = local.network_tag
   project            = var.gcp_project
   vpc                = module.network.vpc_id
@@ -63,7 +63,7 @@ resource "google_compute_firewall" "stm_allow_ssh_external" {
 }
 
 # ------------------------------------------------
-# Allow all traffic between STM and single-region-tests instances (VPC-internal).
+# Allow all traffic between STM and snarkos-p2p-tests instances (VPC-internal).
 #
 # source_tags matches VMs tagged with the STM tag or any SRT tag (see
 # var.srt_source_tags default and override docs). source_ranges keeps the

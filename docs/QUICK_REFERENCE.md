@@ -7,7 +7,7 @@
 ## Run a Test (GCP)
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Interactive (recommended)
 ./scripts/full_run.sh
@@ -27,7 +27,7 @@ pueue log run-test:swap_ledgers
 ## Pueue Job Queue (Atomized Tests)
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # Status
 pueue status
@@ -79,7 +79,7 @@ pueue reset
 ## Provision & Setup
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Initialize (once)
 terraform init
@@ -120,7 +120,7 @@ curl http://localhost:3030/rpc/latest_block_height
 ## Common Ansible Playbooks
 
 ```bash
-cd test_suites/single-region-tests/playbooks
+cd test_suites/snarkos-p2p-tests/playbooks
 
 # Check sync
 ansible-playbook is_synced.yml \
@@ -152,10 +152,10 @@ The dynamic inventory uses **private IPs** (`hostnames: [private_ip]`,
 ssh ubuntu@stress-testing-manager
 
 # Move to playbooks directory
-cd ~/snarkos-stress-testing/test_suites/single-region-tests/playbooks
+cd ~/snarkos-stress-testing/test_suites/snarkos-p2p-tests/playbooks
 
 # List hosts by devnet
-ansible-inventory --graph devnet_single_region_tests
+ansible-inventory --graph devnet_snarkos_p2p_tests
 ansible-inventory --graph devnet_stress_testing_manager
 
 # List hosts by role
@@ -164,7 +164,7 @@ ansible-inventory --graph role_snarkos_builder
 ansible-inventory --graph role_tx_runner
 
 # Test connectivity
-ansible -m ping devnet_single_region_tests
+ansible -m ping devnet_snarkos_p2p_tests
 ```
 
 ---
@@ -172,7 +172,7 @@ ansible -m ping devnet_single_region_tests
 ## Utilities (14 Available)
 
 ```bash
-cd test_suites/single-region-tests
+cd test_suites/snarkos-p2p-tests
 
 # TX generation
 ./scripts/bin/run-utility.sh --utility=pregenerate_transactions
@@ -221,7 +221,7 @@ terraform apply -var-file=heavy.tfvars
 ## Scale & Modify Infrastructure
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 # Edit variables
 vim light.tfvars
@@ -271,7 +271,7 @@ cd ../stress-testing-manager/infrastructure
 ## Destroy Infrastructure
 
 ```bash
-cd test_suites/single-region-tests/terraform
+cd test_suites/snarkos-p2p-tests/terraform
 
 terraform destroy -var-file=light.tfvars -auto-approve
 ```
@@ -316,7 +316,7 @@ cargo run --release -- \
 ## Key Directories
 
 ```
-test_suites/single-region-tests/
+test_suites/snarkos-p2p-tests/
 ├── terraform/              # IaC (dual stacks: main + tx_cannon)
 ├── terraform_tx_cannon/    # TX runner stack
 ├── playbooks/              # Ansible (setup, run_test, run_utility)
@@ -403,8 +403,8 @@ aws s3 cp s3://provable-logs-results/logs/mike/testnet-v123/ ./logs/ --recursive
 | Network won't sync | `is_synced.yml` → check journalctl |
 | SnarkOS crashes | `journalctl -u snarkos -n 50` |
 | Terraform fails | Check quota, service account perms |
-| Ansible inventory empty or missing hosts | Run from inside the VPC (STM). `ansible-inventory --graph devnet_single_region_tests`. Verify labels + `google.cloud` collection. |
-| Ansible ping fails | `ansible -m ping devnet_single_region_tests`. Verify `devnet-key` exists on caller, port 22 open, same VPC. |
+| Ansible inventory empty or missing hosts | Run from inside the VPC (STM). `ansible-inventory --graph devnet_snarkos_p2p_tests`. Verify labels + `google.cloud` collection. |
+| Ansible ping fails | `ansible -m ping devnet_snarkos_p2p_tests`. Verify `devnet-key` exists on caller, port 22 open, same VPC. |
 | SSH fails | Verify firewall rule, public IP |
 | Logs not uploading | Check S3 bucket policy, IAM role |
 

@@ -25,15 +25,15 @@
 **/vars.*.yaml
 **/logs/
 **/ledger_backups
-/test_suites/network-sync-tests/playbooks/snarkos-shallow/
-/test_suites/network-sync-tests/prometheus_server_data/
-/test_suites/single-region-tests/playbooks/snarkos-shallow/
-/test_suites/single-region-tests/tests/_save_deployments/snarkos-shallow/
-/test_suites/single-region-tests/prometheus_server_data/
-/test_suites/single-region-tests/transaction_files/
-/test_suites/single-region-tests/tests/load_saved_transactions/transactions_to_send/
-/test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/target
-/test_suites/single-region-tests/tests/load_saved_transactions/tx_submitter/*.log
+/test_suites/snarkos-cdn-tests/playbooks/snarkos-shallow/
+/test_suites/snarkos-cdn-tests/prometheus_server_data/
+/test_suites/snarkos-p2p-tests/playbooks/snarkos-shallow/
+/test_suites/snarkos-p2p-tests/tests/_save_deployments/snarkos-shallow/
+/test_suites/snarkos-p2p-tests/prometheus_server_data/
+/test_suites/snarkos-p2p-tests/transaction_files/
+/test_suites/snarkos-p2p-tests/tests/load_saved_transactions/transactions_to_send/
+/test_suites/snarkos-p2p-tests/tests/load_saved_transactions/tx_submitter/target
+/test_suites/snarkos-p2p-tests/tests/load_saved_transactions/tx_submitter/*.log
 
 # ignore service account secrets
 .gcp-key-*-snarkos-sa.json
@@ -42,7 +42,7 @@
 
 
 # ignore "roles/googlecloudplatform.google_cloud_ops_agents" - install with `ansible-galaxy install googlecloudplatform.google_cloud_ops_agents`
-/test_suites/single-region-tests/playbooks/roles/googlecloudplatform.google_cloud_ops_agents
+/test_suites/snarkos-p2p-tests/playbooks/roles/googlecloudplatform.google_cloud_ops_agents
 
 # General
 .DS_Store
@@ -89,18 +89,18 @@ log_files
 builder/infrastructure/ansible/builder_inventory.yml
 
 # Related to the client sync and load ledger tests
-test_suites/network-sync-tests/playbooks/snapshot_urls.txt
-test_suites/network-sync-tests/playbooks/network_info.json
-test_suites/network-sync-tests/playbooks/.network
-test_suites/network-sync-tests/.terraform-client-sync/
-test_suites/network-sync-tests/.terraform-load-ledger/
-test_suites/network-sync-tests/lb_url_load-ledger-tests.txt
-test_suites/network-sync-tests/playbooks/snapshot_urls_load-ledger-tests.txt
+test_suites/snarkos-cdn-tests/playbooks/snapshot_urls.txt
+test_suites/snarkos-cdn-tests/playbooks/network_info.json
+test_suites/snarkos-cdn-tests/playbooks/.network
+test_suites/snarkos-cdn-tests/.terraform-client-sync/
+test_suites/snarkos-cdn-tests/.terraform-load-ledger/
+test_suites/snarkos-cdn-tests/lb_url_load-ledger-tests.txt
+test_suites/snarkos-cdn-tests/playbooks/snapshot_urls_load-ledger-tests.txt
 
 # Related to load ledger tests
-test_suites/network-sync-tests/load_ledger_results/
-test_suites/network-sync-tests/playbooks/inventory_load_ledger.aws_ec2.yml
-test_suites/network-sync-tests/playbooks/local.inventory
+test_suites/snarkos-cdn-tests/load_ledger_results/
+test_suites/snarkos-cdn-tests/playbooks/inventory_load_ledger.aws_ec2.yml
+test_suites/snarkos-cdn-tests/playbooks/local.inventory
 
 # Related to scripts
 **/*/.builder_ip

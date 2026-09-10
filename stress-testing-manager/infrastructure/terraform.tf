@@ -6,7 +6,7 @@
 # map to state files "<prefix>/default.tfstate", "<prefix>/staging.tfstate".
 #
 # The GCS bucket is provisioned separately by
-# test_suites/single-region-tests/terraform_init/.
+# test_suites/snarkos-p2p-tests/terraform_init/.
 
 terraform {
   required_version = ">= 1.10"

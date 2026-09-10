@@ -12,8 +12,8 @@ snarkos-stress-testing is a sophisticated four-layer stress testing framework fo
 
 | Purpose | Cloud | Primary Suite | Node Types |
 |---|---|---|---|
-| **Stress Testing** | GCP | `single-region-tests` | Validators, Clients, Provers, TX Runner |
-| **Sync Benchmarking** | AWS | `network-sync-tests` | EC2 Clients, Prometheus Server |
+| **P2P network** | GCP | `snarkos-p2p-tests` | Validators, Clients, Provers, TX Runner |
+| **CDN / ledger / sync** | AWS | `snarkos-cdn-tests` | Single machine: load ledger or sync |
 
 Each cloud is independently managed but follows identical deployment patterns.
 

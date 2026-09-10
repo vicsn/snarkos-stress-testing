@@ -197,7 +197,7 @@ terraform workspace select <target>   # staging or default
 terraform plan -var="owner=$USER"
 
 # terraform_init side — expect "No changes."
-cd test_suites/single-region-tests/terraform_init
+cd test_suites/snarkos-p2p-tests/terraform_init
 terraform plan
 ```
 
@@ -206,7 +206,7 @@ If either baseline fails, STOP. Do not proceed to Step 3.
 ### 3. Confirm state addresses in terraform_init
 
 ```bash
-cd test_suites/single-region-tests/terraform_init
+cd test_suites/snarkos-p2p-tests/terraform_init
 terraform state list
 ```
 
@@ -222,7 +222,7 @@ If any address differs (e.g. resource inside a module, renamed), STOP. Adjust th
 The code blocks stay in place — only the state entry is removed. This is intentional (see Safety model above).
 
 ```bash
-cd test_suites/single-region-tests/terraform_init
+cd test_suites/snarkos-p2p-tests/terraform_init
 terraform state rm \
   google_storage_bucket.logs \
   google_storage_bucket_iam_member.sa_logs_admin \
@@ -348,7 +348,7 @@ The default workspace requires `--force` to prevent accidental teardown.
 
 ## Running tests
 
-See [single-region-tests/README.md](../test_suites/single-region-tests/README.md).
+See [snarkos-p2p-tests/README.md](../test_suites/snarkos-p2p-tests/README.md).
 
 From your laptop, `./scripts/full_run.sh` in that test suite delegates to
 this manager by default. It reads the STM's instance name and zone from

@@ -128,8 +128,8 @@ rsync_package() {
       --exclude=.graphifyignore
       --exclude='vars.*.yaml'
       --exclude=.ansible/
-      --exclude='test_suites/network-sync-tests/.*'
-      --exclude='test_suites/single-region-tests/transaction_files/transaction_files'
+      --exclude='test_suites/snarkos-cdn-tests/.*'
+      --exclude='test_suites/snarkos-p2p-tests/transaction_files/transaction_files'
     )
     rsync -avzhP --delete "${_excludes[@]}" \
       "${REPO_ROOT}/" \
