@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# bin/select-test.sh — interactive menu that LAUNCHES a test rather than running
-# inline. Picks a name, then enqueues run-test.sh (or runs inline when
+# lib/select-test.sh — interactive menu that LAUNCHES a test rather than running
+# inline. Picks a name, then enqueues bin/run-test.sh (or runs inline when
 # PUEUE_DISABLED=1). The menu prints to stderr; only invoked at a TTY.
+#
+# The menu itself stays local — each run-test.sh it launches delegates to the
+# manager on its own.
 set -euo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
-source "$HERE/../lib/common.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+
+for arg in "$@"; do
+  parse_tx_run_flag "$arg" || die "Unknown argument: $arg"
+done
+tx_flags=()
+tx_run_flag_args tx_flags
 
 discover_tests
 echo "Select a test to run:" >&2
@@ -33,6 +41,9 @@ esac
 mapfile -t SELECTED_TESTS < <(resolve_tests "$TESTS_ARG")
 
 for t in "${SELECTED_TESTS[@]}"; do
-  "$HERE/run-test.sh" --test="$t"
+  if [[ "$t" == "load_saved_transactions" ]]; then
+    require_load_saved_transactions_flags
+  fi
+  "$BIN/run-test.sh" --test="$t" ${tx_flags[@]+"${tx_flags[@]}"}
 done
 echo "Launched ${#SELECTED_TESTS[@]} test job(s). (Assumes infra is already provisioned + set up.)"

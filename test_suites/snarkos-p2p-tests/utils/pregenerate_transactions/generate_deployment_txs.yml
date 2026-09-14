@@ -6,7 +6,7 @@
 
     # Load keys into KEYS[] (each line -> one element)
     mapfile -t KEYS </tmp/keys.txt
-    NUMV={{ pregenerate_transactions_num_validators }}
+    NUMV={{ num_validators_fact }}
 
     run_dep() {
       idx="$1"
@@ -29,7 +29,7 @@
 
       "{{ snarkos_bin_path }}/snarkos" developer deploy \
         --private-key "$pk" \
-        --query '{"state_root": "{{ txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
+        --query '{"state_root": "{{ resolved_txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
         --priority-fee 1 \
         --network {{ snarkos_network_int }} \
         --store "/tmp/deployment_tx${idx}.txt" \

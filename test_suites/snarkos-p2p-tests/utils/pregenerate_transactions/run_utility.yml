@@ -17,13 +17,19 @@
         that:
           - txs_target_consensus_version_height is defined
           - txs_target_consensus_version is defined
+          - txs_target_state_root is mapping
           - pregeneration_execution_tx_count is defined
           - pregeneration_deployment_tx_count is defined
           - pregeneration_bucket_path is defined
           - pregeneration_tx_batch_size is defined
+          - pregenerate_transactions_num_validators is defined
+          - pregenerate_transactions_num_validators | int > 0
         fail_msg: >
-          This playbook requires the following variables to be set:
-          txs_target_consensus_version_height, pregeneration_execution_tx_count, pregeneration_bucket_path, pregeneration_tx_batch_size, pregeneration_deployment_tx_count, txs_target_consensus_version
+          This playbook requires --execution-tx-count, --deployment-tx-count,
+          and --num-validators, plus vars.yml keys
+          txs_target_consensus_version_height, txs_target_consensus_version,
+          txs_target_state_root (map of validator count to state root),
+          pregeneration_bucket_path, and pregeneration_tx_batch_size.
 
     - name: Load credits.aleo program
       set_fact:
@@ -87,26 +93,16 @@
       set_fact:
         release_name: "{{ hostvars['localhost'].release_name }}"
 
-    - name: Read pregenerate_transactions_num_validators var (if set)
+    - name: Set num_validators_fact from runtime flag
       set_fact:
-        num_validators_value: "{{ pregenerate_transactions_num_validators | default('', true) }}"
-
-    - name: Ask the user if env var is not set
-      pause:
-        prompt: "How many validators do you expect in the target network?"
-      register: num_validators
-      when: not num_validators_value
-
-    - name: Set unified num_validators_fact from pause or env
-      set_fact:
-        num_validators_fact: "{{ (num_validators.user_input | default(num_validators_value)) | trim }}"
+        num_validators_fact: "{{ pregenerate_transactions_num_validators | string }}"
 
     - name: Fail if input is not a number
       fail:
         msg: "The number of validators must be an integer, but got '{{ num_validators_fact }}'"
       when: not (num_validators_fact is match('^[0-9]+$'))
 
-    - name: Set unified num_validators_fact from pause or env
+    - name: Set transactions file id prefix
       set_fact:
         transactions_file_id_prefix: "{{ snarkos_network }}-{{ num_validators_fact }}val"
 
@@ -171,9 +167,18 @@
       set_fact:
         snarkos_bin_path: "/usr/bin"
 
-    - name: Set txs_target_state_root based on num_validators_fact
+    - name: Require a state root for this validator count
+      assert:
+        that:
+          - (num_validators_fact | string in txs_target_state_root) or
+            (num_validators_fact | int in txs_target_state_root)
+        fail_msg: >-
+          No txs_target_state_root for {{ num_validators_fact }} validators.
+          Defined keys: {{ txs_target_state_root.keys() | list }}
+
+    - name: Resolve state root for this validator count
       set_fact:
-        txs_target_state_root: "{{ hostvars['localhost'].validator_data.state_roots[num_validators_fact | string] }}"
+        resolved_txs_target_state_root: "{{ txs_target_state_root[num_validators_fact | string] | default(txs_target_state_root[num_validators_fact | int]) }}"
 
     - name: Write base program once
       copy:

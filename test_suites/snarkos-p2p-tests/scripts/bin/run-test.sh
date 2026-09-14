@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # bin/run-test.sh --test=NAME [--vars=NAME] [--no-collect]
+#   load_saved_transactions also requires:
+#     --execution-tx-count=N --deployment-tx-count=N --tx-type=executions|deployments|all
 # Runs ONE test and (by default) collects its logs. This is the fine-grained
 # unit you enqueue in pueue — one job per test.
 set -euo pipefail
@@ -14,10 +16,14 @@ for arg in "$@"; do
     --test=*) TEST="${arg#*=}" ;;
     --vars=*) VARS="${arg#*=}"; export VARS ;;
     --no-collect) COLLECT=0 ;;
-    *) die "Unknown argument: $arg" ;;
+    *) parse_tx_run_flag "$arg" || die "Unknown argument: $arg" ;;
   esac
 done
 [[ -n "$TEST" ]] || die "--test=NAME is required."
+if [[ "$TEST" == "load_saved_transactions" ]]; then
+  require_load_saved_transactions_flags
+fi
+stm_dispatch_self ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 pueue_dispatch_self "run-test:$TEST" -- "$0" "${ORIG_ARGS[@]}"
 
 install_exit_trap

@@ -10,7 +10,7 @@
 
       "{{ snarkos_bin_path }}/snarkos" developer execute \
         --private-key "{{ txs_accounts[0].private_key }}" \
-        --query '{"state_root": "{{ txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
+        --query '{"state_root": "{{ resolved_txs_target_state_root }}", "height": {{ txs_target_consensus_version_height }}}' \
         credits.aleo transfer_public "{{ txs_accounts[1].address }}" 100u64 \
         --network {{ snarkos_network_int }} \
         --store "/tmp/transfer_public_tx${idx}.txt" \

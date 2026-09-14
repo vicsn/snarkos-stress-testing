@@ -8,25 +8,41 @@ The test suite uses a **decomposed script architecture** under `scripts/`:
 
 ```
 scripts/
-├── full_run.sh          # Master orchestrator — composes all steps
-├── bin/                  # Individual entrypoints (one job each)
-│   ├── provision.sh     # Terraform apply
-│   ├── setup.sh         # Build binary + Ansible setup
-│   ├── run-test.sh      # Run one test + collect logs
-│   ├── run-utility.sh   # Run one utility
-│   ├── collect-logs.sh  # Standalone log download + GCS upload
-│   ├── destroy.sh       # Terraform destroy
-│   └── select-test.sh   # Interactive test menu
-└── lib/                  # Shared libraries (sourced, never executed)
+├── full_run.sh           # Master orchestrator — composes all steps
+├── bin/                  # Pipeline entrypoints (one pueue job each)
+│   ├── provision.sh      # Terraform apply
+│   ├── setup.sh          # Build binary + Ansible setup
+│   ├── run-test.sh       # Run one test + collect logs
+│   ├── run-utility.sh    # Run one utility
+│   ├── collect-logs.sh   # Standalone log download + GCS upload
+│   ├── destroy.sh        # Terraform destroy
+│   └── fetch-job-log.sh  # Save one pueue task's output to a temp file
+└── lib/                  # Shared libraries + supporting scripts
     ├── common.sh         # Paths, helpers, Ansible wrappers, terraform
     ├── notify.sh         # Slack notifications (best-effort)
+    ├── stm.sh            # Delegation to the manager; also runnable directly
     ├── pueue.sh          # pueue job queue dispatch
-    └── slack_config.sh   # Load Slack creds from vars.yml / profile
+    ├── slack_config.sh   # Load Slack creds from vars.yml / profile
+    ├── select-test.sh    # Interactive test menu
+    └── unlock-state.sh   # Release a stale terraform state lock
 ```
 
-Jobs run via **pueue** by default (parallel pipeline with dependency DAG). Set `PUEUE_DISABLED=1` to run sequentially in the current shell.
+`bin/` holds the phases a run is made of; `lib/` holds the shared code plus the
+standalone helpers that are not part of a run.
 
-When `stress-testing-manager-ip.txt` exists at the repo root, `full_run.sh` **delegates over SSH** to the stress-testing-manager GCE instance.
+Every entrypoint that runs a phase — `full_run.sh` and each `bin/*.sh` except
+`fetch-job-log.sh` — shares the same preamble: parse args, **delegate to the
+stress-testing-manager** (`lib/stm.sh`), then **enqueue in pueue**
+(`lib/pueue.sh`), then do the work. So a command typed on your laptop is the
+same command that runs on the manager; the only difference is where it executes.
+
+Delegation resolves the manager from `stress-testing-manager-ip.txt` at the repo
+root and runs the identical command over SSH. It is skipped when already on the
+manager (GCE metadata `role=stress-testing-manager`) or when `STM_LOCAL=1` is
+set. Ansible targets private IPs, so a laptop run needs `STM_LOCAL=1` **and**
+VPC access — delegation is the normal path.
+
+Jobs run via **pueue** by default (parallel pipeline with dependency DAG). Set `PUEUE_DISABLED=1` to run sequentially in the current shell — that also makes a delegated command block until the remote job finishes.
 
 ---
 
@@ -51,13 +67,18 @@ scripts/full_run.sh --mode=light --tests=swap_ledgers,unbond_validators
 scripts/full_run.sh --mode=light --vars=vars --tests=prerelease
 
 # Include a utility
-scripts/full_run.sh --mode=light --tests=swap_ledgers --utility=pregenerate_transactions
+scripts/full_run.sh --mode=light --tests=none --utility=pregenerate_transactions \
+  --execution-tx-count=40 --deployment-tx-count=20 --num-validators=5
+
+# Load pregenerated transactions
+scripts/full_run.sh --mode=light --tests=load_saved_transactions \
+  --execution-tx-count=40 --deployment-tx-count=20 --tx-type=executions
 
 # Run sequentially (no pueue)
 PUEUE_DISABLED=1 scripts/full_run.sh --mode=light --tests=swap_ledgers
 
 # Force local execution (skip SSH delegation)
-FULL_RUN_LOCAL=1 scripts/full_run.sh --mode=light --tests=swap_ledgers
+STM_LOCAL=1 scripts/full_run.sh --mode=light --tests=swap_ledgers
 ```
 
 ### `full_run.sh` Options
@@ -68,12 +89,22 @@ FULL_RUN_LOCAL=1 scripts/full_run.sh --mode=light --tests=swap_ledgers
 | `--vars=NAME` | Ansible vars file basename without extension (default: `vars`) |
 | `--tests=SPEC` | Test(s) to run: `<name>`, `a,b,c`, `all`, or `prerelease` |
 | `--utility=NAME` | Run a utility after tests |
+| `--execution-tx-count=N` | Required for `pregenerate_transactions` and `load_saved_transactions` |
+| `--deployment-tx-count=N` | Required for `pregenerate_transactions` and `load_saved_transactions` |
+| `--num-validators=N` | Required for `pregenerate_transactions` (5 or 40). `load_saved_transactions` infers this from live validator IPs |
+| `--tx-type=TYPE` | Required for `load_saved_transactions`: `executions`, `deployments`, or `all` |
 
 ### Individual Entrypoints
 
-Each script under `scripts/bin/` handles one phase. When pueue is enabled, calling any of them **enqueues** the job and exits immediately.
+Each phase script under `scripts/bin/` handles one step. Invoke them exactly as you
+would `full_run.sh` — from your laptop, from the repo root of your checkout —
+and each one delegates itself to the manager. When pueue is enabled there, the
+job is **enqueued** and the call returns immediately; add `PUEUE_DISABLED=1` to
+block until it finishes.
 
 ```bash
+export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
+
 # Provision infrastructure
 scripts/bin/provision.sh --mode=light
 
@@ -83,21 +114,68 @@ scripts/bin/setup.sh --vars=vars
 # Run a single test (collects logs by default)
 scripts/bin/run-test.sh --test=swap_ledgers
 scripts/bin/run-test.sh --test=swap_ledgers --no-collect
+scripts/bin/run-test.sh --test=load_saved_transactions \
+  --execution-tx-count=40 --deployment-tx-count=20 --tx-type=executions
 
 # Run a utility
-scripts/bin/run-utility.sh --utility=pregenerate_transactions
+scripts/bin/run-utility.sh --utility=pregenerate_transactions \
+  --execution-tx-count=40 --deployment-tx-count=20 --num-validators=5
 
 # Collect logs standalone
 scripts/bin/collect-logs.sh --label=my_run
 
-# Interactive test selection menu
-scripts/bin/select-test.sh
-
 # Destroy infrastructure
 scripts/bin/destroy.sh
+
+# Interactive test selection menu (menu is local; each test delegates)
+scripts/lib/select-test.sh
 ```
 
 All entrypoints accept `--vars=NAME` to override the Ansible vars file.
+
+This is how you keep one devnet alive across several runs of the same test:
+`provision.sh` once, `setup.sh` once, then `run-test.sh` as often as you like,
+and `destroy.sh` when you are done. (`full_run.sh` always destroys at the end,
+so it is the wrong tool for that.)
+
+### Inspecting a run
+
+`scripts/lib/stm.sh` — the delegation library, also runnable on its own — takes
+one command to the manager, or opens a shell there. Use it to inspect a run,
+never to start one:
+
+```bash
+scripts/lib/stm.sh pueue status
+scripts/lib/stm.sh systemctl status pueued
+scripts/lib/stm.sh                  # interactive shell, cwd = this suite
+```
+
+A finished job's output is usually too long to read in the terminal, so
+`fetch-job-log.sh` saves it to a temp file and prints the path (task ids come
+from `pueue status`, and each enqueue echoes its own):
+
+```bash
+scripts/bin/fetch-job-log.sh --job=7          # prints e.g. /tmp/pueue-job-7-….log
+less "$(scripts/bin/fetch-job-log.sh --job=7)"
+```
+
+### Stuck state lock
+
+A run killed mid-apply (dropped SSH, cancelled job) leaves the GCS backend
+locked, and the next provision fails with `Error acquiring the state lock`.
+`scripts/lib/unlock-state.sh` releases it:
+
+```bash
+scripts/lib/unlock-state.sh         # inspect the holder, confirm, unlock
+scripts/lib/unlock-state.sh --force # no prompt (non-interactive)
+```
+
+Do not run `terraform force-unlock` by hand with the `ID:` from the error — the
+GCS backend wants the lock object's **generation number**, so the UUID fails
+with `Lock ID should be numerical value`. The script looks the generation up,
+prints who has held the lock and for how long, and refuses while a terraform
+process is still alive. Like every other entrypoint it delegates to the
+manager; `STM_LOCAL=1` runs it on your machine when SSH is down.
 
 ---
 
@@ -106,8 +184,8 @@ All entrypoints accept `--vars=NAME` to override the Ansible vars file.
 ### `full_run.sh` Pipeline
 
 ```
-1. Resolve manager IP (delegate over SSH if not on manager)
-2. Parse --mode, --vars, --tests, --utility
+1. Parse --mode, --vars, --tests, --utility
+2. Delegate to the manager over SSH (unless already there / STM_LOCAL=1)
 3. Discover tests from tests/*/
 4. Send Slack banner notification
 5. Enqueue pipeline via pueue:
@@ -116,6 +194,9 @@ All entrypoints accept `--vars=NAME` to override the Ansible vars file.
            └─> run-test:test1, run-test:test2, ... (parallel)
                  └─> destroy
 ```
+
+Steps 3-5 always happen on the manager. Each phase script follows the same
+shape: parse args → delegate → enqueue → work.
 
 ### `provision.sh`
 1. Select `.tfvars` profile based on `--mode`
@@ -170,7 +251,7 @@ Each mode uses a corresponding `.tfvars` profile:
 
 | Test | Description |
 |---|---|
-| `load_saved_transactions` | Submit pre-generated transactions (Rust tx_submitter) |
+| `load_saved_transactions` | Submit pre-generated transactions (Rust tx_submitter). Requires `--execution-tx-count`, `--deployment-tx-count`, `--tx-type`. Validator count is inferred from live IPs. |
 | `malicious_certificates` | Malicious certificate injection (has check.sh) |
 | `malicious_flood` | Flood attack simulation (has check.sh) |
 | `malicious_peer_response` | Malicious peer response handling |
@@ -208,7 +289,7 @@ Tests are **auto-discovered** by scanning `tests/*/` directories. No registratio
 | `download_logs_tx_runner` | Download logs from TX runner |
 | `download_logs_validators` | Download logs from validator nodes |
 | `download_prometheus_snapshot` | Download Prometheus data snapshot |
-| `pregenerate_transactions` | Pre-generate TX batches (deployment + execution) |
+| `pregenerate_transactions` | Pre-generate TX batches (deployment + execution). Requires `--execution-tx-count`, `--deployment-tx-count`, `--num-validators`. |
 | `reset_all` | Reset all nodes (stop + wipe state) |
 | `reset_clients` | Reset client nodes only |
 | `stop_all` | Stop all snarkOS services |
@@ -252,7 +333,7 @@ Utilities are **auto-discovered** by scanning `utils/*/` directories.
 | `RELEASE_BUCKET` | `provable-binaries-releases` | GCS bucket for snarkOS binaries |
 | `VARS` | `vars` | Ansible vars file basename |
 | `PUEUE_DISABLED` | _(unset)_ | Set to `1` to run jobs inline (no pueue) |
-| `FULL_RUN_LOCAL` | _(unset)_ | Set to `1` to skip SSH delegation to manager |
+| `STM_LOCAL` | _(unset)_ | Set to `1` to skip SSH delegation and run here instead |
 | `RUNNER_MANAGES_LOGS` | _(unset)_ | Set to `1` to skip automatic log collection |
 | `SLACK_TOKEN` | _(unset)_ | Slack bot token for notifications |
 | `SLACK_CHANNEL_ID` | _(unset)_ | Slack channel for notifications |

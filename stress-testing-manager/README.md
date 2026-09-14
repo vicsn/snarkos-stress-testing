@@ -350,15 +350,22 @@ The default workspace requires `--force` to prevent accidental teardown.
 
 See [snarkos-p2p-tests/README.md](../test_suites/snarkos-p2p-tests/README.md).
 
-From your laptop, `./scripts/full_run.sh` in that test suite delegates to
-this manager by default. It reads the STM's instance name and zone from
-the STM terraform outputs and SSHes over `gcloud compute ssh` — no
-`stress-testing-manager-ip.txt`, no static key files.
+From your laptop, `./scripts/full_run.sh` and every `./scripts/bin/*.sh`
+entrypoint in that test suite delegates to this manager by default — one
+shared implementation in `scripts/lib/stm.sh`. Each reads the manager's
+external IP from the repo-root `stress-testing-manager-ip.txt` (written by
+`terraform apply`) and runs the identical command over `ssh ubuntu@<ip>`.
+Your key must be listed in `external_ssh_users.auto.tfvars`.
+
+For an ad-hoc command or a shell on the manager, run that library directly:
+`./scripts/lib/stm.sh` (e.g. `./scripts/lib/stm.sh pueue status`). To read a
+finished job's output, `./scripts/bin/fetch-job-log.sh --job=<pueue task id>`
+saves it to a temp file on your machine and prints the path.
 
 To force a local run instead of delegating:
 
 ```bash
-FULL_RUN_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=prerelease
+STM_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=prerelease
 ```
 
 To retrieve the manager's public IP:

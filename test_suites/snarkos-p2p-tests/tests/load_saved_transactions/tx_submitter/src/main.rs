@@ -8,14 +8,11 @@ use reqwest::Client;
 use serde_json::Value;
 use walkdir::WalkDir;
 
-use aws_config::BehaviorVersion;
-use aws_sdk_s3::{types::Object, Client as S3Client};
-
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write as IoWrite, BufWriter};
+use std::io::{BufWriter, Read, Write as IoWrite};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -47,24 +44,24 @@ static SEND_LOG_LOCK: Lazy<Mutex<BufWriter<File>>> = Lazy::new(|| {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    // Args: <network> <s3_bucket> <s3_prefix> <exec_cnt> <deploy_cnt> <target_consensus_version> <target_height>
+    // Args: <network> <gcs_bucket> <gcs_prefix> <exec_cnt> <deploy_cnt> <target_consensus_version> <target_height> <type>
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 8 {
-        eprintln!("Usage: tx_submitter <network> <s3_bucket> <s3_prefix> <exec_cnt> <deploy_cnt> <target_consensus_version> <target_height>");
+    if args.len() < 9 {
+        eprintln!("Usage: tx_submitter <network> <gcs_bucket> <gcs_prefix> <exec_cnt> <deploy_cnt> <target_consensus_version> <target_height> <executions|deployments|all>");
         std::process::exit(1);
     }
     let network = &args[1];
-    let s3_bucket = &args[2];
-    let s3_prefix = &args[3];
+    let gcs_bucket = &args[2];
+    let gcs_prefix = &args[3];
     let exec_cnt = &args[4];
     let deploy_cnt = &args[5];
     let target_consensus_version: i64 = args[6].parse().context("bad consensus version")?;
     let target_height: i64 = args[7].parse().context("bad height")?;
-    let load_saved_type = args.get(8).map(|s| s.as_str()).unwrap_or("all");
+    let load_saved_type = args[8].as_str();
 
     println!("=== TX Submitter (Rust) ===");
     println!(
-        "Args: network={network}, bucket={s3_bucket}, prefix={s3_prefix}, exec_cnt={exec_cnt}, deploy_cnt={deploy_cnt}, target_consensus_version={target_consensus_version}, target_height={target_height}"
+        "Args: network={network}, bucket={gcs_bucket}, prefix={gcs_prefix}, exec_cnt={exec_cnt}, deploy_cnt={deploy_cnt}, target_consensus_version={target_consensus_version}, target_height={target_height}, type={load_saved_type}"
     );
 
     // Fresh logs each run.
@@ -104,13 +101,10 @@ async fn main() -> Result<()> {
     }
     std::fs::create_dir_all(&tx_dir).ok();
 
-    // S3 download:
-    let cfg = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let s3 = S3Client::new(&cfg);
+    // GCS download (via gcloud, same as pregenerate_transactions):
     download_exact_zip(
-        &s3,
-        s3_bucket,
-        s3_prefix,
+        gcs_bucket,
+        gcs_prefix,
         network,
         ips.len(),
         exec_cnt,
@@ -118,8 +112,7 @@ async fn main() -> Result<()> {
         target_consensus_version,
         target_height,
         &archive_path,
-    )
-    .await?;
+    )?;
     unzip_to(&archive_path, &tx_dir)?;
 
     // Read TXs into memory. All txs are in memory to not slow down when loading them file by file,
@@ -139,7 +132,9 @@ async fn main() -> Result<()> {
             exec_lines
         }
         "deployments" => {
-            println!("Using only deployment transactions (load_saved_transactions_type=deployments)");
+            println!(
+                "Using only deployment transactions (load_saved_transactions_type=deployments)"
+            );
             deploy_lines
         }
         "all" | "" => {
@@ -150,14 +145,10 @@ async fn main() -> Result<()> {
             v
         }
         other => {
-            eprintln!(
-                "Unknown load_saved_transactions_type='{}'. Defaulting to 'all' (deployments + executions).",
+            return Err(anyhow!(
+                "Unknown load_saved_transactions_type='{}'. Expected executions, deployments, or all.",
                 other
-            );
-            let mut v = Vec::with_capacity(deploy_lines.len() + exec_lines.len());
-            v.extend(deploy_lines);
-            v.extend(exec_lines);
-            v
+            ));
         }
     };
 
@@ -190,7 +181,7 @@ async fn main() -> Result<()> {
     let send_client = Client::builder()
         .http2_adaptive_window(true)
         .pool_max_idle_per_host(std::cmp::min(per_ip_limit, 64)) // Tried with 128, but again am
-                                                                 // getting the too many files..
+        // getting the too many files..
         .pool_idle_timeout(Some(Duration::from_secs(10)))
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(6))
@@ -199,13 +190,14 @@ async fn main() -> Result<()> {
 
     // Start block scanner (concurrent), baseline at current latest height
     let first_ip = ips[0].trim().to_string();
-    let start_height = match get_latest_height(&scan_client, &first_ip, network).await {
-        Ok(h) => h, // Modify here manually to start from a specific block, if needed.
-        Err(e) => {
-            eprintln!("Failed to fetch latest height, defaulting to 1: {e}");
-            1
-        }
-    };
+    let start_height = get_latest_height(&scan_client, &first_ip, network)
+        .await
+        .with_context(|| {
+            format!(
+                "cannot reach validator REST at http://{first_ip}:3030/{network}/block/height/latest \
+                 (ip_addresses.txt must list VPC private IPs reachable from the STM)"
+            )
+        })?;
     println!("Scanner baseline latest_height={start_height}");
 
     let scanner_expected_total = expected_ids.len();
@@ -257,6 +249,12 @@ async fn main() -> Result<()> {
         (all_lines.len() as f64 / dt) as usize
     );
 
+    if ok_count == 0 && !all_lines.is_empty() {
+        return Err(anyhow!(
+            "all {err_count} transaction broadcasts failed — none reached a validator"
+        ));
+    }
+
     if let (Some(f), Some(l)) = (first_ok, last_ok) {
         let window = l - f;
         println!(
@@ -289,8 +287,25 @@ fn read_ip_addresses(path: &Path) -> Result<Vec<String>> {
     Ok(ips)
 }
 
-async fn download_exact_zip(
-    s3: &S3Client,
+fn gcloud_storage(args: &[&str]) -> Result<std::process::Output> {
+    std::process::Command::new("gcloud")
+        .arg("storage")
+        .args(args)
+        .output()
+        .context("failed to run `gcloud storage` — is gcloud installed and authenticated for GCS?")
+}
+
+fn gcs_object_name(item: &Value) -> Option<&str> {
+    item.get("name").and_then(|v| v.as_str())
+}
+
+fn gcs_object_timestamp(item: &Value) -> Option<&str> {
+    item.get("update_time")
+        .or_else(|| item.get("creation_time"))
+        .and_then(|v| v.as_str())
+}
+
+fn download_exact_zip(
     bucket: &str,
     prefix: &str,
     network: &str,
@@ -304,65 +319,59 @@ async fn download_exact_zip(
     let want_prefix =
         format!("{prefix}/transactions-{network}-{num_validators}val-{target_consensus_version}-{target_height}-");
     let want_suffix = format!("-{exec_cnt}-{deploy_cnt}.zip");
+    let list_url = format!("gs://{bucket}/{prefix}/transactions-{network}-{num_validators}val-*");
 
-    println!("S3 search s3://{bucket}/{prefix} for exact archive…");
+    println!("GCS search {list_url} for exact archive…");
 
-    let mut token: Option<String> = None;
-    let mut best: Option<Object> = None;
+    let output = gcloud_storage(&["objects", "list", &list_url, "--format=json"])?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!("GCS list failed for {list_url}: {stderr}"));
+    }
 
-    loop {
-        let mut req = s3.list_objects_v2().bucket(bucket).prefix(format!(
-            "{prefix}/transactions-{network}-{num_validators}val-"
-        ));
-        if let Some(t) = &token {
-            req = req.continuation_token(t);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let items: Vec<Value> = if stdout.trim().is_empty() {
+        Vec::new()
+    } else {
+        serde_json::from_str(&stdout).context("parsing `gcloud storage objects list` JSON")?
+    };
+
+    let mut best_key: Option<String> = None;
+    let mut best_time: Option<String> = None;
+    for item in &items {
+        let Some(key) = gcs_object_name(item) else {
+            continue;
+        };
+        if !(key.starts_with(&want_prefix) && key.ends_with(&want_suffix)) {
+            continue;
         }
-        let resp = req.send().await?;
-
-        for o in resp.contents() {
-            let Some(key) = o.key() else { continue };
-            if key.starts_with(&want_prefix) && key.ends_with(&want_suffix) {
-                best = match best.take() {
-                    None => Some(o.clone()),
-                    Some(prev) => {
-                        let newer = match (o.last_modified(), prev.last_modified()) {
-                            (Some(a), Some(b)) => a > b,
-                            (Some(_), None) => true,
-                            _ => false,
-                        };
-                        if newer {
-                            Some(o.clone())
-                        } else {
-                            Some(prev)
-                        }
-                    }
-                };
-            }
-        }
-
-        token = resp.next_continuation_token().map(|s| s.to_string());
-        if resp.is_truncated() != Some(true) {
-            break;
+        let ts = gcs_object_timestamp(item).map(str::to_string);
+        let newer = match (&ts, &best_time) {
+            (Some(a), Some(b)) => a > b,
+            (Some(_), None) => true,
+            _ => best_key.is_none(),
+        };
+        if newer {
+            best_time = ts;
+            best_key = Some(key.to_string());
         }
     }
 
-    let chosen = best.ok_or_else(|| {
+    let key = best_key.ok_or_else(|| {
         anyhow!(
-            "No zip matched height={target_height} for prefix='{}*' suffix='{}'",
-            want_prefix,
-            want_suffix
+            "No zip matched gs://{bucket}/{want_prefix}*{want_suffix}. \
+             Generate one with the pregenerate_transactions utility, or confirm the validator count ({num_validators}) matches an existing archive."
         )
     })?;
-    let key = chosen
-        .key()
-        .ok_or_else(|| anyhow!("Chosen object has no key"))?;
-    println!("Chosen: s3://{bucket}/{key}");
+    let uri = format!("gs://{bucket}/{key}");
+    println!("Chosen: {uri}");
 
-    // Download to file with Tokio I/O
-    let body = s3.get_object().bucket(bucket).key(key).send().await?;
-    let mut reader = body.body.into_async_read();
-    let mut out = tokio::fs::File::create(out_path).await?;
-    tokio::io::copy(&mut reader, &mut out).await?;
+    let dest = out_path.to_string_lossy();
+    let output = gcloud_storage(&["cp", &uri, dest.as_ref()])?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!("GCS download failed for {uri}: {stderr}"));
+    }
     println!("Downloaded to {:?}", out_path);
     Ok(())
 }
@@ -523,12 +532,20 @@ async fn blast_all(
     start: Instant,
 ) -> (usize, usize, Option<f64>, Option<f64>) {
     let overall = Arc::new(Semaphore::new(overall_limit));
-    let per_ip: Vec<Arc<Semaphore>> =
-        ips.iter().map(|_| Arc::new(Semaphore::new(per_ip_limit))).collect();
+    let per_ip: Vec<Arc<Semaphore>> = ips
+        .iter()
+        .map(|_| Arc::new(Semaphore::new(per_ip_limit)))
+        .collect();
 
     let urls: Vec<String> = ips
         .iter()
-        .map(|ip| format!("http://{}:3030/{}/transaction/broadcast", ip.trim(), network))
+        .map(|ip| {
+            format!(
+                "http://{}:3030/{}/transaction/broadcast",
+                ip.trim(),
+                network
+            )
+        })
         .collect();
 
     let first_ok = Arc::new(Mutex::new(None::<f64>));
@@ -590,7 +607,11 @@ async fn blast_all(
                 Ok(r) => {
                     let status = r.status();
                     let body = r.text().await.unwrap_or_default();
-                    let snippet = if body.len() > 200 { &body[..200] } else { &body };
+                    let snippet = if body.len() > 200 {
+                        &body[..200]
+                    } else {
+                        &body
+                    };
                     slogf(&format!(
                         "[Exec] HTTP error {} for {} (body: {:?})",
                         status, url, snippet
@@ -604,7 +625,10 @@ async fn blast_all(
                         err_chain.push_str(&format!("; caused by: {s}"));
                         src = s.source();
                     }
-                    slogf(&format!("[Exec] Network error for {} -> {}", url, err_chain));
+                    slogf(&format!(
+                        "[Exec] Network error for {} -> {}",
+                        url, err_chain
+                    ));
                     Err(anyhow!(err_chain))
                 }
             }

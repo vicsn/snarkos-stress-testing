@@ -4,8 +4,19 @@
   vars:
     tx_submitter_dir: "{{ playbook_dir }}/tx_submitter"
     tx_submitter_bin: "{{ tx_submitter_dir }}/target/release/tx_submitter"
-    load_saved_tx_type: "{{ load_saved_transactions_type | default('all') }}"
   tasks:
+    - name: Assert required runtime flags
+      ansible.builtin.assert:
+        that:
+          - pregeneration_execution_tx_count is defined
+          - pregeneration_deployment_tx_count is defined
+          - load_saved_transactions_type is defined
+          - load_saved_transactions_type in ['executions', 'deployments', 'all']
+        fail_msg: >-
+          load_saved_transactions requires --execution-tx-count=N,
+          --deployment-tx-count=N, and --tx-type=executions|deployments|all.
+          Validator count is inferred from ip_addresses.txt.
+
     - name: Ensure Rust toolchain (rustup) is installed
       shell: |
         set -o pipefail
@@ -37,8 +48,8 @@
         if [ ! -x "{{ tx_submitter_bin }}" ]; then
           cargo build --release
         else
-          # Rebuild if sources are newer than binary
-          if find src -type f -newer "{{ tx_submitter_bin }}" | grep -q .; then
+          # Rebuild if sources or Cargo metadata are newer than binary
+          if find src Cargo.toml Cargo.lock -type f -newer "{{ tx_submitter_bin }}" 2>/dev/null | grep -q .; then
             cargo build --release
           fi
         fi
@@ -58,7 +69,7 @@
           "{{ pregeneration_deployment_tx_count }}" \
           "{{ txs_target_consensus_version }}" \
           "{{ txs_target_consensus_version_height }}" \
-          "{{ load_saved_tx_type }}"
+          "{{ load_saved_transactions_type }}"
       args:
         executable: /bin/bash
         chdir: "{{ tx_submitter_dir }}"

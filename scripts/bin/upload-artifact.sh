@@ -31,6 +31,8 @@ tar czf "/tmp/${TARBALL}" \
   --exclude='*.tfstate' \
   --exclude='*.tfstate.backup' \
   --exclude='log_files' \
+  --exclude='ip_addresses.txt' \
+  --exclude='client_ip_addresses.txt' \
   --exclude='graphify-out' \
   --exclude='.agents' \
   --exclude='.codegraph' \

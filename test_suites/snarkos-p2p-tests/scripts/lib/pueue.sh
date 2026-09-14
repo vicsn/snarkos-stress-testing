@@ -80,6 +80,8 @@ run_pipeline() {
   local mode="$1" vars="$2" util="$3" tests_arg="$4"; shift 4
   local -a run_tests=("$@")
   local bin="$BIN"
+  local -a tx_flags=()
+  tx_run_flag_args tx_flags
 
   if ! pueue_enabled; then
     local rc=0
@@ -87,8 +89,10 @@ run_pipeline() {
       "$bin/provision.sh" --mode="$mode" --vars="$vars"
       "$bin/setup.sh" --vars="$vars" --mode="$mode" --tests="$tests_arg"
       local t
-      for t in "${run_tests[@]}"; do "$bin/run-test.sh" --test="$t" --vars="$vars"; done
-      [[ -n "$util" ]] && "$bin/run-utility.sh" --utility="$util" --vars="$vars"
+      for t in "${run_tests[@]}"; do
+        "$bin/run-test.sh" --test="$t" --vars="$vars" ${tx_flags[@]+"${tx_flags[@]}"}
+      done
+      [[ -n "$util" ]] && "$bin/run-utility.sh" --utility="$util" --vars="$vars" ${tx_flags[@]+"${tx_flags[@]}"}
     ) || rc=$?
     "$bin/destroy.sh" || true
     [[ $rc -eq 0 ]] || return "$rc"
@@ -108,13 +112,14 @@ run_pipeline() {
 
   local -a test_ids=() t
   for t in "${run_tests[@]}"; do
-    test_ids+=("$(pueue_enqueue "run-test:$t" --after "$setup" -- "$bin/run-test.sh" "--test=$t" "--vars=$vars")")
+    test_ids+=("$(pueue_enqueue "run-test:$t" --after "$setup" -- \
+      "$bin/run-test.sh" "--test=$t" "--vars=$vars" ${tx_flags[@]+"${tx_flags[@]}"})")
   done
   ((${#test_ids[@]})) && pipeline_ids+=("${test_ids[@]}")
 
   local util_id=""
   [[ -n "$util" ]] && util_id="$(pueue_enqueue "run-utility:$util" --after "$setup" \
-    -- "$bin/run-utility.sh" "--utility=$util" "--vars=$vars")"
+    -- "$bin/run-utility.sh" "--utility=$util" "--vars=$vars" ${tx_flags[@]+"${tx_flags[@]}"})"
   [[ -n "$util_id" ]] && pipeline_ids+=("$util_id")
 
   # Teardown group: start now, block until pipeline ids are terminal (success,

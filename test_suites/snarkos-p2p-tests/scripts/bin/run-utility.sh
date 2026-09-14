@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # bin/run-utility.sh --utility=NAME [--vars=NAME]
+#   pregenerate_transactions also requires:
+#     --execution-tx-count=N --deployment-tx-count=N --num-validators=N
 set -euo pipefail
 ORIG_ARGS=("$@")
 # shellcheck source=/dev/null
@@ -10,10 +12,14 @@ for arg in "$@"; do
   case "$arg" in
     --utility=*) UTIL="${arg#*=}" ;;
     --vars=*)    VARS="${arg#*=}"; export VARS ;;
-    *) die "Unknown argument: $arg" ;;
+    *) parse_tx_run_flag "$arg" || die "Unknown argument: $arg" ;;
   esac
 done
 [[ -n "$UTIL" ]] || die "--utility=NAME is required."
+if [[ "$UTIL" == "pregenerate_transactions" ]]; then
+  require_pregenerate_transactions_flags
+fi
+stm_dispatch_self ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 pueue_dispatch_self "run-utility:$UTIL" -- "$0" "${ORIG_ARGS[@]}"
 
 install_exit_trap

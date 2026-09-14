@@ -79,7 +79,7 @@ Ansible connects as `ansible_user=ubuntu` with
 `ansible_ssh_private_key_file=/home/ubuntu/snarkos-stress-testing/devnet-key`
 (absolute path resolved on the STM or builder host that runs `ansible-playbook`).
 
-**Local runs (`FULL_RUN_LOCAL=1`) require an override:** the absolute path does
+**Local runs (`STM_LOCAL=1`) require an override:** the absolute path does
 not exist on macOS. Pass `--extra-vars ansible_ssh_private_key_file=<repo>/devnet-key`
 (or symlink at that path) when invoking Ansible from the laptop.
 
@@ -92,8 +92,8 @@ SSH target (`ansible_host: networkInterfaces[0].networkIP`).
 
 Because the inventory targets private IPs, Ansible must run from a host inside
 the shared VPC (the stress-testing-manager, the ephemeral builder, or a VM in
-the same subnet). Laptop runs (`FULL_RUN_LOCAL=1`) cannot reach the private IPs
-directly — use manager delegation instead, or SSH-tunnel from the STM.
+the same subnet). Laptop runs (`STM_LOCAL=1`) cannot reach the private IPs
+directly — use the default manager delegation instead, or SSH-tunnel from the STM.
 
 GCE labels create dynamic groups. Example filters and groups:
 
@@ -168,7 +168,7 @@ The devnet name can be set via the `DEVNET_NAME` env variable (for example `DEVN
 By default for local test runs it is `snarkos-p2p-tests` and for automatic pre-release tests it is `prerelease-devnet`.
 Alternatively the TF var `devnet_name` can be edited to change it too.
 
-All work goes through **pueue** by default (`lib/pueue.sh`). Each `scripts/bin/` entrypoint self-enqueues unless `PUEUE_DISABLED=1`. Set `PUEUE_DISABLED=1` to run inline in the current shell.
+Every phase entrypoint (`full_run.sh` and each `scripts/bin/*.sh` except the read-only `fetch-job-log.sh`) runs the same preamble: parse args, **delegate to the Stress Testing Manager** (`lib/stm.sh`), then **self-enqueue in pueue** (`lib/pueue.sh`), then do the work. Whatever you type on your laptop is what runs on the manager. `PUEUE_DISABLED=1` runs jobs inline instead of queueing them, which also makes a delegated command block until the remote job is done.
 
 
 ### Full run
@@ -185,30 +185,23 @@ Use `--tests=prerelease` or `--tests=t1,t2` to narrow the test list. A failed pr
 
 #### Stress Testing Manager delegation
 
-`full_run.sh` can run on the shared [Stress Testing Manager](../../stress-testing-manager/README.md) instead of your laptop. By default it delegates over SSH to the manager using a repo-root file, `stress-testing-manager-ip.txt` (gitignored):
+Everything runs on the shared [Stress Testing Manager](../../stress-testing-manager/README.md), because the Ansible inventory targets private IPs inside the shared VPC. `lib/stm.sh` implements this once and every entrypoint calls it — there is no separate "delegated" command to remember.
 
-| Situation | Behaviour |
-|-----------|-----------|
-| IP file **missing** | Runs `stress-testing-manager/infrastructure/tf_stack.sh ip`, writes the IP to `stress-testing-manager-ip.txt`, then **delegates** to that host. |
-| IP file **present** | Delegates immediately (same as above). |
+The manager is resolved from the repo-root file `stress-testing-manager-ip.txt` (gitignored, written by the STM `terraform apply`). If it is missing, delegation fails and tells you to run `stress-testing-manager/infrastructure/tf_stack.sh provision` (`tf_stack.sh ip` prints the same IP). The manager must be provisioned and set up first (`tf_stack.sh provision` + `setup`; see the manager README). To point at a different manager, replace the file contents.
 
-The manager must be provisioned and set up first (`tf_stack.sh provision` + `setup`; see the manager README). `tf_stack.sh ip` must succeed when the IP file is first created.
+Delegation is skipped in exactly two cases: this host **is** the manager (GCE metadata `role=stress-testing-manager`), or `STM_LOCAL=1` is set.
 
-You can still `export SLACK_TOKEN` and `SLACK_CHANNEL_ID` locally to override. Set `NOTIFY_SLACK_DISABLED=1` to turn notifications off.
+Forwarded into the remote command when set: `RUN_ID`, Slack/pueue settings, `DEVNET_NAME`, `OWNER`, and the bucket/region vars. You can `export SLACK_TOKEN` and `SLACK_CHANNEL_ID` locally to override what the manager resolves for itself; `NOTIFY_SLACK_DISABLED=1` turns notifications off.
 
-Forwarded explicitly when set: `RUN_ID`, Slack/pueue settings, `DEVNET_NAME`, `OWNER`, and related bucket/region env vars.
-
-To run **locally** on your machine (requires pueue, or `PUEUE_DISABLED=1`):
+To run on your own machine instead (needs pueue or `PUEUE_DISABLED=1`, plus VPC access for Ansible):
 
 ```bash
-FULL_RUN_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=prerelease
+STM_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=prerelease
 ```
-
-To point at a different manager, replace the file contents or delete it and re-run so `tf_stack.sh ip` repopulates it.
 
 ### Individual jobs
 
-Once `RUN_ID` is exported, pueue snapshots it at enqueue time — every job in the run shares the same GCS prefix. Invoke a bin script directly; it enqueues itself:
+Once `RUN_ID` is exported, pueue snapshots it at enqueue time — every job in the run shares the same GCS prefix. Invoke a bin script directly; it delegates, then enqueues itself:
 
 ```bash
 export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
@@ -217,10 +210,28 @@ export RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
 ./scripts/bin/run-test.sh --test=prerelease_foo
 ./scripts/bin/run-utility.sh --utility=analyze_logs
 ./scripts/bin/destroy.sh
-pueue status
+./scripts/lib/stm.sh pueue status
 ```
 
-Run inline (no pueue): `PUEUE_DISABLED=1 ./scripts/bin/run-test.sh --test=foo`.
+Run inline (no pueue): `PUEUE_DISABLED=1 ./scripts/bin/run-test.sh --test=foo`. Inline is what you want when driving the phases yourself, since each command then returns only once the remote job has finished.
+
+This is also how you re-run one test against a devnet you keep alive: `provision.sh` and `setup.sh` once, then `run-test.sh` as many times as you like, then `destroy.sh`. Use `run-utility.sh --utility=reset_all` between iterations for a clean ledger. `full_run.sh` always ends with `destroy`, so it cannot hold a devnet open.
+
+#### Inspecting a run
+
+`lib/stm.sh` doubles as the one-off escape hatch — run it directly for a command on the manager, or a shell there:
+
+```bash
+./scripts/lib/stm.sh pueue status
+./scripts/lib/stm.sh                 # interactive shell in this suite's directory
+```
+
+For a job's output, `fetch-job-log.sh` pulls it into a temp file on your machine and prints the path, which beats scrolling a long log over SSH:
+
+```bash
+./scripts/bin/fetch-job-log.sh --job=7        # task id from `pueue status`
+less "$(./scripts/bin/fetch-job-log.sh --job=7)"
+```
 
 ### Slack notifications
 
@@ -356,9 +367,9 @@ Download all logs, analyze, and upload to GCS:
 
 ## Destroying the stress testing infrastructure locally
 
-When runs are **delegated** to the Stress Testing Manager (see [Full run](#stress-testing-manager-delegation) above), cleanup is handled on the manager via the normal `destroy` job in the pipeline.
+With `full_run.sh`, cleanup is handled on the manager via the normal `destroy` job at the end of the pipeline.
 
-When running **locally** with `FULL_RUN_LOCAL=1`, destroy manually when ready (with the run's `RUN_ID` still exported):
+When you drive the phases yourself (or run with `STM_LOCAL=1`), destroy manually when ready (with the run's `RUN_ID` still exported):
 
 ```bash
 ./scripts/bin/destroy.sh
@@ -366,21 +377,42 @@ When running **locally** with `FULL_RUN_LOCAL=1`, destroy manually when ready (w
 
 ## Troubleshooting
 
+### `Error acquiring the state lock`
+
+A run killed mid-apply leaves the GCS backend locked. Release it with:
+
+```bash
+./scripts/lib/unlock-state.sh
+```
+
+It resolves the lock object's generation number (the value the GCS backend
+wants — the `ID:` UUID in terraform's error is rejected with `Lock ID should be
+numerical value`), shows who holds the lock and how long they have held it, and
+refuses while terraform is still running. It delegates to the manager like
+every other entrypoint, so it uses the terraform working directory that is
+already initialised against this backend; `STM_LOCAL=1` runs it locally when
+SSH is down. Add `--force` for non-interactive use.
+
+A local run may hit `Backend configuration changed` if your checkout's
+`terraform/.terraform/` was last initialised against a different backend. Fix
+it with `terraform -chdir=terraform init -reconfigure` (use `-migrate-state`
+instead only if you have local state worth moving).
+
 ### Ansible inventory
 
 The dynamic inventory uses private IPs. Run inventory commands from the
 stress-testing-manager (or another host inside the shared VPC), not your laptop.
 
-SSH to the manager:
+Open a shell on the manager:
 
 ```bash
-ssh ubuntu@stress-testing-manager
+./scripts/lib/stm.sh
 ```
 
 Move to the playbooks directory (where `ansible.cfg` points at the GCP inventory):
 
 ```bash
-cd ~/snarkos-stress-testing/test_suites/snarkos-p2p-tests/playbooks
+cd playbooks
 ```
 
 List hosts by devnet:

@@ -15,6 +15,7 @@ for arg in "$@"; do
   esac
 done
 [[ -n "$MODE" ]] || die "--mode=light|heavy|prerelease is required."
+stm_dispatch_self ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 pueue_dispatch_self "provision:$MODE" -- "$0" "${ORIG_ARGS[@]}"
 
 install_exit_trap

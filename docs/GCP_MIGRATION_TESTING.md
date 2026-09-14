@@ -550,7 +550,7 @@ terraform destroy \
 `full_run.sh` orchestrates the entire pipeline:
 provision → setup → run tests → collect logs → destroy.
 
-It auto-delegates to the stress-testing-manager via SSH unless `FULL_RUN_LOCAL=1`.
+It auto-delegates to the stress-testing-manager via SSH unless `STM_LOCAL=1`.
 Jobs enqueue via pueue by default; `PUEUE_DISABLED=1` runs sequentially inline.
 
 ### Pre-flight bugs fixed (2026-07-07)
@@ -603,7 +603,7 @@ Export Slack channel before any run:
 export SLACK_CHANNEL_ID="C07JA6U0TV5"   # #pagerduty-alerts-testing
 ```
 
-All test commands below include `FULL_RUN_LOCAL=1` explicitly to skip manager delegation.
+All test commands below include `STM_LOCAL=1` explicitly to skip manager delegation.
 VPC + subnet: STM-owned, referenced via `terraform_remote_state` (bucket `tfstate-snarkos-stress-testing`, prefix `stress-testing-manager`). SRT reuses STM's subnet (`10.41.0.0/16`) directly — it no longer creates or imports its own subnet.
 Vars file: `playbooks/vars.MIKEN.yml` (pass `--vars=vars.MIKEN`).
 
@@ -614,7 +614,7 @@ Validates the full pipeline end-to-end in a single shell. Start here.
 ```bash
 cd test_suites/snarkos-p2p-tests
 
-PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 \
+PUEUE_DISABLED=1 STM_LOCAL=1 \
   ./scripts/full_run.sh --mode=light --vars=vars.MIKEN --tests=swap_ledgers
 ```
 
@@ -645,7 +645,7 @@ cd test_suites/snarkos-p2p-tests
 # Ensure pueue daemon is running
 pueued -d 2>/dev/null || true
 
-FULL_RUN_LOCAL=1 \
+STM_LOCAL=1 \
   ./scripts/full_run.sh --mode=light --vars=vars.MIKEN --tests=swap_ledgers
 ```
 
@@ -671,7 +671,7 @@ pueue log <id>        # specific job
 ### 5.3 Test 3: Multiple tests
 
 ```bash
-PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 \
+PUEUE_DISABLED=1 STM_LOCAL=1 \
   ./scripts/full_run.sh --mode=light --vars=vars.MIKEN --tests=swap_ledgers,restart_validators
 ```
 
@@ -685,7 +685,7 @@ PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 \
 ### 5.4 Test 4: All tests
 
 ```bash
-FULL_RUN_LOCAL=1 \
+STM_LOCAL=1 \
   ./scripts/full_run.sh --mode=light --vars=vars.MIKEN --tests=all
 ```
 
@@ -698,7 +698,7 @@ FULL_RUN_LOCAL=1 \
 cp playbooks/vars.MIKEN.yml playbooks/test_vars.yml
 # Edit test_vars.yml as needed
 
-PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 \
+PUEUE_DISABLED=1 STM_LOCAL=1 \
   ./scripts/full_run.sh --mode=light --vars=test_vars --tests=swap_ledgers
 ```
 
@@ -728,7 +728,7 @@ PUEUE_DISABLED=1 ./scripts/bin/run-utility.sh --utility=check_network_is_advanci
 PUEUE_DISABLED=1 ./scripts/bin/collect-logs.sh --label=manual_check --vars=vars.MIKEN
 
 # Interactive test picker (TTY only)
-./scripts/bin/select-test.sh
+./scripts/lib/select-test.sh
 
 # Destroy
 PUEUE_DISABLED=1 ./scripts/bin/destroy.sh
@@ -778,14 +778,14 @@ gcloud logging read \
 
 ### 5.9 Test 8: Manager delegation
 
-When not running on the stress-testing-manager and `FULL_RUN_LOCAL` is unset,
+When not running on the stress-testing-manager and `STM_LOCAL` is unset,
 `full_run.sh` resolves the manager IP and delegates via SSH.
 
 ```bash
 # Ensure manager IP file exists (or let full_run.sh auto-populate from tf_stack.sh)
 cat stress-testing-manager-ip.txt
 
-# Run without FULL_RUN_LOCAL — triggers SSH delegation
+# Run without STM_LOCAL — triggers SSH delegation
 ./scripts/full_run.sh --mode=light --tests=swap_ledgers
 ```
 
@@ -801,7 +801,7 @@ cat stress-testing-manager-ip.txt
 ### 5.10 Test 9: Heavy profile
 
 ```bash
-FULL_RUN_LOCAL=1 \
+STM_LOCAL=1 \
   ./scripts/full_run.sh --mode=heavy --vars=vars.MIKEN --tests=prerelease
 ```
 
@@ -932,8 +932,8 @@ Each workflow from [`COMMON_WORKFLOWS.md`](./COMMON_WORKFLOWS.md) mapped to its 
 
 | # | Workflow | How to Test | Result |
 |---|----------|-------------|--------|
-| 10 | **`full_run.sh` local (single test)** | `PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=swap_ledgers` | 🔲 Needs live infra |
-| 11 | **`full_run.sh` local (all tests)** | `FULL_RUN_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=all` | 🔲 Needs live infra |
+| 10 | **`full_run.sh` local (single test)** | `PUEUE_DISABLED=1 STM_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=swap_ledgers` | 🔲 Needs live infra |
+| 11 | **`full_run.sh` local (all tests)** | `STM_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=all` | 🔲 Needs live infra |
 | 12 | **`full_run.sh` manager delegation** | `./scripts/full_run.sh --mode=light --tests=swap_ledgers` (auto-SSH to manager) | 🔲 Needs manager + live infra |
 | 13 | **`provision.sh`** | `PUEUE_DISABLED=1 ./scripts/bin/provision.sh --mode=light` | 🔲 Needs live infra; code review ✅ |
 | 14 | **`setup.sh`** (binary cache hit) | `PUEUE_DISABLED=1 ./scripts/bin/setup.sh` — binary exists in GCS | 🔲 Needs live infra; code review ✅ |
@@ -942,7 +942,7 @@ Each workflow from [`COMMON_WORKFLOWS.md`](./COMMON_WORKFLOWS.md) mapped to its 
 | 17 | **`run-utility.sh`** | `PUEUE_DISABLED=1 ./scripts/bin/run-utility.sh --utility=check_network_is_advancing` | 🔲 Needs live infra |
 | 18 | **`collect-logs.sh`** | `PUEUE_DISABLED=1 ./scripts/bin/collect-logs.sh --label=test_run` | 🔲 Needs live infra; code review ✅ |
 | 19 | **`destroy.sh`** | `PUEUE_DISABLED=1 ./scripts/bin/destroy.sh` | 🔲 Needs live infra |
-| 20 | **`select-test.sh`** (interactive) | `./scripts/bin/select-test.sh` — test menu renders, selection works | 🔲 Needs live infra |
+| 20 | **`select-test.sh`** (interactive) | `./scripts/lib/select-test.sh` — test menu renders, selection works | 🔲 Needs live infra |
 | 21 | **Add a new test** | `mkdir tests/my_test && cat > tests/my_test/run_test.yml` → auto-discovered | ✅ Filesystem-based, cloud-agnostic |
 
 ### Utilities
@@ -993,10 +993,10 @@ Each workflow from [`COMMON_WORKFLOWS.md`](./COMMON_WORKFLOWS.md) mapped to its 
 ### Remaining for full green
 
 1. **Live infrastructure test** — execute `full_run.sh` end-to-end on real GCP:
-   - `PUEUE_DISABLED=1 FULL_RUN_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=swap_ledgers`
+   - `PUEUE_DISABLED=1 STM_LOCAL=1 ./scripts/full_run.sh --mode=light --tests=swap_ledgers`
    - Validates: provision → setup (binary build/cache) → test execution → log collection → destroy
 2. **Individual script tests** — run each `scripts/bin/` entrypoint against live infra to confirm pueue integration, GCS uploads, and Ansible inventory resolution
-3. **Manager delegation** — test `full_run.sh` without `FULL_RUN_LOCAL` to confirm SSH delegation to stress-testing-manager
+3. **Manager delegation** — test `full_run.sh` without `STM_LOCAL` to confirm SSH delegation to stress-testing-manager
 4. **TX submitter Rust rewrite** — `tests/load_saved_transactions/tx_submitter/` (`aws-sdk-s3` → `google-cloud-storage` crate)
 5. **Manual cleanup** — delete `inventory/dynamic_inventory.aws_ec2.yml`
 

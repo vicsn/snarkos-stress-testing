@@ -54,7 +54,8 @@ pueue reset
 ### Ledger Operations (2)
 ```bash
 ./scripts/bin/run-test.sh --test=swap_ledgers
-./scripts/bin/run-test.sh --test=load_saved_transactions
+./scripts/bin/run-test.sh --test=load_saved_transactions \
+  --execution-tx-count=40 --deployment-tx-count=20 --tx-type=executions
 ```
 
 ### Malicious Behavior (6)
@@ -148,11 +149,11 @@ The dynamic inventory uses **private IPs** (`hostnames: [private_ip]`,
 (the STM or the ephemeral builder), not your laptop.
 
 ```bash
-# SSH to the manager
-ssh ubuntu@stress-testing-manager
+# Shell on the manager (from test_suites/snarkos-p2p-tests)
+./scripts/lib/stm.sh
 
 # Move to playbooks directory
-cd ~/snarkos-stress-testing/test_suites/snarkos-p2p-tests/playbooks
+cd playbooks
 
 # List hosts by devnet
 ansible-inventory --graph devnet_snarkos_p2p_tests
@@ -175,7 +176,8 @@ ansible -m ping devnet_snarkos_p2p_tests
 cd test_suites/snarkos-p2p-tests
 
 # TX generation
-./scripts/bin/run-utility.sh --utility=pregenerate_transactions
+./scripts/bin/run-utility.sh --utility=pregenerate_transactions \
+  --execution-tx-count=40 --deployment-tx-count=20 --num-validators=5
 
 # State resets
 ./scripts/bin/run-utility.sh --utility=reset_all
@@ -323,19 +325,22 @@ test_suites/snarkos-p2p-tests/
 ├── tests/                  # 12 pluggable test definitions
 ├── utils/                  # 14 utility helpers
 └── scripts/                # CLI orchestration (bin + lib)
-    ├── bin/                # 8 executables
+    ├── bin/                # Pipeline entrypoints (one pueue job each)
     │   ├── provision.sh
     │   ├── setup.sh
     │   ├── run-test.sh
     │   ├── run-utility.sh
-    │   ├── select-test.sh
     │   ├── destroy.sh
     │   ├── collect-logs.sh
-    │   └── .shellcheckrc
-    ├── lib/                # 3 libraries
+    │   └── fetch-job-log.sh  # One pueue task's output -> temp file
+    ├── lib/                # Libraries + supporting scripts
     │   ├── common.sh
     │   ├── notify.sh
-    │   └── pueue.sh
+    │   ├── slack_config.sh
+    │   ├── pueue.sh
+    │   ├── stm.sh          # Delegation; also runnable directly
+    │   ├── select-test.sh  # Interactive test menu
+    │   └── unlock-state.sh # Release a stale terraform state lock
     └── full_run.sh         # Interactive orchestrator
 ```
 

@@ -47,25 +47,19 @@ features: "test_network,locktick"
 snarkos_verbosity: 1
 rest_rps: 1000000000
 
-# TX pre-generation variables:
+# TX pre-generation variables (kept here):
 #
 txs_target_consensus_version: 10
 txs_target_consensus_version_height: 22
-
-# # 40 validators, testnet:
-# txs_target_state_root: sr1z5xdwjtm5caz603essyuu2jkdm3jczkflxqfj3egj29ajg0fv5qqnpqqa2
-#
-# 5 validators, testnet:
-txs_target_state_root: sr1pmfwxzm9r8ywud3mt6kdvaqdjz0d2s6sla3v4xa6jehhp7ky9y9s4wncjw
-
-# pregeneration_execution_tx_count: 6000
-# pregeneration_deployment_tx_count: 20
-# pregeneration_bucket_path: "pregenerated_transactions"
-pregenerate_transactions_num_validators: 5
+pregeneration_bucket_path: "pregenerated_transactions"
 pregeneration_tx_batch_size: 5
 
-# Vars controlling load_saved_transactions:
-# load_saved_transactions_type: "executions" # Possible values executions,deployments,all, default: all
+# State root keyed by committee size. pregenerate_transactions looks up
+# --num-validators here. load_saved_transactions infers the count from live
+# validator IPs and does not use this map.
+txs_target_state_root:
+  "5": sr1pmfwxzm9r8ywud3mt6kdvaqdjz0d2s6sla3v4xa6jehhp7ky9y9s4wncjw
+  "40": sr1z5xdwjtm5caz603essyuu2jkdm3jczkflxqfj3egj29ajg0fv5qqnpqqa2
 
 # All these vars are use by the auto-builder that is triggered on new releases and shouldn't be used locally.
 # Adding them here for documentation purposes:

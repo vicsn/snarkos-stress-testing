@@ -50,6 +50,9 @@ export RUN_ID
 # Slack notifications (best-effort; no-op unless SLACK_TOKEN + channel are set).
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/notify.sh"
+# Delegation to the stress-testing-manager, then queueing on it — in that order.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/stm.sh"
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/pueue.sh"
 
@@ -104,6 +107,84 @@ runner_manages_logs() { [ "${RUNNER_MANAGES_LOGS:-}" = "1" ]; }
 die() {
   echo "ERROR: $* (${BASH_SOURCE[1]}:${BASH_LINENO[0]} ${FUNCNAME[1]}())" >&2
   exit 1
+}
+
+# Runtime flags for pregenerate_transactions / load_saved_transactions.
+# These are not in vars.yml — parse from the CLI, then pass as ansible extra-vars.
+parse_tx_run_flag() {
+  case "$1" in
+    --execution-tx-count=*)
+      PREGENERATION_EXECUTION_TX_COUNT="${1#*=}"
+      export PREGENERATION_EXECUTION_TX_COUNT
+      ;;
+    --deployment-tx-count=*)
+      PREGENERATION_DEPLOYMENT_TX_COUNT="${1#*=}"
+      export PREGENERATION_DEPLOYMENT_TX_COUNT
+      ;;
+    --num-validators=*)
+      PREGENERATE_TRANSACTIONS_NUM_VALIDATORS="${1#*=}"
+      export PREGENERATE_TRANSACTIONS_NUM_VALIDATORS
+      ;;
+    --tx-type=*)
+      LOAD_SAVED_TRANSACTIONS_TYPE="${1#*=}"
+      export LOAD_SAVED_TRANSACTIONS_TYPE
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+tx_run_flag_args() {
+  # shellcheck disable=SC2178
+  local -n _tx_flags_out=$1
+  _tx_flags_out=()
+  # Use `if`, not `[[ -n ]] && append`: a trailing `&&` returns 1 when the
+  # flag is unset and aborts the caller under `set -e` (see say_done).
+  if [[ -n "${PREGENERATION_EXECUTION_TX_COUNT:-}" ]]; then
+    _tx_flags_out+=("--execution-tx-count=${PREGENERATION_EXECUTION_TX_COUNT}")
+  fi
+  if [[ -n "${PREGENERATION_DEPLOYMENT_TX_COUNT:-}" ]]; then
+    _tx_flags_out+=("--deployment-tx-count=${PREGENERATION_DEPLOYMENT_TX_COUNT}")
+  fi
+  if [[ -n "${PREGENERATE_TRANSACTIONS_NUM_VALIDATORS:-}" ]]; then
+    _tx_flags_out+=("--num-validators=${PREGENERATE_TRANSACTIONS_NUM_VALIDATORS}")
+  fi
+  if [[ -n "${LOAD_SAVED_TRANSACTIONS_TYPE:-}" ]]; then
+    _tx_flags_out+=("--tx-type=${LOAD_SAVED_TRANSACTIONS_TYPE}")
+  fi
+}
+
+require_load_saved_transactions_flags() {
+  [[ -n "${PREGENERATION_EXECUTION_TX_COUNT:-}" ]] \
+    || die "--execution-tx-count=N is required for load_saved_transactions"
+  [[ -n "${PREGENERATION_DEPLOYMENT_TX_COUNT:-}" ]] \
+    || die "--deployment-tx-count=N is required for load_saved_transactions"
+  [[ -n "${LOAD_SAVED_TRANSACTIONS_TYPE:-}" ]] \
+    || die "--tx-type=executions|deployments|all is required for load_saved_transactions"
+  isuint "$PREGENERATION_EXECUTION_TX_COUNT" \
+    || die "--execution-tx-count must be a non-negative integer"
+  isuint "$PREGENERATION_DEPLOYMENT_TX_COUNT" \
+    || die "--deployment-tx-count must be a non-negative integer"
+  case "$LOAD_SAVED_TRANSACTIONS_TYPE" in
+    executions|deployments|all) ;;
+    *) die "--tx-type must be executions, deployments, or all" ;;
+  esac
+}
+
+require_pregenerate_transactions_flags() {
+  [[ -n "${PREGENERATION_EXECUTION_TX_COUNT:-}" ]] \
+    || die "--execution-tx-count=N is required for pregenerate_transactions"
+  [[ -n "${PREGENERATION_DEPLOYMENT_TX_COUNT:-}" ]] \
+    || die "--deployment-tx-count=N is required for pregenerate_transactions"
+  [[ -n "${PREGENERATE_TRANSACTIONS_NUM_VALIDATORS:-}" ]] \
+    || die "--num-validators=N is required for pregenerate_transactions"
+  isuint "$PREGENERATION_EXECUTION_TX_COUNT" \
+    || die "--execution-tx-count must be a non-negative integer"
+  isuint "$PREGENERATION_DEPLOYMENT_TX_COUNT" \
+    || die "--deployment-tx-count must be a non-negative integer"
+  isuint "$PREGENERATE_TRANSACTIONS_NUM_VALIDATORS" \
+    || die "--num-validators must be a positive integer"
+  [[ "$PREGENERATE_TRANSACTIONS_NUM_VALIDATORS" -gt 0 ]] \
+    || die "--num-validators must be a positive integer"
 }
 
 ensure_devnet_key() {
@@ -226,6 +307,15 @@ resolve_tests() {
 #   common_ansible <playbook.yml> [extra ansible-playbook args...]
 common_ansible() {
   local playbook="$1"; shift
+  local extra=()
+  [[ -n "${PREGENERATION_EXECUTION_TX_COUNT:-}" ]] \
+    && extra+=(--extra-vars="pregeneration_execution_tx_count=${PREGENERATION_EXECUTION_TX_COUNT}")
+  [[ -n "${PREGENERATION_DEPLOYMENT_TX_COUNT:-}" ]] \
+    && extra+=(--extra-vars="pregeneration_deployment_tx_count=${PREGENERATION_DEPLOYMENT_TX_COUNT}")
+  [[ -n "${PREGENERATE_TRANSACTIONS_NUM_VALIDATORS:-}" ]] \
+    && extra+=(--extra-vars="pregenerate_transactions_num_validators=${PREGENERATE_TRANSACTIONS_NUM_VALIDATORS}")
+  [[ -n "${LOAD_SAVED_TRANSACTIONS_TYPE:-}" ]] \
+    && extra+=(--extra-vars="load_saved_transactions_type=${LOAD_SAVED_TRANSACTIONS_TYPE}")
   ansible-playbook -i "$INVENTORY_DIR" "$playbook" \
     --limit "${LIMIT:-all}" \
     --extra-vars="devnet_name=${DEVNET_NAME:-snarkos-p2p-tests}" \
@@ -236,6 +326,7 @@ common_ansible() {
     --extra-vars="tests=${TESTS:-}" \
     --extra-vars="base_workspace_folder=${PARENT_DIR}/playbooks" \
     --extra-vars="@${VARS}.yml" \
+    ${extra[@]+"${extra[@]}"} \
     "$@"
 }
 

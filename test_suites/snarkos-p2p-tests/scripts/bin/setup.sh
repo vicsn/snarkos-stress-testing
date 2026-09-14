@@ -14,7 +14,8 @@ for arg in "$@"; do
     *) die "Unknown argument: $arg" ;;
   esac
 done
-pueue_dispatch_self "setup" -- "$0" "${ORIG_ARGS[@]}"
+stm_dispatch_self ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+pueue_dispatch_self "setup" -- "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 
 install_exit_trap
 require_provisioned

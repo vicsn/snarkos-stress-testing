@@ -13,7 +13,7 @@ Detailed breakdown of infrastructure layers, modules, and components.
 | **Test Scenarios** | 12 (ledger ops, malicious behavior, prerelease scenarios) |
 | **Terraform Modules** | 3 shared (stress_base_ami, security_group, tx-cannon) |
 | **Ansible Roles** | 14 (snarkos_* operations + component_setup tools) |
-| **Shell Scripts** | 8 executables + 3 libraries + full_run.sh orchestrator |
+| **Shell Scripts** | 7 `bin/` entrypoints + `full_run.sh` orchestrator + `lib/` (5 libraries + 2 helper scripts) |
 | **Analysis Tools** | 7 Python + 1 Rust-based timing analyzer |
 
 ---

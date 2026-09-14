@@ -661,16 +661,16 @@ from a host inside the shared VPC. Use the stress-testing-manager, the ephemeral
 builder, or another VM in the same subnet. Laptops cannot reach private IPs
 directly.
 
-**SSH to the manager:**
+**Open a shell on the manager** (from `test_suites/snarkos-p2p-tests`):
 
 ```bash
-ssh ubuntu@stress-testing-manager
+./scripts/lib/stm.sh
 ```
 
 **Move to the playbooks directory:**
 
 ```bash
-cd ~/snarkos-stress-testing/test_suites/snarkos-p2p-tests/playbooks
+cd playbooks
 ```
 
 **List hosts grouped by devnet label:**

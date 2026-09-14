@@ -4,7 +4,8 @@ set -euo pipefail
 ORIG_ARGS=("$@")
 # shellcheck source=/dev/null
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
-pueue_dispatch_self "destroy" -- "$0" "${ORIG_ARGS[@]}"
+stm_dispatch_self ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+pueue_dispatch_self "destroy" -- "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 
 # No EXIT-trap log collection here: a destroy failure shouldn't try to pull logs
 # off machines that may be half-gone. Still report status to Slack.

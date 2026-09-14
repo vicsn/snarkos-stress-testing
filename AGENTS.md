@@ -184,7 +184,7 @@ scripts/bin/run-test.sh --test=swap_ledgers
 scripts/bin/destroy.sh
 
 # Interactive test selection
-scripts/bin/select-test.sh
+scripts/lib/select-test.sh
 
 # Run without pueue (sequential)
 PUEUE_DISABLED=1 scripts/full_run.sh --mode=light --tests=swap_ledgers
