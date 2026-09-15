@@ -199,7 +199,8 @@ grafana = (
 
 query = (
     f'logName="projects/{project}/logs/syslog"\n'
-    'labels.role!=""'
+    'labels.role="snarkos-validator"\n'
+    '-"systemd"'
 )
 logs = (
     "https://console.cloud.google.com/logs/query;"
