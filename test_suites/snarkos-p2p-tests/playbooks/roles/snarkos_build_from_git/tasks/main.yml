@@ -9,16 +9,42 @@
       debug:
         msg: "Release name: '{{ release_name }}'"
 
-    - name: Check if the binary for the git hash exists in GCS bucket
+    # GCE reports "Google"; EC2 reports "Amazon EC2". sccache GCS auth talks to
+    # metadata.google.internal, which does not resolve on AWS.
+    - name: Read hypervisor vendor to select GCS vs S3
+      ansible.builtin.slurp:
+        src: /sys/class/dmi/id/sys_vendor
+      register: sys_vendor_file
+
+    - name: Select object-storage and sccache backend
+      ansible.builtin.set_fact:
+        use_gcs_backend: "{{ ('Google' in (sys_vendor_file.content | b64decode)) | bool }}"
+        object_bucket: "{{ gcs_bucket | default(s3_bucket) | default('provable-binaries-releases') }}"
+
+    - name: Prefer the S3 bucket name on AWS
+      ansible.builtin.set_fact:
+        object_bucket: "{{ s3_bucket | default(object_bucket) }}"
+      when: not (use_gcs_backend | bool)
+
+    - name: Check if the binary for the git hash exists in GCS
       ansible.builtin.command:
-        cmd: gcloud storage ls "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
+        cmd: gcloud storage ls "gs://{{ object_bucket }}/{{ release_name | trim }}"
       register: gcs_ls_output
       failed_when: false
       changed_when: false
+      when: use_gcs_backend | bool
+
+    - name: Check if the binary for the git hash exists in S3
+      ansible.builtin.command:
+        cmd: aws s3 ls "s3://{{ object_bucket }}/{{ release_name | trim }}"
+      register: s3_ls_output
+      failed_when: false
+      changed_when: false
+      when: not (use_gcs_backend | bool)
 
     - name: Set fact if object exists
-      set_fact:
-        gcs_binary_exists: "{{ gcs_ls_output.rc == 0 }}"
+      ansible.builtin.set_fact:
+        gcs_binary_exists: "{{ (gcs_ls_output.rc | default(1) == 0) if (use_gcs_backend | bool) else (s3_ls_output.rc | default(1) == 0) }}"
 
     - name: Construct authenticated repo URL if GitHub token is set
       set_fact:
@@ -40,11 +66,79 @@
         update: true
         force: true
 
-    - name: Update apt cache
-      ansible.builtin.apt:
-        update_cache: true
-        cache_valid_time: 3600
+    # Fresh AWS/GCP builders often still have cloud-init / unattended-upgrades
+    # holding the apt lock when SSH first comes up. ansible.builtin.apt's
+    # internal cache-update retry is ~27s and reports an empty error when
+    # python-apt's Cache.update() fails on that lock.
+    - name: Wait until cloud-init has finished
+      ansible.builtin.command:
+        cmd: cloud-init status --wait
+      changed_when: false
+      failed_when: false
       when: not gcs_binary_exists
+
+    - name: Stop unattended-upgrades so it cannot hold the apt lock
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        state: stopped
+      failed_when: false
+      when: not gcs_binary_exists
+
+    - name: Wait until apt/dpkg locks are free
+      ansible.builtin.shell: |
+        python3 -c '
+        import fcntl, os, sys
+        paths = (
+            "/var/lib/dpkg/lock-frontend",
+            "/var/lib/apt/lists/lock",
+            "/var/cache/apt/archives/lock",
+            "/var/lib/dpkg/lock",
+        )
+        for path in paths:
+            if not os.path.exists(path):
+                continue
+            fd = os.open(path, os.O_RDWR)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                sys.exit(1)
+            finally:
+                os.close(fd)
+        '
+      args:
+        executable: /bin/bash
+      register: apt_lock
+      until: apt_lock.rc == 0
+      retries: 60
+      delay: 5
+      changed_when: false
+      when: not gcs_binary_exists
+
+    - name: Update apt cache
+      when: not gcs_binary_exists
+      block:
+        - name: Refresh apt cache
+          ansible.builtin.apt:
+            update_cache: true
+            cache_valid_time: 3600
+            lock_timeout: 120
+          register: apt_update
+          until: apt_update is success
+          retries: 10
+          delay: 15
+      rescue:
+        - name: Capture apt-get update output
+          ansible.builtin.command:
+            cmd: apt-get update
+          register: apt_update_debug
+          changed_when: false
+          failed_when: false
+        - name: Fail with apt-get update details
+          ansible.builtin.fail:
+            msg: >-
+              apt cache update failed after retries.
+              stdout: {{ apt_update_debug.stdout | default('') }}
+              stderr: {{ apt_update_debug.stderr | default('') }}
 
     - name: Install Ubuntu dependencies
       ansible.builtin.apt:
@@ -64,11 +158,21 @@
           - ufw
           - wget
         state: present
+        lock_timeout: 120
       register: apt_result
       retries: 5
       delay: 60
       until: apt_result is success
       when: not gcs_binary_exists
+
+    - name: Install awscli on AWS builders
+      ansible.builtin.apt:
+        name: awscli
+        state: present
+        lock_timeout: 120
+      when:
+        - not (use_gcs_backend | bool)
+        - not gcs_binary_exists
 
     - name: Install Rust programming language
       become_user: ubuntu
@@ -133,23 +237,48 @@
         - features is defined and 'locktick' in features
         - not gcs_binary_exists
 
+    - name: Set sccache GCS env (GCE instance SA)
+      ansible.builtin.set_fact:
+        sccache_env:
+          HOME: /home/ubuntu
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+          RUSTC_WRAPPER: /usr/local/bin/sccache
+          SCCACHE_GCS_BUCKET: "{{ compiler_cache_bucket }}"
+          SCCACHE_GCS_KEY_PREFIX: linux_rust/
+          SCCACHE_GCS_RW_MODE: READ_WRITE
+      when:
+        - not gcs_binary_exists
+        - use_gcs_backend | bool
+
+    - name: Set sccache S3 env (EC2 instance profile)
+      ansible.builtin.set_fact:
+        sccache_env:
+          HOME: /home/ubuntu
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+          RUSTC_WRAPPER: /usr/local/bin/sccache
+          SCCACHE_BUCKET: "{{ compiler_cache_bucket }}"
+          SCCACHE_REGION: "{{ compiler_cache_region }}"
+          SCCACHE_S3_USE_SSL: "true"
+          SCCACHE_S3_KEY_PREFIX: linux_rust/
+      when:
+        - not gcs_binary_exists
+        - not (use_gcs_backend | bool)
+
+    - name: Stop leftover sccache daemon from a previous backend
+      become_user: ubuntu
+      ansible.builtin.command:
+        cmd: /usr/local/bin/sccache --stop
+      failed_when: false
+      changed_when: false
+      when: not gcs_binary_exists
+
     - name: Source cargo env and install snarkOS with git CLI
       become_user: ubuntu
       ansible.builtin.shell: source /home/ubuntu/.cargo/env && cargo install --force --locked --path . {{ featureflags }}
       args:
         executable: /bin/bash
         chdir: /home/ubuntu/snarkOS
-      environment: >-
-        {{
-          {
-            'HOME': '/home/ubuntu',
-            'CARGO_NET_GIT_FETCH_WITH_CLI': 'true',
-            'RUSTC_WRAPPER': '/usr/local/bin/sccache',
-            'SCCACHE_GCS_BUCKET': '{{ compiler_cache_bucket | default("snarkos-compiler-cache") }}',
-            'SCCACHE_GCS_KEY_PREFIX': 'linux_rust/',
-            'SCCACHE_GCS_RW_MODE': 'READ_WRITE'
-          } | combine(envs_dict | default({}))
-        }}
+      environment: "{{ sccache_env | combine(envs_dict | default({})) }}"
       async: 7200
       poll: 0
       register: cargo_job
@@ -166,32 +295,53 @@
       delay: 10
       when: not gcs_binary_exists
 
-    - name: Check if the binary for the git hash exists in GCS bucket (post)
+    - name: Check if the binary for the git hash exists in GCS (post)
       ansible.builtin.command:
-        cmd: gcloud storage ls "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
+        cmd: gcloud storage ls "gs://{{ object_bucket }}/{{ release_name | trim }}"
       register: gcs_ls_output_post
       failed_when: false
       changed_when: false
+      when: use_gcs_backend | bool
+
+    - name: Check if the binary for the git hash exists in S3 (post)
+      ansible.builtin.command:
+        cmd: aws s3 ls "s3://{{ object_bucket }}/{{ release_name | trim }}"
+      register: s3_ls_output_post
+      failed_when: false
+      changed_when: false
+      when: not (use_gcs_backend | bool)
 
     - name: Set fact if object exists (post)
-      set_fact:
-        gcs_binary_exists: "{{ gcs_ls_output_post.rc == 0 }}"
+      ansible.builtin.set_fact:
+        gcs_binary_exists: "{{ (gcs_ls_output_post.rc | default(1) == 0) if (use_gcs_backend | bool) else (s3_ls_output_post.rc | default(1) == 0) }}"
 
     - name: Upload the built snarkos binary to GCS
       become_user: ubuntu
       ansible.builtin.command:
-        cmd: gcloud storage cp "/home/ubuntu/snarkOS/target/release/snarkos" "gs://{{ gcs_bucket }}/{{ release_name | trim }}"
+        cmd: gcloud storage cp "/home/ubuntu/snarkOS/target/release/snarkos" "gs://{{ object_bucket }}/{{ release_name | trim }}"
       when:
         - not gcs_binary_exists
+        - use_gcs_backend | bool
       register: gcs_upload_output
       changed_when: gcs_upload_output.rc == 0
 
-    - name: Debug message after upload
-      debug:
-        msg: "Uploaded snarkos binary to GCS."
+    - name: Upload the built snarkos binary to S3
+      become_user: ubuntu
+      ansible.builtin.command:
+        cmd: aws s3 cp "/home/ubuntu/snarkOS/target/release/snarkos" "s3://{{ object_bucket }}/{{ release_name | trim }}"
       when:
         - not gcs_binary_exists
-        - gcs_upload_output is changed
+        - not (use_gcs_backend | bool)
+      register: s3_upload_output
+      changed_when: s3_upload_output.rc == 0
+
+    - name: Debug message after upload
+      debug:
+        msg: "Uploaded snarkos binary to {{ 'GCS' if (use_gcs_backend | bool) else 'S3' }}."
+      when:
+        - not gcs_binary_exists
+        - (gcs_upload_output is defined and gcs_upload_output is changed)
+          or (s3_upload_output is defined and s3_upload_output is changed)
 
     - name: Ensure cargo bin dir exists
       ansible.builtin.file:
@@ -203,8 +353,18 @@
 
     - name: Download snarkos binary from GCS
       ansible.builtin.command:
-        cmd: gcloud storage cp "gs://{{ gcs_bucket }}/{{ release_name | trim }}" "/usr/bin/snarkos"
-      when: gcs_binary_exists
+        cmd: gcloud storage cp "gs://{{ object_bucket }}/{{ release_name | trim }}" "/usr/bin/snarkos"
+      when:
+        - gcs_binary_exists
+        - use_gcs_backend | bool
+      changed_when: true
+
+    - name: Download snarkos binary from S3
+      ansible.builtin.command:
+        cmd: aws s3 cp "s3://{{ object_bucket }}/{{ release_name | trim }}" "/usr/bin/snarkos"
+      when:
+        - gcs_binary_exists
+        - not (use_gcs_backend | bool)
       changed_when: true
 
     - name: Copy locally built binary to /usr/bin/snarkos

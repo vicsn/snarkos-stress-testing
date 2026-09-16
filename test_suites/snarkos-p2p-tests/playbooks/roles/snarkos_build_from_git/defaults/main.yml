@@ -1,0 +1,5 @@
+---
+# Shared by GCP p2p builders (GCE SA → GCS) and AWS CDN builders (instance
+# profile → S3). The role picks the backend from /sys/class/dmi/id/sys_vendor.
+compiler_cache_bucket: snarkos-compiler-cache
+compiler_cache_region: us-west-2
