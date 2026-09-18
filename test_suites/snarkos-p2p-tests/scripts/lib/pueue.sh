@@ -72,26 +72,42 @@ pueue_dispatch_self() {
   exit 0
 }
 
-# Run a full provision → setup → tests → destroy pipeline.
+# Run a full build → provision → setup → tests → destroy pipeline.
 # tests_arg is the raw --tests= value from full_run.sh (e.g. "prerelease",
 # "all", or "t1,t2"); we forward it to setup.sh so the ops-agent config gets
 # stable `mode`/`tests` labels rather than an expanded per-run test list.
+# Build runs first so a cache miss compiles on an ephemeral builder without
+# paying for the validator fleet; a cache hit is a no-op.
 run_pipeline() {
   local mode="$1" vars="$2" util="$3" tests_arg="$4"; shift 4
   local -a run_tests=("$@")
   local bin="$BIN"
   local -a tx_flags=()
   tx_run_flag_args tx_flags
+  local -a prov_flags=()
+  if [[ "${ADD_MASTER:-0}" == 1 ]]; then
+    prov_flags+=("--add-master")
+  fi
+
+  local delay="${DELAY_BETWEEN_TESTS:-0}"
 
   if ! pueue_enabled; then
     local rc=0
     (
-      "$bin/provision.sh" --mode="$mode" --vars="$vars"
+      "$bin/build.sh" --vars="$vars" --mode="$mode"
+      "$bin/provision.sh" --mode="$mode" --vars="$vars" ${prov_flags[@]+"${prov_flags[@]}"}
       "$bin/setup.sh" --vars="$vars" --mode="$mode" --tests="$tests_arg"
-      local t
       for t in "${run_tests[@]}"; do
+        if (( delay > 0 )); then
+          echo "Waiting ${delay}s between tests..."
+          sleep "$delay"
+        fi
         "$bin/run-test.sh" --test="$t" --vars="$vars" ${tx_flags[@]+"${tx_flags[@]}"}
       done
+      if (( delay > 0 )); then
+        echo "Waiting ${delay}s after tests..."
+        sleep "$delay"
+      fi
       [[ -n "$util" ]] && "$bin/run-utility.sh" --utility="$util" --vars="$vars" ${tx_flags[@]+"${tx_flags[@]}"}
     ) || rc=$?
     "$bin/destroy.sh" || true
@@ -103,18 +119,34 @@ run_pipeline() {
   pueue_require
   pueue_ensure_group "$PUEUE_TEARDOWN_GROUP"
 
-  local prov setup dest
+  local build prov setup dest
   local -a pipeline_ids=()
-  prov="$(pueue_enqueue "provision:$mode" -- "$bin/provision.sh" "--mode=$mode" "--vars=$vars")"
+  build="$(pueue_enqueue "build" -- "$bin/build.sh" "--vars=$vars" "--mode=$mode")"
+  pipeline_ids+=("$build")
+  prov="$(pueue_enqueue "provision:$mode" --after "$build" -- "$bin/provision.sh" "--mode=$mode" "--vars=$vars" ${prov_flags[@]+"${prov_flags[@]}"})"
   pipeline_ids+=("$prov")
   setup="$(pueue_enqueue "setup" --after "$prov" -- "$bin/setup.sh" "--vars=$vars" "--mode=$mode" "--tests=$tests_arg")"
   pipeline_ids+=("$setup")
 
   local -a test_ids=() t
-  for t in "${run_tests[@]}"; do
-    test_ids+=("$(pueue_enqueue "run-test:$t" --after "$setup" -- \
-      "$bin/run-test.sh" "--test=$t" "--vars=$vars" ${tx_flags[@]+"${tx_flags[@]}"})")
-  done
+  if (( delay > 0 )); then
+    local prev="$setup" first=1
+    for t in "${run_tests[@]}"; do
+      if (( first == 0 )); then
+        prev="$(pueue_enqueue "wait-between-tests:${delay}s" --after "$prev" -- sleep "$delay")"
+        pipeline_ids+=("$prev")
+      fi
+      first=0
+      prev="$(pueue_enqueue "run-test:$t" --after "$prev" -- \
+        "$bin/run-test.sh" "--test=$t" "--vars=$vars" ${tx_flags[@]+"${tx_flags[@]}"})"
+      test_ids+=("$prev")
+    done
+  else
+    for t in "${run_tests[@]}"; do
+      test_ids+=("$(pueue_enqueue "run-test:$t" --after "$setup" -- \
+        "$bin/run-test.sh" "--test=$t" "--vars=$vars" ${tx_flags[@]+"${tx_flags[@]}"})")
+    done
+  fi
   ((${#test_ids[@]})) && pipeline_ids+=("${test_ids[@]}")
 
   local util_id=""
@@ -129,6 +161,6 @@ run_pipeline() {
   dest="$(pueue_enqueue "destroy" --group "$PUEUE_TEARDOWN_GROUP" -- \
     bash -c 'pueue wait "$@" || true; exec "$0"' "$bin/destroy.sh" "${pipeline_ids[@]}")"
 
-  echo "Enqueued provision($prov) -> setup($setup) -> ${#run_tests[@]} test job(s); destroy($dest) in group '$PUEUE_TEARDOWN_GROUP'."
+  echo "Enqueued build($build) -> provision($prov) -> setup($setup) -> ${#run_tests[@]} test job(s); destroy($dest) in group '$PUEUE_TEARDOWN_GROUP'."
   echo "Watch with: pueue status"
 }

@@ -44,6 +44,9 @@
 # ignore "roles/googlecloudplatform.google_cloud_ops_agents" - install with `ansible-galaxy install googlecloudplatform.google_cloud_ops_agents`
 /test_suites/snarkos-p2p-tests/playbooks/roles/googlecloudplatform.google_cloud_ops_agents
 
+# Python
+**/__pycache__/
+
 # General
 .DS_Store
 .AppleDouble
@@ -101,6 +104,9 @@ test_suites/snarkos-cdn-tests/playbooks/snapshot_urls_load-ledger-tests.txt
 test_suites/snarkos-cdn-tests/load_ledger_results/
 test_suites/snarkos-cdn-tests/playbooks/inventory_load_ledger.aws_ec2.yml
 test_suites/snarkos-cdn-tests/playbooks/local.inventory
+
+# Local copies of GCS pregenerated transaction zips
+/pregenerated_transactions/
 
 # Related to scripts
 **/*/.builder_ip

@@ -17,6 +17,22 @@
           --deployment-tx-count=N, and --tx-type=executions|deployments|all.
           Validator count is inferred from ip_addresses.txt.
 
+    - name: Resolve validator-0 IP when targeting master
+      ansible.builtin.set_fact:
+        tx_blast_ip: "{{ hostvars[item].gcp_private_ip }}"
+      loop: "{{ groups.get('snarkos_validator', []) }}"
+      when:
+        - target_master | default(false) | bool
+        - (hostvars[item].gcp_labels.dev | default('') | string) == '0'
+
+    - name: Require a validator-0 IP for --target-master
+      ansible.builtin.assert:
+        that:
+          - tx_blast_ip is defined
+          - tx_blast_ip | length > 0
+        fail_msg: "--target-master needs a running validator with labels.dev=0"
+      when: target_master | default(false) | bool
+
     - name: Ensure Rust toolchain (rustup) is installed
       shell: |
         set -o pipefail
@@ -73,6 +89,9 @@
       args:
         executable: /bin/bash
         chdir: "{{ tx_submitter_dir }}"
+      environment:
+        TX_BLAST_IP: "{{ tx_blast_ip | default('') }}"
+        VALIDATOR_NUM_VERIFYING_EXECUTIONS: "{{ validator_num_verifying_executions | default(10) }}"
       register: out
 
     - name: Print the output

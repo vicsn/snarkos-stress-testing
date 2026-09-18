@@ -146,6 +146,7 @@ start_snarkos_and_wait_for_markers() {
     --verbosity 1
     --metrics
     --rest-rps 1000000000
+    --num-verifying-executions {{ client_num_verifying_executions | default(10) }}
     --auto-migrate-node-data
     --storage "${storage_dir}"
     --network "${NETWORK_CODE}"

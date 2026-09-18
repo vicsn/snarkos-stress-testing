@@ -46,6 +46,8 @@ features: "test_network"
 # Application vars
 snarkos_verbosity: 1
 rest_rps: 1000000000
+validator_num_verifying_executions: 10
+client_num_verifying_executions: 10
 
 # TX pre-generation variables (kept here):
 #

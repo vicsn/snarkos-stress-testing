@@ -1,10 +1,5 @@
 - name: Build snarkos directly from github
   block:
-    - name: Parse envs into a dictionary using dict filter
-      set_fact:
-        envs_dict: "{{ dict(envs | default('') | split(',') | map('split', '=', 1)) }}"
-      when: envs is defined and envs | length > 0
-
     - name: Debug release name
       debug:
         msg: "Release name: '{{ release_name }}'"
@@ -121,7 +116,6 @@
           ansible.builtin.apt:
             update_cache: true
             cache_valid_time: 3600
-            lock_timeout: 120
           register: apt_update
           until: apt_update is success
           retries: 10
@@ -158,7 +152,6 @@
           - ufw
           - wget
         state: present
-        lock_timeout: 120
       register: apt_result
       retries: 5
       delay: 60
@@ -169,7 +162,6 @@
       ansible.builtin.apt:
         name: awscli
         state: present
-        lock_timeout: 120
       when:
         - not (use_gcs_backend | bool)
         - not gcs_binary_exists
@@ -199,12 +191,14 @@
         envs_dict: {}
       when: not gcs_binary_exists
 
-    - name: Parse envs into a dictionary using dict filter
-      set_fact:
-        envs_dict: "{{ dict(envs | default('') | split(',') | map('split', '=', 1)) }}"
+    - name: Parse envs into a dictionary
+      ansible.builtin.set_fact:
+        envs_dict: "{{ envs_dict | combine({ (item | trim).split('=', 1)[0]: (item | trim).split('=', 1)[1] }) }}"
+      loop: "{{ (envs | default('')).split(',') }}"
       when:
         - envs is defined and envs != ""
         - not gcs_binary_exists
+        - "'=' in (item | trim)"
 
     - name: Debug envs_dict
       debug:

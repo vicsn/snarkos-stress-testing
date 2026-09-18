@@ -8,7 +8,7 @@ use reqwest::Client;
 use serde_json::Value;
 use walkdir::WalkDir;
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
@@ -84,7 +84,39 @@ async fn main() -> Result<()> {
     if ips.is_empty() {
         return Err(anyhow!("No validator IPs found in {:?}", ip_list_path));
     }
-    println!("Loaded {} validator IP(s). First IP: {}", ips.len(), ips[0]);
+    let num_validators = ips.len();
+    println!(
+        "Loaded {} validator IP(s). First IP: {}",
+        num_validators, ips[0]
+    );
+
+    // Optional: send every TX to one validator (index 0 / --target-master).
+    let target_master = match env::var("TX_BLAST_IP") {
+        Ok(ip) => !ip.trim().is_empty(),
+        Err(_) => false,
+    };
+    let blast_ips: Vec<String> = if target_master {
+        let ip = env::var("TX_BLAST_IP").unwrap().trim().to_string();
+        println!("TX_BLAST_IP={ip} — sending every transaction to that validator");
+        vec![ip]
+    } else {
+        ips.clone()
+    };
+    let verifying = parse_env_usize("VALIDATOR_NUM_VERIFYING_EXECUTIONS", 10);
+    let max_rps = if target_master {
+        let rps = (verifying as f64) / 10.0;
+        if rps <= 0.0 {
+            return Err(anyhow!(
+                "validator_num_verifying_executions={verifying} yields a non-positive --target-master rate"
+            ));
+        }
+        println!(
+            "--target-master rate limit: {rps:.2} req/s (validator_num_verifying_executions={verifying}/10)"
+        );
+        Some(rps)
+    } else {
+        None
+    };
 
     // Temp dir for archive/extract
     let tx_root = std::env::current_dir()?
@@ -106,7 +138,6 @@ async fn main() -> Result<()> {
         gcs_bucket,
         gcs_prefix,
         network,
-        ips.len(),
         exec_cnt,
         deploy_cnt,
         target_consensus_version,
@@ -162,7 +193,7 @@ async fn main() -> Result<()> {
     // These are because we are hitting "too many open files" otherwise:
     let per_ip_limit = parse_env_usize(
         "TX_PER_IP_LIMIT",
-        std::cmp::max(256usize, all_lines.len() / ips.len()),
+        std::cmp::max(256usize, all_lines.len() / blast_ips.len()),
     );
     let overall_limit = parse_env_usize(
         "TX_OVERALL_LIMIT",
@@ -189,7 +220,7 @@ async fn main() -> Result<()> {
         .build()?;
 
     // Start block scanner (concurrent), baseline at current latest height
-    let first_ip = ips[0].trim().to_string();
+    let first_ip = blast_ips[0].trim().to_string();
     let start_height = get_latest_height(&scan_client, &first_ip, network)
         .await
         .with_context(|| {
@@ -222,14 +253,15 @@ async fn main() -> Result<()> {
 
     // --- Measure only the send phase (using the sender client) ---
     let t0 = Instant::now();
-    let (ok_count, err_count, first_ok, last_ok) = blast_all(
+    let (ok_count, err_count, first_ok, last_ok, status_counts) = blast_all(
         &send_client,
         network,
-        &ips,
+        &blast_ips,
         &all_lines,
         per_ip_limit,
         overall_limit,
         t0,
+        max_rps,
     )
     .await;
     let dt = t0.elapsed().as_secs_f64();
@@ -248,6 +280,10 @@ async fn main() -> Result<()> {
         dt,
         (all_lines.len() as f64 / dt) as usize
     );
+    println!("HTTP status summary:");
+    for (code, n) in &status_counts {
+        println!("  {code}: {n}");
+    }
 
     if ok_count == 0 && !all_lines.is_empty() {
         return Err(anyhow!(
@@ -309,19 +345,28 @@ fn download_exact_zip(
     bucket: &str,
     prefix: &str,
     network: &str,
-    num_validators: usize,
     exec_cnt: &str,
     deploy_cnt: &str,
     target_consensus_version: i64,
     target_height: i64,
     out_path: &Path,
 ) -> Result<()> {
-    let want_prefix =
-        format!("{prefix}/transactions-{network}-{num_validators}val-{target_consensus_version}-{target_height}-");
-    let want_suffix = format!("-{exec_cnt}-{deploy_cnt}.zip");
-    let list_url = format!("gs://{bucket}/{prefix}/transactions-{network}-{num_validators}val-*");
+    // Validator count in the object name is ignored so a 40val archive can
+    // be blasted at a 5-node (or 1-master) fleet.
+    let list_url = format!(
+        "gs://{bucket}/{prefix}/transactions-{network}-*val-{target_consensus_version}-{target_height}-*-{exec_cnt}-{deploy_cnt}.zip"
+    );
+    let name_re = Regex::new(&format!(
+        r"^{}/transactions-{}-.*val-{}-{}-.+-{}-{}\.zip$",
+        regex::escape(prefix),
+        regex::escape(network),
+        target_consensus_version,
+        target_height,
+        regex::escape(exec_cnt),
+        regex::escape(deploy_cnt),
+    ))?;
 
-    println!("GCS search {list_url} for exact archive…");
+    println!("GCS search {list_url} for archive…");
 
     let output = gcloud_storage(&["objects", "list", &list_url, "--format=json"])?;
     if !output.status.success() {
@@ -342,7 +387,7 @@ fn download_exact_zip(
         let Some(key) = gcs_object_name(item) else {
             continue;
         };
-        if !(key.starts_with(&want_prefix) && key.ends_with(&want_suffix)) {
+        if !name_re.is_match(key) {
             continue;
         }
         let ts = gcs_object_timestamp(item).map(str::to_string);
@@ -359,8 +404,7 @@ fn download_exact_zip(
 
     let key = best_key.ok_or_else(|| {
         anyhow!(
-            "No zip matched gs://{bucket}/{want_prefix}*{want_suffix}. \
-             Generate one with the pregenerate_transactions utility, or confirm the validator count ({num_validators}) matches an existing archive."
+            "No zip matched {list_url}. Generate one with the pregenerate_transactions utility."
         )
     })?;
     let uri = format!("gs://{bucket}/{key}");
@@ -510,11 +554,12 @@ fn tx_ids_from_lines(lines: &[String]) -> HashSet<String> {
 /// * `overall_limit` — global cap on all concurrent in-flight requests.
 /// * `start` — Instant captured before sending starts; used to compute the
 ///   effective timing window of successful sends.
+/// * `max_rps` — when set, start at most this many requests per second.
 ///
 /// # Returns
-/// `(ok_count, err_count, first_ok, last_ok)` — numbers of successfully and
-/// unsuccessfully sent transactions, plus timestamps (seconds since `start`)
-/// of the earliest and latest successful send (if any).
+/// `(ok_count, err_count, first_ok, last_ok, status_counts)` — success/error
+/// counts, timestamps of the earliest and latest successful send, and a
+/// histogram of HTTP status codes (`"network"` / `"join"` for non-HTTP failures).
 ///
 /// - Designed for extremely high concurrency, but still bounded by semaphores because of the FD
 /// problems - too many open files.
@@ -530,7 +575,8 @@ async fn blast_all(
     per_ip_limit: usize,
     overall_limit: usize,
     start: Instant,
-) -> (usize, usize, Option<f64>, Option<f64>) {
+    max_rps: Option<f64>,
+) -> (usize, usize, Option<f64>, Option<f64>, BTreeMap<String, usize>) {
     let overall = Arc::new(Semaphore::new(overall_limit));
     let per_ip: Vec<Arc<Semaphore>> = ips
         .iter()
@@ -551,8 +597,17 @@ async fn blast_all(
     let first_ok = Arc::new(Mutex::new(None::<f64>));
     let last_ok = Arc::new(Mutex::new(None::<f64>));
 
+    let mut ticker = max_rps.map(|rps| {
+        let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / rps));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        interval
+    });
+
     let mut futs = Vec::with_capacity(tx_lines.len());
     for (i, payload) in tx_lines.iter().enumerate() {
+        if let Some(t) = ticker.as_mut() {
+            t.tick().await;
+        }
         let idx = i % urls.len();
         let url = urls[idx].clone();
         let client = client.clone();
@@ -602,7 +657,7 @@ async fn blast_all(
                         }
                     }
 
-                    Ok::<(), anyhow::Error>(())
+                    Ok::<u16, anyhow::Error>(r.status().as_u16())
                 }
                 Ok(r) => {
                     let status = r.status();
@@ -616,7 +671,7 @@ async fn blast_all(
                         "[Exec] HTTP error {} for {} (body: {:?})",
                         status, url, snippet
                     ));
-                    Err(anyhow!("HTTP {}", status))
+                    Ok(status.as_u16())
                 }
                 Err(e) => {
                     let mut err_chain = format!("{e}");
@@ -639,16 +694,31 @@ async fn blast_all(
     let results = join_all(futs).await;
     let mut ok = 0usize;
     let mut err = 0usize;
+    let mut status_counts: BTreeMap<String, usize> = BTreeMap::new();
     for r in results {
         match r {
-            Ok(Ok(())) => ok += 1,
-            _ => err += 1,
+            Ok(Ok(code)) => {
+                *status_counts.entry(code.to_string()).or_insert(0) += 1;
+                if (200..300).contains(&code) {
+                    ok += 1;
+                } else {
+                    err += 1;
+                }
+            }
+            Ok(Err(_)) => {
+                *status_counts.entry("network".to_string()).or_insert(0) += 1;
+                err += 1;
+            }
+            Err(_) => {
+                *status_counts.entry("join".to_string()).or_insert(0) += 1;
+                err += 1;
+            }
         }
     }
 
     let first_ok_val = *first_ok.lock().unwrap();
     let last_ok_val = *last_ok.lock().unwrap();
-    (ok, err, first_ok_val, last_ok_val)
+    (ok, err, first_ok_val, last_ok_val, status_counts)
 }
 
 // ---------------- Block scanner ----------------

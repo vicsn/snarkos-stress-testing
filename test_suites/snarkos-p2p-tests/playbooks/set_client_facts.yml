@@ -96,7 +96,7 @@
       {{ dummy_peers_flag }}
       {{ rotate_flag }}
       --dev {{ node_id }} --dev-num-validators {{ num_instances }}
-      --rest-rps {{ rest_rps }} --network {{ snarkos_network_int }}
+      --rest-rps {{ rest_rps }} --num-verifying-executions {{ client_num_verifying_executions }} --network {{ snarkos_network_int }}
 
 - name: Collect committee addresses (all)
   set_fact:

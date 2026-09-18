@@ -50,7 +50,7 @@ module "tx-cannon" {
 resource "google_compute_instance" "snarkos_validator" {
   count        = var.validator_instance_count
   name         = "${var.owner}-${var.devnet_name}-snarkos-validator-${count.index}"
-  machine_type = var.validator_instance_type
+  machine_type = (var.add_master && count.index == 0) ? var.master_instance_type : var.validator_instance_type
   zone         = local.zones[count.index % length(local.zones)]
 
   tags = [module.fwrule.network_tag]

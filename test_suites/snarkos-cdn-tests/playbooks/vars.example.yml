@@ -23,6 +23,7 @@ s3_bucket: release-bucket-2122415'
 # Application vars
 snarkos_verbosity: "6"
 rest_rps: 1000000000
+client_num_verifying_executions: 10
 
 # Ansible vars
 # ansible_python_interpreter: /usr/bin/python3.10

@@ -5,6 +5,7 @@
         --rest 0.0.0.0:3030 --node 0.0.0.0:4130 \
         --verbosity {{ snarkos_verbosity }} --metrics \
         --rest-rps {{ rest_rps }} \
+        --num-verifying-executions {{ client_num_verifying_executions }} \
         --auto-migrate-node-data \
         --storage /home/ubuntu/.aleo/storage/ledger-{{ snarkos_network_int }} \
         --logfile /home/ubuntu/snarkos.log \

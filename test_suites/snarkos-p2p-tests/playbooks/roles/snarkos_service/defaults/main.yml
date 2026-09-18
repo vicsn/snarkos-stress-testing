@@ -1,2 +1,4 @@
 snarkos_commit_id: "unknown"
 snarkos_branch_name: "unknown"
+validator_num_verifying_executions: 10
+client_num_verifying_executions: 10

@@ -186,7 +186,22 @@ variable "add_builder" {
 variable "builder_instance_type" {
   description = "Machine type for the ephemeral snarkOS builder"
   type        = string
-  default     = "c3d-standard-30"
+  default     = "c3d-standard-60"
+}
+
+# ------------------------------------------------
+# Master validator (optional)
+
+variable "add_master" {
+  description = "Give validator index 0 a larger machine type (master_instance_type)"
+  type        = bool
+  default     = false
+}
+
+variable "master_instance_type" {
+  description = "Machine type for validator 0 when add_master is true"
+  type        = string
+  default     = "c3d-standard-60"
 }
 
 # ------------------------------------------------

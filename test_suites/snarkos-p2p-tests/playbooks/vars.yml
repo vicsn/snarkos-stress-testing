@@ -18,10 +18,11 @@ flamegraph_node_id: "1"
 #
 snarkos_repo: "https://github.com/ProvableHQ/snarkOS" # note the URL format
 # snarkos_git_commit_local_build: "your_commit_id"
-snarkos_git_hash: "89f5d81f8" # must be a commit hash
+snarkos_git_hash: "73a2938cb0" # must be a commit hash
 
-# features: "test_network,tokio_console" # optional
-features: "test_network,locktick"
+# features: "test_network,locktick,tokio_console" # optional
+features: "test_network,locktick,dev_skip_state_root_check"
+envs: "RUSTFLAGS=--cfg tokio_unstable"
 
 #?# For GitHub build: (note that it uses the ProvableHQ/snarkOS-staging repository. Comment out if using another installation method)
 #?# For binary installation:
@@ -46,6 +47,8 @@ features: "test_network,locktick"
 # Application vars
 snarkos_verbosity: 1
 rest_rps: 1000000000
+validator_num_verifying_executions: 1000
+client_num_verifying_executions: 1000
 
 # TX pre-generation variables (kept here):
 #
@@ -70,4 +73,5 @@ txs_target_state_root:
 gcs_bucket: 'provable-binaries-releases'
 
 # Do not change the code below
-release_name: "{{ snarkos_git_hash }}{{ '_' + features if (features is defined and features | length > 0) else '' }}"
+# Spaces in envs become underscores so the GCS object name stays a single token.
+release_name: "{{ snarkos_git_hash }}{{ '_' + features if (features is defined and features | length > 0) else '' }}{{ '_' + (envs | replace(' ', '_')) if (envs is defined and envs | length > 0) else '' }}"

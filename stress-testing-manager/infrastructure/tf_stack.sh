@@ -119,6 +119,7 @@ rsync_package() {
       --exclude='*.tfstate'
       --exclude='*.tfstate.backup'
       --exclude=log_files
+      --exclude=pregenerated_transactions
       --exclude=graphify-out
       --exclude=.agents
       --exclude=.codegraph

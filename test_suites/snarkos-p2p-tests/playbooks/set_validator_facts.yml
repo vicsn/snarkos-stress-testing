@@ -114,6 +114,7 @@
         --dev {{ node_id }} \
         --dev-num-validators {{ num_instances | int }} --no-dev-txs \
         --rest-rps {{ rest_rps }} \
+        --num-verifying-executions {{ validator_num_verifying_executions }} \
         --allow-external-peers \
         --peers {{ peers_combined }} \
         --network {{ snarkos_network_int }}

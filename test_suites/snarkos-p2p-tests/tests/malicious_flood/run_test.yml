@@ -18,7 +18,7 @@
           {{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 \
             --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} \
             --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} \
-            --validator --rest-rps {{ rest_rps }} --no-dev-txs --network {{ snarkos_network_int }}
+            --validator --rest-rps {{ rest_rps }} --num-verifying-executions {{ validator_num_verifying_executions }} --no-dev-txs --network {{ snarkos_network_int }}
 
     - name: Copy pregenerated transactions file
       ansible.builtin.copy:
@@ -53,6 +53,6 @@
           {{ snarkos_binary_name }} start --metrics --nodisplay --bft 0.0.0.0:5000 --rest 0.0.0.0:3030 \
             --peers {{ validator_client_ips }} --validators {{ formatted_validator_ips }} \
             --verbosity {{ snarkos_verbosity }} --dev {{ node_id }} --dev-num-validators {{ num_instances }} \
-            --validator --rest-rps {{ rest_rps }} --no-dev-txs --network {{ snarkos_network_int }}
+            --validator --rest-rps {{ rest_rps }} --num-verifying-executions {{ validator_num_verifying_executions }} --no-dev-txs --network {{ snarkos_network_int }}
   roles:
     - snarkos_service

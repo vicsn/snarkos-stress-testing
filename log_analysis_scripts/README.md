@@ -51,3 +51,19 @@ To analyze whether requested transmissions have been in the mempool:
 # Flamegraph analysis
 To count frequently occurring tasks from a flamegraph, you can use:
 `python3 analysis_flamegraph_svg.py ../test_suites/snarkos-p2p-tests/log_files/val-0.svg`
+
+# TX-blast confirmation gaps
+After `load_saved_transactions`, download validator journals from GCS (preferred) and summarize REST ingest vs BFT inclusion vs gossip/fetch failures:
+
+```bash
+gcloud storage cp gs://provable-logs-results/manual_test_runs/$USER/<RUN_ID>/load_saved_transactions/val-0-*.log.gz .
+python3 log_analysis_scripts/analyze_tx_blast.py --logfile val-0-*.log.gz --from 10:49:00 --to 10:53:00
+```
+
+Cloud Logging ingest time lags snarkOS event time. Use it only if GCS journals are gone:
+
+```bash
+log_analysis_scripts/fetch_gcp_instance_syslog.sh \
+  --instance "$USER-snarkos-p2p-tests-snarkos-validator-0" \
+  --from 2026-09-17T10:49:00Z --to 2026-09-17T11:00:00Z
+```

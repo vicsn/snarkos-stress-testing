@@ -97,6 +97,15 @@ notify_job_begin() {
   return 0
 }
 
+# notify_job_alert <message> [color] — extra detail in the job thread.
+# color defaults to danger. No-op when Slack is off or no thread exists.
+notify_job_alert() {
+  local msg="$1" color="${2:-danger}"
+  notify_enabled || return 0
+  [[ -n "${SLACK_THREAD_TS:-}" ]] || return 0
+  _slack_post "$msg" "$SLACK_THREAD_TS" "$color" >/dev/null
+}
+
 # notify_job_end [rc] — terminal status into the job thread; returns rc.
 notify_job_end() {
   local rc="${1:-$?}"

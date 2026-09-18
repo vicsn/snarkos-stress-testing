@@ -129,6 +129,14 @@ parse_tx_run_flag() {
       LOAD_SAVED_TRANSACTIONS_TYPE="${1#*=}"
       export LOAD_SAVED_TRANSACTIONS_TYPE
       ;;
+    --target-master|--target-master=true|--target-master=1)
+      TARGET_MASTER=1
+      export TARGET_MASTER
+      ;;
+    --target-master=false|--target-master=0)
+      TARGET_MASTER=0
+      export TARGET_MASTER
+      ;;
     *) return 1 ;;
   esac
 }
@@ -151,9 +159,35 @@ tx_run_flag_args() {
   if [[ -n "${LOAD_SAVED_TRANSACTIONS_TYPE:-}" ]]; then
     _tx_flags_out+=("--tx-type=${LOAD_SAVED_TRANSACTIONS_TYPE}")
   fi
+  if [[ "${TARGET_MASTER:-0}" == 1 ]]; then
+    _tx_flags_out+=("--target-master")
+  fi
+}
+
+# Best-effort listing of pregenerated TX zips so callers can pick
+# --execution-tx-count / --deployment-tx-count. Names look like
+# transactions-<network>-<N>val-<cv>-<height>-<release>-<exec>-<deploy>.zip
+list_pregenerated_transaction_files() {
+  local vars_file="$PARENT_DIR/playbooks/${VARS}.yml"
+  local bucket="provable-pregenerated-transactions"
+  local prefix
+  prefix=$(read_yml_field pregeneration_bucket_path "$vars_file" 2>/dev/null || true)
+  prefix="${prefix:-pregenerated_transactions}"
+  local uri="gs://${bucket}/${prefix}/"
+  echo "Existing files in ${uri}"
+  if ! gcloud storage ls "$uri" 2>/dev/null; then
+    echo "(could not list ${uri})"
+    echo "Fix gcloud auth: ${MONOREPO_ROOT}/scripts/ensure_gcloud_auth.sh"
+    "${MONOREPO_ROOT}/scripts/ensure_gcloud_auth.sh" 2>/dev/null || true
+  fi
 }
 
 require_load_saved_transactions_flags() {
+  if [[ -z "${PREGENERATION_EXECUTION_TX_COUNT:-}" \
+     || -z "${PREGENERATION_DEPLOYMENT_TX_COUNT:-}" \
+     || -z "${LOAD_SAVED_TRANSACTIONS_TYPE:-}" ]]; then
+    list_pregenerated_transaction_files >&2 || true
+  fi
   [[ -n "${PREGENERATION_EXECUTION_TX_COUNT:-}" ]] \
     || die "--execution-tx-count=N is required for load_saved_transactions"
   [[ -n "${PREGENERATION_DEPLOYMENT_TX_COUNT:-}" ]] \
@@ -235,6 +269,134 @@ tfvars_for_mode() {
   esac
 }
 
+# Last uncommented `key = value` in the given tfvars files wins (later files
+# override), then TF_VAR_$key. Matches terraform's auto.tfvars + -var-file
+# merge well enough for a static preflight — not a full HCL parser.
+_tfvars_file_get() {
+  local key="$1" file="$2"
+  [[ -f "$file" ]] || return 0
+  awk -v key="$key" '
+    /^[[:space:]]*#/ || NF == 0 { next }
+    $1 == key && $2 == "=" {
+      val = $0
+      sub(/^[^=]*=[[:space:]]*/, "", val)
+      sub(/[[:space:]]+#.*$/, "", val)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+      gsub(/^["'\'']|["'\'']$/, "", val)
+      last = val
+    }
+    END { if (last != "") print last }
+  ' "$file"
+}
+
+_tfvars_get() {
+  local key="$1" default="$2"; shift 2
+  local file got val="$default" env_name="TF_VAR_${key}"
+  for file in "$@"; do
+    got="$(_tfvars_file_get "$key" "$file")"
+    [[ -n "$got" ]] && val="$got"
+  done
+  if [[ -n "${!env_name:-}" ]]; then
+    val="${!env_name}"
+  fi
+  printf '%s' "$val"
+}
+
+# GCE named types put vCPU last (`c3d-standard-60` → 60). Returns 0 if the
+# name does not end in a number (custom / GPU shapes we do not use).
+machine_type_vcpu() {
+  local tail="${1##*-}"
+  if [[ "$tail" =~ ^[0-9]+$ ]]; then
+    printf '%s' "$tail"
+  else
+    printf '0'
+  fi
+}
+
+_tf_bool_true() { [[ "${1:-}" == "true" || "${1:-}" == "1" ]]; }
+
+# Static C3D CPUS_PER_VM_FAMILY preflight. us-central1 is capped at 1500;
+# terraform apply otherwise dies mid-create after spinning up a partial fleet.
+# Counts planned C3D vCPU from default.auto.tfvars + the mode profile (and
+# TF_VAR_*), not live quota, so it is approximate. Override the cap with
+# C3D_FAMILY_VCPU_CAP.
+assert_c3d_family_vcpu_cap() {
+  local profile="$1"
+  local cap="${C3D_FAMILY_VCPU_CAP:-1500}"
+  local auto="$PARENT_DIR/terraform/default.auto.tfvars"
+  local -a files=("$auto")
+  [[ -n "$profile" && -f "$profile" ]] && files+=("$profile")
+
+  # Defaults match terraform/variables.tf so a key omitted from both files
+  # still counts (e.g. light.tfvars leaves validator_instance_type commented).
+  local v_count c_count p_count cannon_count
+  local v_type c_type p_type tx_type cannon_type builder_type master_type
+  local add_cannons add_builder prom_enabled add_master
+  v_count="$(_tfvars_get validator_instance_count 5 "${files[@]}")"
+  c_count="$(_tfvars_get client_instance_count 0 "${files[@]}")"
+  p_count="$(_tfvars_get prover_instance_count 0 "${files[@]}")"
+  v_type="$(_tfvars_get validator_instance_type c3d-standard-30 "${files[@]}")"
+  c_type="$(_tfvars_get client_instance_type c3d-standard-8 "${files[@]}")"
+  p_type="$(_tfvars_get prover_instance_type c3d-standard-8 "${files[@]}")"
+  tx_type="$(_tfvars_get tx_runner_instance_type c3d-standard-30 "${files[@]}")"
+  cannon_count="$(_tfvars_get tx_cannon_instance_count 4 "${files[@]}")"
+  cannon_type="$(_tfvars_get tx_cannon_instance_type c3d-standard-30 "${files[@]}")"
+  builder_type="$(_tfvars_get builder_instance_type c3d-standard-60 "${files[@]}")"
+  add_cannons="$(_tfvars_get add_tx_cannons false "${files[@]}")"
+  add_builder="$(_tfvars_get add_builder false "${files[@]}")"
+  prom_enabled="$(_tfvars_get prometheus_enabled false "${files[@]}")"
+  add_master="$(_tfvars_get add_master false "${files[@]}")"
+  master_type="$(_tfvars_get master_instance_type c3d-standard-60 "${files[@]}")"
+  if [[ "${ADD_MASTER:-0}" == 1 ]]; then add_master=true; fi
+
+  local total=0 vcpu n
+  local -a breakdown=()
+  _c3d_add() {
+    local role="$1" count="$2" type="$3"
+    [[ "$count" =~ ^[0-9]+$ ]] || count=0
+    (( count > 0 )) || return 0
+    [[ "$type" == c3d-* ]] || return 0
+    vcpu="$(machine_type_vcpu "$type")"
+    if (( vcpu == 0 )); then
+      die "cannot parse vCPU from C3D machine type '$type' (role $role)"
+    fi
+    n=$((count * vcpu))
+    breakdown+=("${role}: ${count} × \`${type}\` = ${n}")
+    total=$((total + n))
+  }
+
+  if _tf_bool_true "$add_master" && (( v_count > 0 )); then
+    _c3d_add master 1 "$master_type"
+    _c3d_add validators $((v_count - 1)) "$v_type"
+  else
+    _c3d_add validators "$v_count" "$v_type"
+  fi
+  _c3d_add clients "$c_count" "$c_type"
+  _c3d_add provers "$p_count" "$p_type"
+  _c3d_add tx_runner 1 "$tx_type"
+  if _tf_bool_true "$prom_enabled"; then _c3d_add prometheus 1 "$c_type"; fi
+  if _tf_bool_true "$add_builder"; then _c3d_add builder 1 "$builder_type"; fi
+  if _tf_bool_true "$add_cannons"; then _c3d_add tx_cannons "$cannon_count" "$cannon_type"; fi
+
+  echo "C3D vCPU preflight: ${total}/${cap} ($(basename "$profile"))"
+  local line
+  for line in "${breakdown[@]}"; do
+    echo "  - $line"
+  done
+
+  (( total > cap )) || return 0
+
+  local msg
+  msg="❌ *Refusing provision:* planned C3D vCPU \`${total}\` exceeds the \`${cap}\` \`CPUS_PER_VM_FAMILY\` cap in us-central1."
+  msg+=$'\n'
+  for line in "${breakdown[@]}"; do
+    msg+=$'\n'"• ${line}"
+  done
+  msg+=$'\n'$'\n'"Total C3D: \`${total}\` > \`${cap}\`. Lower count/size, or switch family (n2d/c2d). Remaining quota may be lower because of other C3D VMs (e.g. the STM)."
+  notify_job_alert "$msg" danger
+  die "planned C3D vCPU ${total} exceeds cap ${cap}"
+}
+
 # Args that must match the original provision. Without them, a targeted
 # builder apply uses default.auto.tfvars (devnet_name=snarkos-p2p-tests)
 # and tags the VM for a different firewall than the fleet — STM SSH to the
@@ -252,7 +414,9 @@ _ephemeral_builder_tf_args() {
   _out+=(-var="owner=$OWNER" -var="add_builder=true")
 }
 
-# Ephemeral snarkOS builder.
+# Ephemeral snarkOS builder. Also apply the node SA's GCS bindings: a
+# -target on the instance only pulls in the SA itself, not IAM members that
+# depend on it, so uploads would 403 without these.
 apply_ephemeral_builder() {
   local tf_args=()
   _ephemeral_builder_tf_args tf_args
@@ -261,6 +425,8 @@ apply_ephemeral_builder() {
     tf_init
     terraform apply \
       -target=google_compute_instance.snarkos_builder \
+      -target=google_project_iam_member.snarkos_gcs_object_viewer \
+      -target=google_project_iam_member.snarkos_gcs_object_creator \
       "${tf_args[@]}" \
       -auto-approve )
 }
@@ -316,6 +482,9 @@ common_ansible() {
     && extra+=(--extra-vars="pregenerate_transactions_num_validators=${PREGENERATE_TRANSACTIONS_NUM_VALIDATORS}")
   [[ -n "${LOAD_SAVED_TRANSACTIONS_TYPE:-}" ]] \
     && extra+=(--extra-vars="load_saved_transactions_type=${LOAD_SAVED_TRANSACTIONS_TYPE}")
+  if [[ "${TARGET_MASTER:-0}" == 1 ]]; then
+    extra+=(--extra-vars="target_master=true")
+  fi
   ansible-playbook -i "$INVENTORY_DIR" "$playbook" \
     --limit "${LIMIT:-all}" \
     --extra-vars="devnet_name=${DEVNET_NAME:-snarkos-p2p-tests}" \
@@ -331,14 +500,24 @@ common_ansible() {
 }
 
 # Read a simple "key: value" field from a YAML file (best-effort).
+# Keeps spaces inside quotes (e.g. RUSTFLAGS=--cfg tokio_unstable) and
+# drops an unquoted inline comment after the value.
 read_yml_field() {
   local key="$1" file="$2"
   [[ -f "$file" ]] || return 1
   awk -v key="$key" '
     $1 == key ":" {
-      val = $2
-      for (i = 3; i <= NF; i++) val = val " " $i
-      gsub(/^"|"$|^'\''|'\''$/, "", val)
+      val = substr($0, index($0, ":") + 1)
+      sub(/^[[:space:]]+/, "", val)
+      if (val ~ /^"/) {
+        if (match(val, /^"[^"]*"/)) val = substr(val, RSTART, RLENGTH)
+      } else if (val ~ /^'\''/) {
+        if (match(val, /^'\''[^'\'']*'\''/)) val = substr(val, RSTART, RLENGTH)
+      } else {
+        sub(/[[:space:]]+#.*$/, "", val)
+        sub(/[[:space:]]+$/, "", val)
+      }
+      gsub(/^["'\'']|["'\'']$/, "", val)
       print val
       exit
     }

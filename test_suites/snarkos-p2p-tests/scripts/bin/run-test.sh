@@ -2,6 +2,7 @@
 # bin/run-test.sh --test=NAME [--vars=NAME] [--no-collect]
 #   load_saved_transactions also requires:
 #     --execution-tx-count=N --deployment-tx-count=N --tx-type=executions|deployments|all
+#     optional: --target-master (blast every TX at validator index 0)
 # Runs ONE test and (by default) collects its logs. This is the fine-grained
 # unit you enqueue in pueue — one job per test.
 set -euo pipefail

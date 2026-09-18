@@ -23,7 +23,7 @@ ops_agent_tests: ""
 ops_agent_snarkos_network: ""
 
 # Prometheus scrape configuration for local exporters
-ops_agent_prometheus_scrape_interval: "30s"
+ops_agent_prometheus_scrape_interval: "10s"
 ops_agent_node_exporter_endpoint: "localhost:9100"
 ops_agent_process_exporter_endpoint: "localhost:9256"
 ops_agent_snarkos_metrics_endpoint: "localhost:9000"
