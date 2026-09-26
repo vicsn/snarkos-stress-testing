@@ -1,30 +1,29 @@
-# Stress Testing
+# snarkOS stress testing
 
-A collection of integration tests with an infrastructure as code (IaC) approach.
+Infrastructure and tests for stressing snarkOS. The P2P network suite and the stress-testing manager run on GCP. The CDN/ledger suite runs on AWS.
 
-- [builder](./builder): A builder machine for re-usable snarkOS binaries.
-- [log_analysis_scripts](./log_analysis_scripts): collection of scripts for log analysis.
-- [release_scripts](./release_scripts): collection of scripts for release management.
-- [scripts](./scripts): Collection of shell and python utility scripts to work with the network created for testing
-- [test_suites](./test_suites): a maintained integration test runner.
+Guides: [docs/README.md](./docs/README.md).
 
-## Development Setup
+## Layout
 
-After cloning the repository, it is recommend to set up the pre-commit hook for lints:
+- [test_suites/snarkos-p2p-tests](./test_suites/snarkos-p2p-tests): GCP P2P network (validators, clients, provers).
+- [test_suites/snarkos-cdn-tests](./test_suites/snarkos-cdn-tests): AWS single-machine suite for loading a ledger or syncing from CDN/snapshots.
+- [stress-testing-manager](./stress-testing-manager): long-running GCE instance that runs pueue and launches test suites.
+- [single-machine-with-ssh-forwarding](./single-machine-with-ssh-forwarding): one machine with SSH agent forwarding.
+- [packer](./packer): GCP base image (`stress-test-base`).
+- [common](./common): shared Ansible roles.
+- [scripts](./scripts): shell and Python helpers.
+- [log_analysis_scripts](./log_analysis_scripts): log analysis.
 
-First, install the required Python packages.
+## Development setup
+
 ```bash
 pip install pre-commit ansible ansible-lint
-```
-
-Then, activate the hook.
-```bash
 pre-commit install
 ```
 
-You may also need to install a newer version of bash and shellcheck if you are on MacOS.
+On macOS you may also need a newer bash and shellcheck:
 
-For example, you can install them through homebrew using this command.
-```
+```bash
 brew install bash shellcheck
 ```
